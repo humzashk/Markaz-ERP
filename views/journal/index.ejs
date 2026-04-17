@@ -1,0 +1,45 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-journal-bookmark"></i> Journal Entries</h2>
+  <a href="/journal/add" class="btn btn-primary"><i class="bi bi-plus"></i> New Entry</a>
+</div>
+<div class="filter-bar">
+  <form class="row g-2" method="get">
+    <div class="col-md-2"><input type="date" name="from" class="form-control datepicker" value="<%= from %>" placeholder="From"></div>
+    <div class="col-md-2"><input type="date" name="to" class="form-control datepicker" value="<%= to %>" placeholder="To"></div>
+    <div class="col-auto"><button class="btn btn-primary"><i class="bi bi-search"></i> Filter</button></div>
+    <% if (from||to) { %><div class="col-auto"><a href="/journal" class="btn btn-outline-secondary">Clear</a></div><% } %>
+  </form>
+</div>
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr><th>Entry No</th><th>Date</th><th>Description</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+          <% entries.forEach(e => { %>
+          <tr>
+            <td><strong><%= e.entry_no %></strong></td>
+            <td><%= formatDate(e.entry_date) %></td>
+            <td>
+              <%= e.description || '-' %>
+              <% if (e.reference) { %><br><small class="text-muted">Ref: <%= e.reference %></small><% } %>
+            </td>
+            <td class="text-end fw-bold"><%= formatCurrency(e.totalDebit) %></td>
+            <td class="text-end fw-bold"><%= formatCurrency(e.totalCredit) %></td>
+            <td><span class="badge bg-success"><%= e.status %></span></td>
+            <td>
+              <a href="/journal/view/<%= e.id %>" class="btn btn-sm btn-outline-info"><i class="bi bi-eye"></i></a>
+              <form class="d-inline delete-form" method="post" action="/journal/delete/<%= e.id %>">
+                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+              </form>
+            </td>
+          </tr>
+          <% }) %>
+          <% if (!entries.length) { %><tr><td colspan="7" class="text-center text-muted py-4">No journal entries found</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

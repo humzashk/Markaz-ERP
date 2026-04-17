@@ -1,0 +1,87 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-truck"></i> <%= edit ? 'Edit' : 'Add' %> Vendor</h2>
+  <a href="/vendors" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+</div>
+<div class="card" style="max-width:640px">
+  <div class="card-body">
+    <form method="post" action="/vendors/<%= edit ? 'edit/'+vendor.id : 'add' %>">
+      <div class="row g-3">
+        <div class="col-12">
+          <label class="form-label fw-semibold">Vendor Name *</label>
+          <input type="text" name="name" class="form-control form-control-lg" required value="<%= vendor?.name || '' %>">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Phone</label>
+          <input type="text" name="phone" class="form-control" value="<%= vendor?.phone || '' %>" placeholder="03XX-XXXXXXX">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">City</label>
+          <input type="text" name="city" class="form-control" value="<%= vendor?.city || '' %>">
+        </div>
+
+        <!-- Classification -->
+        <div class="col-12"><hr class="my-1"><label class="form-label fw-semibold text-muted small text-uppercase">Classification</label></div>
+        <div class="col-md-6">
+          <label class="form-label">Region <span class="text-muted small">(where they're based)</span></label>
+          <select name="region" class="form-select">
+            <option value="">— Not Set —</option>
+            <% regions.forEach(r => { %>
+            <option value="<%= r.name %>" <%= vendor?.region === r.name ? 'selected' : '' %>><%= r.name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Type <span class="text-muted small">(kind of supplier)</span></label>
+          <select name="party_type" class="form-select">
+            <option value="">— Not Set —</option>
+            <% types.forEach(t => { %>
+            <option value="<%= t.name %>" <%= vendor?.party_type === t.name ? 'selected' : '' %>><%= t.name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="col-12">
+          <a href="/categories" class="small text-muted"><i class="bi bi-pencil-square"></i> Manage categories</a>
+        </div>
+
+        <!-- Commission -->
+        <div class="col-md-6">
+          <label class="form-label">Commission <span class="text-muted small">(%)</span></label>
+          <input type="number" name="commission" class="form-control" value="<%= vendor?.commission || 0 %>" step="0.01" min="0" max="100" placeholder="Percentage">
+        </div>
+
+        <% if (!edit) { %>
+        <div class="col-md-6">
+          <label class="form-label">Opening Balance (Rs.)</label>
+          <input type="number" name="opening_balance" class="form-control" value="0" step="0.01">
+        </div>
+        <% } %>
+        <div class="col-12">
+          <label class="form-label">Address</label>
+          <input type="text" name="address" class="form-control" value="<%= vendor?.address || '' %>">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Email</label>
+          <input type="email" name="email" class="form-control" value="<%= vendor?.email || '' %>">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Notes</label>
+          <input type="text" name="notes" class="form-control" value="<%= vendor?.notes || '' %>" placeholder="Internal notes...">
+        </div>
+        <% if (edit) { %>
+        <div class="col-md-6">
+          <label class="form-label">Status</label>
+          <select name="status" class="form-select">
+            <option value="active" <%= vendor.status==='active'?'selected':'' %>>Active</option>
+            <option value="inactive" <%= vendor.status==='inactive'?'selected':'' %>>Inactive</option>
+          </select>
+        </div>
+        <% } %>
+        <div class="col-12">
+          <button type="submit" class="btn btn-primary btn-lg px-4"><i class="bi bi-save"></i> <%= edit ? 'Update' : 'Save' %> Vendor</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+<%- include('../partials/footer') %>

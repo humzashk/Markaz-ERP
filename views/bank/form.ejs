@@ -1,0 +1,55 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-bank"></i> <%= edit ? 'Edit' : 'Add' %> Bank Account</h2>
+  <a href="/bank" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+</div>
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-body">
+        <form method="POST" action="/bank/<%= edit ? 'edit/' + account.id : 'add' %>">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Account Name *</label>
+            <input type="text" name="account_name" class="form-control" value="<%= edit ? account.account_name : '' %>" placeholder="e.g. Main Cash, HBL Current" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Account Type</label>
+            <select name="account_type" class="form-select">
+              <option value="bank" <%= (!edit || account.account_type==='bank') ? 'selected' : '' %>>Bank</option>
+              <option value="cash" <%= (edit && account.account_type==='cash') ? 'selected' : '' %>>Cash</option>
+              <option value="mobile_wallet" <%= (edit && account.account_type==='mobile_wallet') ? 'selected' : '' %>>Mobile Wallet (JazzCash/Easypaisa)</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Bank Name</label>
+            <input type="text" name="bank_name" class="form-control" value="<%= edit ? (account.bank_name||'') : '' %>" placeholder="e.g. HBL, MCB, UBL">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Account Number / IBAN</label>
+            <input type="text" name="account_number" class="form-control" value="<%= edit ? (account.account_number||'') : '' %>">
+          </div>
+          <% if (!edit) { %>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Opening Balance</label>
+            <div class="input-group">
+              <span class="input-group-text">Rs.</span>
+              <input type="number" name="opening_balance" class="form-control" step="0.01" value="0">
+            </div>
+          </div>
+          <% } %>
+          <% if (edit) { %>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Status</label>
+            <select name="status" class="form-select">
+              <option value="active" <%= account.status==='active'?'selected':'' %>>Active</option>
+              <option value="inactive" <%= account.status==='inactive'?'selected':'' %>>Inactive</option>
+            </select>
+          </div>
+          <% } %>
+          <button type="submit" class="btn btn-primary w-100"><i class="bi bi-check"></i> <%= edit ? 'Update' : 'Create' %> Account</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

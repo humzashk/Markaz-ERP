@@ -1,0 +1,106 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-journal-plus"></i> New Journal Entry</h2>
+  <a href="/journal" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+</div>
+<form method="post" action="/journal/add" id="journalForm">
+  <div class="row g-3 mb-3">
+    <div class="col-md-3">
+      <label class="form-label fw-semibold">Date *</label>
+      <input type="date" name="entry_date" class="form-control datepicker" value="<%= today %>" required>
+    </div>
+    <div class="col-md-5">
+      <label class="form-label fw-semibold">Description</label>
+      <input type="text" name="description" class="form-control" placeholder="e.g. Monthly rent payment...">
+    </div>
+    <div class="col-md-4">
+      <label class="form-label fw-semibold">Reference No.</label>
+      <input type="text" name="reference" class="form-control" placeholder="Voucher / Cheque no.">
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-table"></i> Journal Lines</span>
+      <div class="d-flex gap-3">
+        <span class="text-muted small">Debit Total: <strong id="totalDebit" class="text-danger">0.00</strong></span>
+        <span class="text-muted small">Credit Total: <strong id="totalCredit" class="text-success">0.00</strong></span>
+        <span id="balanceStatus" class="badge bg-warning">Unbalanced</span>
+      </div>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table mb-0" id="journalTable">
+          <thead class="table-light">
+            <tr>
+              <th>Account</th>
+              <th>Description</th>
+              <th width="150" class="text-end">Debit (Rs.)</th>
+              <th width="150" class="text-end">Credit (Rs.)</th>
+              <th width="50"></th>
+            </tr>
+          </thead>
+          <tbody id="journalBody">
+            <tr>
+              <td><input type="text" name="account" class="form-control" list="accountList" placeholder="Select account..." required oninput="calcJournal()"></td>
+              <td><input type="text" name="line_description" class="form-control" placeholder="Note..."></td>
+              <td><input type="number" name="debit" class="form-control text-end" min="0" step="0.01" value="0" oninput="calcJournal()"></td>
+              <td><input type="number" name="credit" class="form-control text-end" min="0" step="0.01" value="0" oninput="calcJournal()"></td>
+              <td></td>
+            </tr>
+            <tr>
+              <td><input type="text" name="account" class="form-control" list="accountList" placeholder="Select account..." required oninput="calcJournal()"></td>
+              <td><input type="text" name="line_description" class="form-control" placeholder="Note..."></td>
+              <td><input type="number" name="debit" class="form-control text-end" min="0" step="0.01" value="0" oninput="calcJournal()"></td>
+              <td><input type="number" name="credit" class="form-control text-end" min="0" step="0.01" value="0" oninput="calcJournal()"></td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card-footer">
+      <button type="button" class="btn btn-sm btn-outline-primary" onclick="addJournalLine()"><i class="bi bi-plus-circle"></i> Add Line</button>
+    </div>
+  </div>
+
+  <datalist id="accountList">
+    <% accounts.forEach(a => { %><option value="<%= a %>"><% }) %>
+  </datalist>
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary btn-lg px-5" id="submitBtn" disabled><i class="bi bi-save"></i> Post Journal Entry</button>
+    <a href="/journal" class="btn btn-outline-secondary btn-lg">Cancel</a>
+  </div>
+</form>
+
+<script>
+function addJournalLine() {
+  const tbody = document.getElementById('journalBody');
+  const row = tbody.insertRow();
+  row.innerHTML = `
+    <td><input type="text" name="account" class="form-control" list="accountList" placeholder="Select account..." required oninput="calcJournal()"></td>
+    <td><input type="text" name="line_description" class="form-control" placeholder="Note..."></td>
+    <td><input type="number" name="debit" class="form-control text-end" min="0" step="0.01" value="0" oninput="calcJournal()"></td>
+    <td><input type="number" name="credit" class="form-control text-end" min="0" step="0.01" value="0" oninput="calcJournal()"></td>
+    <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove();calcJournal()"><i class="bi bi-x"></i></button></td>
+  `;
+}
+
+function calcJournal() {
+  const rows = document.querySelectorAll('#journalBody tr');
+  let totalDr = 0, totalCr = 0;
+  rows.forEach(row => {
+    totalDr += parseFloat(row.querySelector('input[name="debit"]')?.value) || 0;
+    totalCr += parseFloat(row.querySelector('input[name="credit"]')?.value) || 0;
+  });
+  document.getElementById('totalDebit').textContent = totalDr.toFixed(2);
+  document.getElementById('totalCredit').textContent = totalCr.toFixed(2);
+  const balanced = Math.abs(totalDr - totalCr) < 0.01 && totalDr > 0;
+  const statusEl = document.getElementById('balanceStatus');
+  statusEl.textContent = balanced ? '✓ Balanced' : 'Unbalanced';
+  statusEl.className = 'badge ' + (balanced ? 'bg-success' : 'bg-warning');
+  document.getElementById('submitBtn').disabled = !balanced;
+}
+</script>
+<%- include('../partials/footer') %>

@@ -1,0 +1,121 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-people"></i> Customers</h2>
+  <a href="/customers/add" class="btn btn-primary"><i class="bi bi-plus"></i> Add Customer</a>
+</div>
+<div class="filter-bar">
+  <form class="row g-2" method="get">
+    <div class="col-md-3">
+      <input type="text" name="search" class="form-control form-control-sm" placeholder="Name, phone, city..." value="<%= search %>">
+    </div>
+    <div class="col-md-2">
+      <select name="region" class="form-select form-select-sm">
+        <option value="">All Regions</option>
+        <% regions.forEach(r => { %><option value="<%= r.name %>" <%= region===r.name?'selected':'' %>><%= r.name %></option><% }) %>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <select name="party_type" class="form-select form-select-sm">
+        <option value="">All Types</option>
+        <% types.forEach(t => { %><option value="<%= t.name %>" <%= party_type===t.name?'selected':'' %>><%= t.name %></option><% }) %>
+      </select>
+    </div>
+    <div class="col-auto"><button type="submit" class="btn btn-primary btn-sm">Filter</button></div>
+    <% if (search || region || party_type) { %><div class="col-auto"><a href="/customers" class="btn btn-outline-secondary btn-sm">Clear</a></div><% } %>
+    <div class="col-auto ms-auto"><a href="/categories" class="btn btn-outline-secondary btn-sm"><i class="bi bi-tags"></i> Manage Categories</a></div>
+  </form>
+</div>
+<!-- Bulk Action Bar -->
+<div class="bulk-bar" id="bulkBar">
+  <span class="bulk-count"><span id="bulkCount">0</span> selected</span>
+  <form method="post" action="/customers/bulk" id="bulkForm" class="d-flex align-items-center gap-2">
+    <input type="hidden" name="ids" id="bulkIds">
+    <select name="region" class="form-select form-select-sm" style="width:auto;">
+      <option value="">Set Region...</option>
+      <% regions.forEach(r => { %><option value="<%= r.name %>"><%= r.name %></option><% }) %>
+    </select>
+    <select name="party_type" class="form-select form-select-sm" style="width:auto;">
+      <option value="">Set Type...</option>
+      <% types.forEach(t => { %><option value="<%= t.name %>"><%= t.name %></option><% }) %>
+    </select>
+    <select name="status" class="form-select form-select-sm" style="width:auto;">
+      <option value="">Set Status...</option>
+      <option value="active">Active</option>
+      <option value="inactive">Inactive</option>
+    </select>
+    <button type="submit" class="btn btn-sm btn-light"><i class="bi bi-check2"></i> Apply</button>
+  </form>
+  <button class="btn btn-sm btn-outline-light ms-auto" onclick="clearSelection()"><i class="bi bi-x"></i> Clear</button>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr>
+          <th style="width:40px"><input type="checkbox" id="selectAll" class="form-check-input"></th>
+          <th>Name</th><th>Region / Type</th><th>Phone</th><th>City</th><th>Balance</th><th>Status</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          <% customers.forEach((c, i) => { %>
+          <tr>
+            <td><input type="checkbox" class="form-check-input row-check" value="<%= c.id %>"></td>
+            <td>
+              <strong><%= c.name %></strong>
+              <% if(c.notes){ %><br><small class="text-muted"><i class="bi bi-chat-left-text"></i> <%= c.notes %></small><% } %>
+            </td>
+            <td>
+              <% const regionCat = regions.find(r => r.name === c.region); %>
+              <% const typeCat = types.find(t => t.name === c.party_type); %>
+              <% if(regionCat){ %><span class="badge bg-<%= regionCat.color %>"><%= c.region %></span><% } %>
+              <% if(typeCat){ %> <span class="badge bg-<%= typeCat.color %>"><%= c.party_type %></span><% } %>
+              <% if(!c.region && !c.party_type){ %><span class="text-muted small">—</span><% } %>
+            </td>
+            <td><%= c.phone || '-' %></td>
+            <td><%= c.city || '-' %></td>
+            <td class="<%= c.balance > 0 ? 'text-danger fw-bold' : c.balance < 0 ? 'text-success' : '' %>">
+              <%= formatCurrency(Math.abs(c.balance)) %>
+              <% if (c.balance > 0) { %><small class="d-block text-danger">Due</small><% } %>
+              <% if (c.balance < 0) { %><small class="d-block text-success">Advance</small><% } %>
+            </td>
+            <td><span class="badge bg-<%= statusBadge(c.status) %>"><%= c.status %></span></td>
+            <td>
+              <a href="/customers/view/<%= c.id %>" class="btn btn-sm btn-outline-info" title="View"><i class="bi bi-eye"></i></a>
+              <a href="/customers/edit/<%= c.id %>" class="btn btn-sm btn-outline-warning" title="Edit"><i class="bi bi-pencil"></i></a>
+              <a href="/ledger/customer/<%= c.id %>" class="btn btn-sm btn-outline-secondary" title="Ledger"><i class="bi bi-journal-text"></i></a>
+              <a href="/payments/receive?customer_id=<%= c.id %>" class="btn btn-sm btn-outline-success" title="Receive Payment"><i class="bi bi-cash-coin"></i></a>
+            </td>
+          </tr>
+          <% }) %>
+          <% if (!customers.length) { %><tr><td colspan="9" class="text-center text-muted py-4">No customers found</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<script>
+const selectAll = document.getElementById('selectAll');
+const bulkBar = document.getElementById('bulkBar');
+const bulkCount = document.getElementById('bulkCount');
+const bulkIds = document.getElementById('bulkIds');
+function getChecked() { return [...document.querySelectorAll('.row-check:checked')].map(c => c.value); }
+function updateBulk() {
+  const ids = getChecked();
+  bulkCount.textContent = ids.length;
+  bulkIds.value = ids.join(',');
+  bulkBar.classList.toggle('visible', ids.length > 0);
+}
+selectAll.addEventListener('change', () => {
+  document.querySelectorAll('.row-check').forEach(c => c.checked = selectAll.checked);
+  updateBulk();
+});
+document.querySelectorAll('.row-check').forEach(c => c.addEventListener('change', () => {
+  selectAll.checked = document.querySelectorAll('.row-check').length === getChecked().length;
+  updateBulk();
+}));
+function clearSelection() {
+  document.querySelectorAll('.row-check, #selectAll').forEach(c => c.checked = false);
+  updateBulk();
+}
+</script>
+<%- include('../partials/footer') %>

@@ -1,0 +1,186 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-tags"></i> Party Categories</h2>
+  <a href="/settings" class="btn btn-outline-secondary"><i class="bi bi-gear"></i> Settings</a>
+</div>
+
+<div class="alert alert-info py-2 mb-3">
+  <strong>Region</strong> = Where the party is located (Local, Upcountry, etc.) &nbsp;|&nbsp;
+  <strong>Type</strong> = What kind of business (Retail, Wholesale, Shop, etc.)
+</div>
+
+<div class="row g-4">
+  <!-- Regions -->
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong><i class="bi bi-geo-alt"></i> Regions</strong>
+        <small class="text-muted">Used by Customers & Vendors</small>
+      </div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+          <% regions.forEach(cat => { %>
+          <li class="list-group-item d-flex justify-content-between align-items-center py-2 px-3">
+            <span class="badge bg-<%= cat.color %> me-2" style="font-size:13px"><%= cat.name %></span>
+            <div class="d-flex gap-1">
+              <button class="btn btn-xs btn-outline-secondary" onclick="openEdit(<%= cat.id %>, '<%= cat.name %>', '<%= cat.applies_to %>', '<%= cat.color %>')" style="font-size:11px;padding:2px 7px">Edit</button>
+              <form method="POST" action="/categories/delete/<%= cat.id %>" class="d-inline" onsubmit="return confirm('Delete?')">
+                <button class="btn btn-xs btn-outline-danger" style="font-size:11px;padding:2px 7px">×</button>
+              </form>
+            </div>
+          </li>
+          <% }) %>
+          <% if (!regions.length) { %><li class="list-group-item text-muted small">No regions yet</li><% } %>
+        </ul>
+      </div>
+      <div class="card-footer">
+        <form method="POST" action="/categories/add" class="d-flex gap-2">
+          <input type="hidden" name="cat_group" value="region">
+          <input type="hidden" name="applies_to" value="both">
+          <input type="text" name="name" class="form-control form-control-sm" placeholder="New region name..." required style="max-width:130px">
+          <select name="color" class="form-select form-select-sm" style="max-width:100px">
+            <option value="success">Green</option>
+            <option value="info">Blue</option>
+            <option value="primary">Indigo</option>
+            <option value="warning">Yellow</option>
+            <option value="danger">Red</option>
+            <option value="secondary">Grey</option>
+            <option value="dark">Dark</option>
+          </select>
+          <button class="btn btn-sm btn-primary">+ Add</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Customer Types -->
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong><i class="bi bi-person-badge"></i> Customer Types</strong>
+        <small class="text-muted">Customers only</small>
+      </div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+          <% customerTypes.forEach(cat => { %>
+          <li class="list-group-item d-flex justify-content-between align-items-center py-2 px-3">
+            <span class="badge bg-<%= cat.color %> me-2" style="font-size:13px"><%= cat.name %></span>
+            <div class="d-flex gap-1">
+              <button class="btn btn-xs btn-outline-secondary" onclick="openEdit(<%= cat.id %>, '<%= cat.name %>', '<%= cat.applies_to %>', '<%= cat.color %>')" style="font-size:11px;padding:2px 7px">Edit</button>
+              <form method="POST" action="/categories/delete/<%= cat.id %>" class="d-inline" onsubmit="return confirm('Delete?')">
+                <button class="btn btn-xs btn-outline-danger" style="font-size:11px;padding:2px 7px">×</button>
+              </form>
+            </div>
+          </li>
+          <% }) %>
+          <% if (!customerTypes.length) { %><li class="list-group-item text-muted small">No types yet</li><% } %>
+        </ul>
+      </div>
+      <div class="card-footer">
+        <form method="POST" action="/categories/add" class="d-flex gap-2">
+          <input type="hidden" name="cat_group" value="type">
+          <input type="hidden" name="applies_to" value="customer">
+          <input type="text" name="name" class="form-control form-control-sm" placeholder="New type name..." required style="max-width:130px">
+          <select name="color" class="form-select form-select-sm" style="max-width:100px">
+            <option value="secondary">Grey</option>
+            <option value="dark">Dark</option>
+            <option value="primary">Indigo</option>
+            <option value="success">Green</option>
+            <option value="info">Blue</option>
+            <option value="warning">Yellow</option>
+            <option value="danger">Red</option>
+          </select>
+          <button class="btn btn-sm btn-success">+ Add</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Vendor Types -->
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong><i class="bi bi-truck"></i> Vendor Types</strong>
+        <small class="text-muted">Vendors only</small>
+      </div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+          <% vendorTypes.forEach(cat => { %>
+          <li class="list-group-item d-flex justify-content-between align-items-center py-2 px-3">
+            <span class="badge bg-<%= cat.color %> me-2" style="font-size:13px"><%= cat.name %></span>
+            <div class="d-flex gap-1">
+              <button class="btn btn-xs btn-outline-secondary" onclick="openEdit(<%= cat.id %>, '<%= cat.name %>', '<%= cat.applies_to %>', '<%= cat.color %>')" style="font-size:11px;padding:2px 7px">Edit</button>
+              <form method="POST" action="/categories/delete/<%= cat.id %>" class="d-inline" onsubmit="return confirm('Delete?')">
+                <button class="btn btn-xs btn-outline-danger" style="font-size:11px;padding:2px 7px">×</button>
+              </form>
+            </div>
+          </li>
+          <% }) %>
+          <% if (!vendorTypes.length) { %><li class="list-group-item text-muted small">No types yet</li><% } %>
+        </ul>
+      </div>
+      <div class="card-footer">
+        <form method="POST" action="/categories/add" class="d-flex gap-2">
+          <input type="hidden" name="cat_group" value="type">
+          <input type="hidden" name="applies_to" value="vendor">
+          <input type="text" name="name" class="form-control form-control-sm" placeholder="New type name..." required style="max-width:130px">
+          <select name="color" class="form-select form-select-sm" style="max-width:100px">
+            <option value="secondary">Grey</option>
+            <option value="dark">Dark</option>
+            <option value="primary">Indigo</option>
+            <option value="success">Green</option>
+            <option value="info">Blue</option>
+            <option value="warning">Yellow</option>
+            <option value="danger">Red</option>
+          </select>
+          <button class="btn btn-sm btn-primary">+ Add</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal fade" id="editModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header py-2"><h6 class="modal-title">Edit Category</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <form method="POST" id="editForm">
+        <div class="modal-body">
+          <div class="mb-2">
+            <label class="form-label small fw-bold">Name</label>
+            <input type="text" name="name" id="editName" class="form-control form-control-sm" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-bold">Color</label>
+            <select name="color" id="editColor" class="form-select form-select-sm">
+              <option value="success">Green</option>
+              <option value="info">Blue</option>
+              <option value="primary">Indigo</option>
+              <option value="warning">Yellow</option>
+              <option value="danger">Red</option>
+              <option value="secondary">Grey</option>
+              <option value="dark">Dark</option>
+            </select>
+          </div>
+          <input type="hidden" name="applies_to" id="editAppliesTo">
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-sm btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function openEdit(id, name, appliesTo, color) {
+  document.getElementById('editForm').action = '/categories/edit/' + id;
+  document.getElementById('editName').value = name;
+  document.getElementById('editAppliesTo').value = appliesTo;
+  document.getElementById('editColor').value = color;
+  new bootstrap.Modal(document.getElementById('editModal')).show();
+}
+</script>
+<%- include('../partials/footer') %>

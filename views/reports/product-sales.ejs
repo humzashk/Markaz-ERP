@@ -1,0 +1,16 @@
+<%- include('../partials/header') %>
+<div class="page-header"><h2><i class="bi bi-box"></i> Product Sales</h2><button onclick="window.print()" class="btn btn-outline-secondary no-print"><i class="bi bi-printer"></i></button></div>
+<div class="filter-bar no-print">
+  <form class="row g-2" method="get">
+    <div class="col-md-3"><input type="date" name="from" class="form-control" value="<%= from %>"></div>
+    <div class="col-md-3"><input type="date" name="to" class="form-control" value="<%= to %>"></div>
+    <div class="col-auto"><button class="btn btn-primary"><i class="bi bi-filter"></i> Filter</button></div>
+  </form>
+</div>
+<div class="card"><div class="card-body p-0"><div class="table-responsive">
+  <table class="table table-hover mb-0"><thead><tr><th>#</th><th>Product</th><th class="text-end">Qty Sold</th><th class="text-end">Total Amount</th></tr></thead><tbody>
+    <% productSales.forEach((p, i) => { %><tr><td><%= i+1 %></td><td><strong><%= p.name %></strong></td><td class="text-end"><%= p.total_qty %></td><td class="text-end fw-bold text-success"><%= formatCurrency(p.total_amount) %></td></tr><% }) %>
+    <% if (!productSales.length) { %><tr><td colspan="4" class="text-center text-muted py-3">No data</td></tr><% } %>
+  </tbody></table>
+</div></div></div>
+<%- include('../partials/footer') %>

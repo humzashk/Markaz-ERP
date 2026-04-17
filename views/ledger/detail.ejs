@@ -1,0 +1,130 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-journal-text"></i> <%= entityType === 'customer' ? 'Customer' : 'Vendor' %> Ledger: <%= entity.name %></h2>
+  <div class="d-flex gap-2 no-print">
+    <a href="/ledger/print/<%= entityType %>/<%= entity.id %>?from=<%= from %>&to=<%= to %>" class="btn btn-outline-secondary" target="_blank"><i class="bi bi-printer"></i> Print</a>
+    <a href="/ledger/pdf/<%= entityType %>/<%= entity.id %>?from=<%= from %>&to=<%= to %>" class="btn btn-danger" target="_blank"><i class="bi bi-file-pdf"></i> PDF</a>
+    <a href="/payments/add?type=<%= entityType %>&entity_id=<%= entity.id %>" class="btn btn-success"><i class="bi bi-cash"></i> <%= entityType === 'customer' ? 'Receive' : 'Make' %> Payment</a>
+    <a href="/ledger" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+</div>
+
+<!-- Balance Highlight -->
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <div class="stat-card <%= entity.balance > 0 ? 'stat-red' : entity.balance < 0 ? 'stat-orange' : 'stat-green' %>">
+      <div class="stat-icon"><i class="bi bi-wallet2"></i></div>
+      <div class="stat-info">
+        <h3><%= formatCurrency(Math.abs(entity.balance)) %></h3>
+        <p><%= entity.balance > 0 && entityType === 'customer' ? 'Amount Due' : entity.balance < 0 && entityType === 'vendor' ? 'Amount Payable' : 'Settled' %></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Date Filter -->
+<div class="filter-bar no-print">
+  <form class="row g-2" method="get">
+    <div class="col-md-3"><label class="form-label">From Date</label><input type="date" name="from" class="form-control" value="<%= from %>"></div>
+    <div class="col-md-3"><label class="form-label">To Date</label><input type="date" name="to" class="form-control" value="<%= to %>"></div>
+    <div class="col-auto d-flex align-items-end"><button class="btn btn-primary"><i class="bi bi-filter"></i> Filter</button></div>
+    <% if (from||to) { %><div class="col-auto d-flex align-items-end"><a href="/ledger/<%= entityType %>/<%= entity.id %>" class="btn btn-outline-secondary">Clear</a></div><% } %>
+  </form>
+</div>
+
+<!-- Ledger Table + Detail Panel -->
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0" id="ledgerTable">
+            <thead>
+              <tr><th>Date</th><th>Description</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th class="text-end">Balance</th></tr>
+            </thead>
+            <tbody>
+              <% entries.forEach((e, idx) => { %>
+              <tr class="ledger-row" style="cursor:pointer;" onclick="showTxnDetail(<%= idx %>)"
+                data-id="<%= e.id %>"
+                data-date="<%= e.txn_date %>"
+                data-desc="<%= (e.description || '').replace(/'/g, '&#39;') %>"
+                data-debit="<%= e.debit || 0 %>"
+                data-credit="<%= e.credit || 0 %>"
+                data-balance="<%= e.balance %>"
+                data-reftype="<%= e.reference_type || '' %>"
+                data-refid="<%= e.reference_id || '' %>">
+                <td><%= formatDate(e.txn_date) %></td>
+                <td><%= e.description || '-' %></td>
+                <td class="text-end"><%= e.debit > 0 ? formatCurrency(e.debit) : '-' %></td>
+                <td class="text-end"><%= e.credit > 0 ? formatCurrency(e.credit) : '-' %></td>
+                <td class="text-end fw-bold <%= e.balance > 0 ? 'due-amount' : e.balance < 0 ? 'credit-amount' : '' %>"><%= formatCurrency(e.balance) %></td>
+              </tr>
+              <% }) %>
+              <% if (!entries.length) { %><tr><td colspan="5" class="text-center text-muted py-4">No transactions found</td></tr><% } %>
+            </tbody>
+            <% if (entries.length) { %>
+            <tfoot class="table-light">
+              <tr class="fs-5 fw-bold">
+                <td colspan="4" class="text-end">Current Balance:</td>
+                <td class="text-end <%= entity.balance > 0 ? 'due-amount' : entity.balance < 0 ? 'credit-amount' : '' %>"><%= formatCurrency(entity.balance) %></td>
+              </tr>
+            </tfoot>
+            <% } %>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card" id="txnDetailPanel" style="display:none; position:sticky; top:80px;">
+      <div class="card-header fw-semibold"><i class="bi bi-info-circle text-primary"></i> Transaction Detail</div>
+      <div class="card-body">
+        <table class="table table-sm mb-0">
+          <tr><th width="40%">Date</th><td id="td_date">-</td></tr>
+          <tr><th>Description</th><td id="td_desc">-</td></tr>
+          <tr><th>Debit</th><td id="td_debit" class="text-danger fw-bold">-</td></tr>
+          <tr><th>Credit</th><td id="td_credit" class="text-success fw-bold">-</td></tr>
+          <tr><th>Balance</th><td id="td_balance" class="fw-bold">-</td></tr>
+          <tr><th>Type</th><td id="td_type">-</td></tr>
+        </table>
+        <div class="mt-3" id="td_link"></div>
+      </div>
+    </div>
+    <% if (!entries.length) { %>
+    <div class="card">
+      <div class="card-body text-muted text-center py-4"><i class="bi bi-info-circle"></i> Click a row to view details</div>
+    </div>
+    <% } %>
+  </div>
+</div>
+<script>
+const fmt = (n) => parseFloat(n).toLocaleString('en-PK', {minimumFractionDigits:2, maximumFractionDigits:2});
+function showTxnDetail(idx) {
+  document.querySelectorAll('.ledger-row').forEach(r => r.classList.remove('table-active'));
+  const row = document.querySelectorAll('.ledger-row')[idx];
+  if (!row) return;
+  row.classList.add('table-active');
+  const d = row.dataset;
+  document.getElementById('td_date').textContent = d.date;
+  document.getElementById('td_desc').textContent = d.desc;
+  document.getElementById('td_debit').textContent = parseFloat(d.debit) > 0 ? 'Rs. ' + fmt(d.debit) : '-';
+  document.getElementById('td_credit').textContent = parseFloat(d.credit) > 0 ? 'Rs. ' + fmt(d.credit) : '-';
+  document.getElementById('td_balance').textContent = 'Rs. ' + fmt(d.balance);
+  document.getElementById('td_type').textContent = d.reftype ? d.reftype.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()) : 'General';
+
+  let linkHtml = '';
+  if (d.reftype && d.refid) {
+    const links = {
+      invoice: '/invoices/view/' + d.refid,
+      order: '/orders/view/' + d.refid,
+      purchase: '/purchases/view/' + d.refid,
+      payment: '/payments',
+    };
+    const url = links[d.reftype];
+    if (url) linkHtml = `<a href="${url}" class="btn btn-sm btn-outline-primary w-100"><i class="bi bi-box-arrow-up-right"></i> View ${d.reftype.charAt(0).toUpperCase()+d.reftype.slice(1)}</a>`;
+  }
+  document.getElementById('td_link').innerHTML = linkHtml;
+  document.getElementById('txnDetailPanel').style.display = '';
+}
+</script>
+<%- include('../partials/footer') %>

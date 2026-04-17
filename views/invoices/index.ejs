@@ -1,0 +1,105 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-receipt"></i> Invoices</h2>
+  <a href="/invoices/add" class="btn btn-primary btn-lg"><i class="bi bi-plus"></i> New Invoice</a>
+</div>
+<div class="filter-bar">
+  <form class="row g-2" method="get">
+    <div class="col-md-4"><input type="text" name="search" class="form-control" placeholder="Search by invoice no, customer..." value="<%= search %>"></div>
+    <div class="col-md-3">
+      <select name="status" class="form-select">
+        <option value="">All Status</option>
+        <% ['paid','unpaid','partial'].forEach(s => { %>
+        <option value="<%= s %>" <%= status===s?'selected':'' %>><%= s.charAt(0).toUpperCase()+s.slice(1) %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="col-auto"><button class="btn btn-primary"><i class="bi bi-search"></i> Search</button></div>
+    <% if (search||status) { %><div class="col-auto"><a href="/invoices" class="btn btn-outline-secondary">Clear</a></div><% } %>
+  </form>
+</div>
+<!-- Bulk Action Bar -->
+<div class="bulk-bar" id="bulkBar">
+  <span class="bulk-count"><span id="bulkCount">0</span> selected</span>
+  <form method="post" action="/invoices/bulk" id="bulkForm" class="d-flex align-items-center gap-2">
+    <input type="hidden" name="ids" id="bulkIds">
+    <select name="action" class="form-select form-select-sm" style="width:auto;">
+      <option value="">-- Bulk Action --</option>
+      <option value="mark_paid">Mark Paid</option>
+      <option value="mark_unpaid">Mark Unpaid</option>
+      <option value="delete">Delete Selected</option>
+    </select>
+    <button type="submit" class="btn btn-sm btn-light" onclick="return confirmBulk()"><i class="bi bi-check2"></i> Apply</button>
+  </form>
+  <button class="btn btn-sm btn-outline-light ms-auto" onclick="clearSelection()"><i class="bi bi-x"></i> Clear</button>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr>
+          <th style="width:40px"><input type="checkbox" id="selectAll" class="form-check-input"></th>
+          <th>Invoice No</th><th>Customer</th><th>Date</th><th>Due</th><th>Total</th><th>Comm.</th><th>Gross</th><th>Status</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          <% invoices.forEach(inv => { %>
+          <tr>
+            <td><input type="checkbox" class="form-check-input row-check" value="<%= inv.id %>"></td>
+            <td><strong><%= inv.invoice_no %></strong></td>
+            <td><%= inv.customer_name %></td>
+            <td><%= formatDate(inv.invoice_date) %></td>
+            <td class="<%= inv.due_date && inv.due_date < new Date().toISOString().split('T')[0] && inv.status!=='paid' ? 'text-danger fw-bold' : '' %>"><%= formatDate(inv.due_date) %></td>
+            <td class="fw-bold"><%= formatCurrency(inv.total) %></td>
+            <td class="text-info"><%= inv.commission_amount > 0 ? formatCurrency(inv.commission_amount) : '-' %></td>
+            <td class="fw-bold text-success"><%= formatCurrency(inv.total - (inv.commission_amount || 0)) %></td>
+            <td><span class="badge bg-<%= statusBadge(inv.status) %>"><%= inv.status %></span></td>
+            <td>
+              <a href="/invoices/view/<%= inv.id %>" class="btn btn-sm btn-outline-info"><i class="bi bi-eye"></i></a>
+              <a href="/invoices/edit/<%= inv.id %>" class="btn btn-sm btn-outline-warning"><i class="bi bi-pencil"></i></a>
+              <a href="/invoices/print/<%= inv.id %>" class="btn btn-sm btn-outline-secondary" target="_blank"><i class="bi bi-printer"></i></a>
+              <a href="/invoices/pdf/<%= inv.id %>" class="btn btn-sm btn-outline-danger" target="_blank"><i class="bi bi-file-pdf"></i></a>
+              <form class="d-inline delete-form" method="post" action="/invoices/delete/<%= inv.id %>">
+                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+              </form>
+            </td>
+          </tr>
+          <% }) %>
+          <% if (!invoices.length) { %><tr><td colspan="11" class="text-center text-muted py-4">No invoices found</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<script>
+const selectAll = document.getElementById('selectAll');
+const bulkBar = document.getElementById('bulkBar');
+const bulkCount = document.getElementById('bulkCount');
+const bulkIds = document.getElementById('bulkIds');
+function getChecked() { return [...document.querySelectorAll('.row-check:checked')].map(c => c.value); }
+function updateBulk() {
+  const ids = getChecked();
+  bulkCount.textContent = ids.length;
+  bulkIds.value = ids.join(',');
+  bulkBar.classList.toggle('visible', ids.length > 0);
+}
+selectAll.addEventListener('change', () => {
+  document.querySelectorAll('.row-check').forEach(c => c.checked = selectAll.checked);
+  updateBulk();
+});
+document.querySelectorAll('.row-check').forEach(c => c.addEventListener('change', () => {
+  selectAll.checked = document.querySelectorAll('.row-check').length === getChecked().length;
+  updateBulk();
+}));
+function clearSelection() {
+  document.querySelectorAll('.row-check, #selectAll').forEach(c => c.checked = false);
+  updateBulk();
+}
+function confirmBulk() {
+  const action = document.querySelector('#bulkForm select[name=action]').value;
+  if (!action) { alert('Please select a bulk action.'); return false; }
+  if (action === 'delete') return confirm('Delete selected invoices? This cannot be undone.');
+  return true;
+}
+</script>
+<%- include('../partials/footer') %>

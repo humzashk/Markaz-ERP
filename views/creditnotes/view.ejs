@@ -1,0 +1,54 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-file-earmark-minus"></i> <%= note.note_no %></h2>
+  <div class="d-flex gap-2">
+    <% if (note.status !== 'applied') { %>
+    <form method="POST" action="/creditnotes/apply/<%= note.id %>">
+      <button class="btn btn-success"><i class="bi bi-check-circle"></i> Apply to Ledger</button>
+    </form>
+    <% } %>
+    <button onclick="window.print()" class="btn btn-outline-secondary"><i class="bi bi-printer"></i> Print</button>
+    <a href="/creditnotes" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <div class="row mb-4">
+      <div class="col-md-6">
+        <h5><%= note.note_type === 'credit' ? 'Credit Note' : 'Debit Note' %></h5>
+        <table class="table table-sm table-borderless">
+          <tr><th>Note No:</th><td class="fw-bold"><%= note.note_no %></td></tr>
+          <tr><th>Date:</th><td><%= formatDate(note.note_date) %></td></tr>
+          <tr><th>Type:</th><td><span class="badge bg-<%= note.note_type==='credit'?'success':'primary' %>"><%= note.note_type === 'credit' ? 'Credit Note (Sales Return)' : 'Debit Note (Purchase Return)' %></span></td></tr>
+          <tr><th>Status:</th><td><span class="badge bg-<%= note.status==='applied'?'success':'warning' %>"><%= note.status %></span></td></tr>
+        </table>
+      </div>
+      <div class="col-md-6">
+        <h5><%= note.note_type === 'credit' ? 'Customer' : 'Vendor' %></h5>
+        <strong><%= note.customer_name || note.vendor_name || '-' %></strong>
+        <% if (note.reason) { %><p class="text-muted mt-2">Reason: <%= note.reason %></p><% } %>
+        <% if (note.notes) { %><p class="text-muted">Notes: <%= note.notes %></p><% } %>
+      </div>
+    </div>
+
+    <table class="table table-bordered">
+      <thead class="table-light"><tr><th>#</th><th>Product</th><th>Qty</th><th>Rate</th><th class="text-end">Amount</th></tr></thead>
+      <tbody>
+        <% items.forEach((item, i) => { %>
+        <tr>
+          <td><%= i+1 %></td>
+          <td><%= item.product_name %></td>
+          <td><%= item.quantity.toLocaleString() %></td>
+          <td><%= formatCurrency(item.rate) %></td>
+          <td class="text-end"><%= formatCurrency(item.amount) %></td>
+        </tr>
+        <% }) %>
+      </tbody>
+      <tfoot>
+        <tr><th colspan="4" class="text-end">Total:</th><th class="text-end fs-5"><%= formatCurrency(note.amount) %></th></tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+<%- include('../partials/footer') %>

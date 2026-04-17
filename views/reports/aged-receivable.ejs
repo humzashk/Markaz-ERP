@@ -1,0 +1,11 @@
+<%- include('../partials/header') %>
+<div class="page-header"><h2><i class="bi bi-clock-history"></i> Aged Receivable</h2><button onclick="window.print()" class="btn btn-outline-secondary no-print"><i class="bi bi-printer"></i></button></div>
+<div class="card"><div class="card-body p-0"><div class="table-responsive">
+  <table class="table table-hover mb-0"><thead><tr><th>#</th><th>Customer</th><th>Phone</th><th>City</th><th class="text-end">Balance Due</th><th>Last Transaction</th></tr></thead><tbody>
+    <% customers.forEach((c, i) => { %><tr><td><%= i+1 %></td><td><strong><%= c.name %></strong></td><td><%= c.phone || '-' %></td><td><%= c.city || '-' %></td><td class="text-end due-amount fs-5"><%= formatCurrency(c.balance) %></td><td><%= formatDate(c.last_txn) %></td></tr><% }) %>
+    <% if (!customers.length) { %><tr><td colspan="6" class="text-center text-muted py-3">No outstanding receivables</td></tr><% } %>
+  </tbody>
+  <% if (customers.length) { %><tfoot class="table-light"><tr class="fs-5 fw-bold"><td colspan="4" class="text-end">Total Receivable:</td><td class="text-end due-amount"><%= formatCurrency(customers.reduce((s,c) => s+c.balance, 0)) %></td><td></td></tr></tfoot><% } %>
+  </table>
+</div></div></div>
+<%- include('../partials/footer') %>

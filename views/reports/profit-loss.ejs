@@ -1,0 +1,45 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-graph-up"></i> Profit & Loss Statement</h2>
+  <button onclick="window.print()" class="btn btn-outline-secondary no-print"><i class="bi bi-printer"></i> Print</button>
+</div>
+<div class="filter-bar no-print">
+  <form class="row g-2" method="get">
+    <div class="col-md-3"><label class="form-label">From</label><input type="date" name="from" class="form-control" value="<%= from %>"></div>
+    <div class="col-md-3"><label class="form-label">To</label><input type="date" name="to" class="form-control" value="<%= to %>"></div>
+    <div class="col-auto d-flex align-items-end"><button class="btn btn-primary"><i class="bi bi-filter"></i> Filter</button></div>
+  </form>
+</div>
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">Income & Costs</div>
+      <div class="card-body">
+        <div class="d-flex justify-content-between border-bottom py-2"><span>Total Revenue (Sales)</span><strong class="text-success"><%= formatCurrency(revenue) %></strong></div>
+        <div class="d-flex justify-content-between border-bottom py-2"><span>Cost of Goods (Purchases)</span><strong class="text-danger"><%= formatCurrency(purchases) %></strong></div>
+        <div class="d-flex justify-content-between border-bottom py-2 fs-5"><span><strong>Gross Profit</strong></span><strong class="<%= grossProfit >= 0 ? 'text-success' : 'text-danger' %>"><%= formatCurrency(grossProfit) %></strong></div>
+        <div class="d-flex justify-content-between border-bottom py-2"><span>Operating Expenses</span><strong class="text-danger"><%= formatCurrency(expenses) %></strong></div>
+        <div class="d-flex justify-content-between border-bottom py-2"><span>Freight Charges</span><strong class="text-danger"><%= formatCurrency(freight) %></strong></div>
+        <div class="d-flex justify-content-between border-bottom py-2"><span>Breakage Adjustments</span><strong class="text-danger"><%= formatCurrency(breakageAdj) %></strong></div>
+        <div class="d-flex justify-content-between py-3 fs-4"><span><strong>Net Profit</strong></span><strong class="<%= netProfit >= 0 ? 'text-success' : 'text-danger' %>"><%= formatCurrency(netProfit) %></strong></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">Expense Breakdown</div>
+      <div class="card-body p-0">
+        <table class="table mb-0">
+          <thead><tr><th>Category</th><th class="text-end">Amount</th></tr></thead>
+          <tbody>
+            <% expenseBreakdown.forEach(e => { %>
+            <tr><td><%= e.category %></td><td class="text-end fw-bold"><%= formatCurrency(e.total) %></td></tr>
+            <% }) %>
+            <% if (!expenseBreakdown.length) { %><tr><td colspan="2" class="text-center text-muted">No expenses</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

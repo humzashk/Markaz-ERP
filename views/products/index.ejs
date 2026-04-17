@@ -1,0 +1,122 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-box"></i> Products / Inventory</h2>
+  <a href="/products/add" class="btn btn-primary"><i class="bi bi-plus"></i> Add Product</a>
+</div>
+<div class="filter-bar">
+  <form class="row g-2" method="get">
+    <div class="col-md-6"><input type="text" name="search" class="form-control" placeholder="Search by name, category..." value="<%= search %>"></div>
+    <div class="col-auto"><button class="btn btn-primary"><i class="bi bi-search"></i> Search</button></div>
+    <% if (search) { %><div class="col-auto"><a href="/products" class="btn btn-outline-secondary">Clear</a></div><% } %>
+    <% if (locals.error) { %><div class="col-12"><div class="alert alert-danger py-2 mb-0"><i class="bi bi-exclamation-triangle"></i> <%= error %></div></div><% } %>
+  </form>
+</div>
+
+<!-- Bulk Action Bar -->
+<div class="bulk-bar" id="bulkBar">
+  <span class="bulk-count"><span id="bulkCount">0</span> selected</span>
+  <form method="post" action="/products/bulk" id="bulkForm" class="d-flex align-items-center gap-2 flex-wrap">
+    <input type="hidden" name="ids" id="bulkIds">
+    <select name="action" id="bulkAction" class="form-select form-select-sm" style="width:auto;" onchange="toggleBulkFields(this.value)">
+      <option value="">-- Action --</option>
+      <option value="set_vendor">Set Manufacturer</option>
+      <option value="set_category">Set Category</option>
+      <option value="set_packaging">Set Pcs/Ctn</option>
+      <option value="set_rate">Set Rate (value)</option>
+      <option value="rate_by_pct">Adjust Rate (%)</option>
+      <option value="stock_add">Add Stock</option>
+      <option value="stock_sub">Reduce Stock</option>
+      <option value="delete">Deactivate Selected</option>
+    </select>
+    <div id="bf-vendor" class="d-none">
+      <select name="value" class="form-select form-select-sm" style="width:160px;">
+        <option value="">Clear Manufacturer</option>
+        <% vendors.forEach(v => { %><option value="<%= v.id %>"><%= v.name %></option><% }) %>
+      </select>
+    </div>
+    <div id="bf-text" class="d-none">
+      <input type="text" name="value" class="form-control form-control-sm" style="width:160px;" placeholder="Value">
+    </div>
+    <div id="bf-num" class="d-none">
+      <input type="number" name="value" class="form-control form-control-sm" style="width:100px;" placeholder="Value" step="0.01">
+    </div>
+    <button type="submit" class="btn btn-sm btn-light" onclick="return confirmBulkProduct()"><i class="bi bi-check2"></i> Apply</button>
+  </form>
+  <button class="btn btn-sm btn-outline-light ms-auto" onclick="clearSelection()"><i class="bi bi-x"></i> Clear</button>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr>
+          <th style="width:40px"><input type="checkbox" id="selectAll" class="form-check-input"></th>
+          <th>Name</th><th>Category</th><th>Manufacturer</th><th>Pcs/Ctn</th><th>Rate/Pc</th><th>Stock (Pcs)</th><th>Min Stock</th><th>Status</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          <% products.forEach((p, i) => { %>
+          <tr class="<%= p.stock <= p.min_stock && p.status === 'active' ? 'table-warning' : '' %>">
+            <td><input type="checkbox" class="form-check-input row-check" value="<%= p.id %>"></td>
+            <td><strong><%= p.name %></strong></td>
+            <td><%= p.category || '-' %></td>
+            <td><small><%= p.vendor_name ? p.vendor_name : '-' %></small></td>
+            <td><%= p.packaging %></td>
+            <td><strong><%= formatCurrency(p.rate) %></strong></td>
+            <td><strong class="<%= p.stock <= p.min_stock ? 'text-danger' : 'text-success' %>"><%= p.stock.toLocaleString() %></strong></td>
+            <td><%= p.min_stock %></td>
+            <td><span class="badge bg-<%= statusBadge(p.status) %>"><%= p.status %></span></td>
+            <td>
+              <a href="/products/view/<%= p.id %>" class="btn btn-sm btn-outline-info"><i class="bi bi-eye"></i></a>
+              <a href="/products/edit/<%= p.id %>" class="btn btn-sm btn-outline-warning"><i class="bi bi-pencil"></i></a>
+              <form class="d-inline delete-form" method="post" action="/products/delete/<%= p.id %>">
+                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+              </form>
+            </td>
+          </tr>
+          <% }) %>
+          <% if (!products.length) { %><tr><td colspan="10" class="text-center text-muted py-4">No products found</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<script>
+const selectAll = document.getElementById('selectAll');
+const bulkBar = document.getElementById('bulkBar');
+const bulkCount = document.getElementById('bulkCount');
+const bulkIds = document.getElementById('bulkIds');
+function getChecked() { return [...document.querySelectorAll('.row-check:checked')].map(c => c.value); }
+function updateBulk() {
+  const ids = getChecked();
+  bulkCount.textContent = ids.length;
+  bulkIds.value = ids.join(',');
+  bulkBar.classList.toggle('visible', ids.length > 0);
+}
+selectAll.addEventListener('change', () => {
+  document.querySelectorAll('.row-check').forEach(c => c.checked = selectAll.checked);
+  updateBulk();
+});
+document.querySelectorAll('.row-check').forEach(c => c.addEventListener('change', () => {
+  selectAll.checked = document.querySelectorAll('.row-check').length === getChecked().length;
+  updateBulk();
+}));
+function clearSelection() {
+  document.querySelectorAll('.row-check, #selectAll').forEach(c => c.checked = false);
+  updateBulk();
+}
+function toggleBulkFields(action) {
+  document.getElementById('bf-vendor').classList.add('d-none');
+  document.getElementById('bf-text').classList.add('d-none');
+  document.getElementById('bf-num').classList.add('d-none');
+  if (action === 'set_vendor') document.getElementById('bf-vendor').classList.remove('d-none');
+  else if (action === 'set_category') document.getElementById('bf-text').classList.remove('d-none');
+  else if (['set_packaging','set_rate','rate_by_pct','stock_add','stock_sub'].includes(action)) document.getElementById('bf-num').classList.remove('d-none');
+}
+function confirmBulkProduct() {
+  const action = document.getElementById('bulkAction').value;
+  if (!action) { alert('Please select an action.'); return false; }
+  if (action === 'delete') return confirm('Deactivate selected products? Products linked to orders will be skipped.');
+  return true;
+}
+</script>
+<%- include('../partials/footer') %>

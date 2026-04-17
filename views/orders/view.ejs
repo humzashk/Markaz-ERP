@@ -1,0 +1,82 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-cart"></i> Order: <%= order.order_no %></h2>
+  <div class="d-flex gap-2 flex-wrap">
+    <% if (!invoice) { %>
+    <a href="/orders/generate-invoice/<%= order.id %>" class="btn btn-success btn-lg"><i class="bi bi-receipt"></i> Generate Invoice</a>
+    <% } else { %>
+    <a href="/invoices/view/<%= invoice.id %>" class="btn btn-success"><i class="bi bi-receipt"></i> View Invoice</a>
+    <% } %>
+    <a href="/bilty/add?order_id=<%= order.id %>" class="btn btn-info"><i class="bi bi-send"></i> Add Bilty</a>
+    <a href="/orders/edit/<%= order.id %>" class="btn btn-warning"><i class="bi bi-pencil"></i> Edit</a>
+    <a href="/orders" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-5">
+    <div class="card">
+      <div class="card-header">Order Info</div>
+      <div class="card-body">
+        <table class="table table-borderless mb-0">
+          <tr><th width="120">Customer</th><td><strong><%= order.customer_name %></strong></td></tr>
+          <tr><th>Phone</th><td><%= order.customer_phone || '-' %></td></tr>
+          <tr><th>Order Date</th><td><%= formatDate(order.order_date) %></td></tr>
+          <tr><th>Delivery</th><td><%= formatDate(order.delivery_date) %></td></tr>
+          <tr><th>Status</th><td><span class="badge bg-<%= statusBadge(order.status) %> fs-6"><%= order.status %></span></td></tr>
+          <% if (order.customer_commission > 0) { %><tr><th>Commission</th><td><span class="badge bg-info fs-6"><%= order.customer_commission %>%</span></td></tr><% } %>
+          <% if (order.notes) { %><tr><th>Notes</th><td><%= order.notes %></td></tr><% } %>
+        </table>
+      </div>
+    </div>
+    <% if (bilty) { %>
+    <div class="card mt-3">
+      <div class="card-header text-info"><i class="bi bi-send"></i> Transport Info</div>
+      <div class="card-body">
+        <table class="table table-borderless mb-0">
+          <tr><th width="120">Transport</th><td><%= bilty.transport_name %></td></tr>
+          <tr><th>Bilty No</th><td><%= bilty.bilty_no || '-' %></td></tr>
+          <tr><th>Route</th><td><%= bilty.from_city %> → <%= bilty.to_city %></td></tr>
+          <tr><th>Freight</th><td><strong><%= formatCurrency(bilty.freight_charges) %></strong></td></tr>
+          <tr><th>Status</th><td><span class="badge bg-<%= statusBadge(bilty.status) %>"><%= bilty.status %></span></td></tr>
+        </table>
+      </div>
+    </div>
+    <% } %>
+  </div>
+  <div class="col-md-7">
+    <div class="card">
+      <div class="card-header">Order Items</div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table mb-0">
+            <thead><tr><th>#</th><th>Product</th><th class="text-end">Pkg(Ctn)</th><th class="text-end">Pcs/Ctn</th><th class="text-end">Qty(Pcs)</th><th class="text-end">Rate</th><th class="text-end">Amount</th></tr></thead>
+            <tbody>
+              <% items.forEach((item, i) => { %>
+              <tr>
+                <td><%= i+1 %></td>
+                <td><strong><%= item.product_name %></strong></td>
+                <td class="text-end"><%= item.packages %></td>
+                <td class="text-end"><%= item.packaging %></td>
+                <td class="text-end"><%= item.quantity.toLocaleString() %></td>
+                <td class="text-end"><%= formatCurrency(item.rate) %></td>
+                <td class="text-end fw-bold"><%= formatCurrency(item.amount) %></td>
+              </tr>
+              <% }) %>
+            </tbody>
+            <tfoot class="table-light fw-bold">
+              <tr><td colspan="6" class="text-end">Subtotal:</td><td class="text-end"><%= formatCurrency(order.subtotal) %></td></tr>
+              <% if (order.discount > 0) { %><tr><td colspan="6" class="text-end">Discount:</td><td class="text-end text-danger">-<%= formatCurrency(order.discount) %></td></tr><% } %>
+              <tr class="fs-5"><td colspan="6" class="text-end">TOTAL:</td><td class="text-end text-success"><%= formatCurrency(order.total) %></td></tr>
+              <% if (order.commission_amount > 0) { %>
+              <tr><td colspan="6" class="text-end">Less Commission (<%= order.customer_commission || '' %>%):</td><td class="text-end text-info">-<%= formatCurrency(order.commission_amount) %></td></tr>
+              <tr class="fs-5 table-warning"><td colspan="6" class="text-end">GROSS AMOUNT:</td><td class="text-end fw-bold"><%= formatCurrency(order.total - order.commission_amount) %></td></tr>
+              <% } %>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

@@ -1,0 +1,172 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-calendar-day"></i> Day Book</h2>
+  <button onclick="window.print()" class="btn btn-outline-secondary no-print"><i class="bi bi-printer"></i> Print</button>
+</div>
+
+<div class="card mb-3 no-print">
+  <div class="card-body py-2">
+    <form method="GET" class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label mb-1 small">Date</label>
+        <input type="date" name="date" class="form-control form-control-sm" value="<%= date %>">
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-sm btn-primary w-100">View</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="row mb-3">
+  <div class="col-md-4">
+    <div class="stat-card stat-card-green">
+      <div class="stat-value"><%= formatCurrency(totalIn) %></div>
+      <div class="stat-label">Total In (Sales + Receipts)</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="stat-card stat-card-red">
+      <div class="stat-value"><%= formatCurrency(totalOut) %></div>
+      <div class="stat-label">Total Out (Purchases + Payments + Expenses)</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="stat-card stat-card-<%= (totalIn - totalOut) >= 0 ? 'blue' : 'orange' %>">
+      <div class="stat-value"><%= formatCurrency(totalIn - totalOut) %></div>
+      <div class="stat-label">Net</div>
+    </div>
+  </div>
+</div>
+
+<% if (invoices.length) { %>
+<div class="card mb-3">
+  <div class="card-header bg-success text-white"><strong><i class="bi bi-receipt"></i> Sales / Invoices</strong></div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead><tr><th>Invoice</th><th>Customer</th><th class="text-end">Amount</th></tr></thead>
+      <tbody>
+        <% invoices.forEach(e => { %>
+        <tr>
+          <td><a href="/invoices/view/<%= e.id %>"><%= e.ref %></a></td>
+          <td><%= e.party %></td>
+          <td class="text-end text-success fw-bold"><%= formatCurrency(e.amount) %></td>
+        </tr>
+        <% }) %>
+        <tr class="table-success"><td colspan="2" class="text-end fw-bold">Sub-Total:</td><td class="text-end fw-bold"><%= formatCurrency(invoices.reduce((s,e)=>s+e.amount,0)) %></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<% } %>
+
+<% if (purchases.length) { %>
+<div class="card mb-3">
+  <div class="card-header bg-primary text-white"><strong><i class="bi bi-bag"></i> Purchases</strong></div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead><tr><th>Purchase</th><th>Vendor</th><th class="text-end">Amount</th></tr></thead>
+      <tbody>
+        <% purchases.forEach(e => { %>
+        <tr>
+          <td><a href="/purchases/view/<%= e.id %>"><%= e.ref %></a></td>
+          <td><%= e.party %></td>
+          <td class="text-end fw-bold"><%= formatCurrency(e.amount) %></td>
+        </tr>
+        <% }) %>
+        <tr class="table-primary"><td colspan="2" class="text-end fw-bold">Sub-Total:</td><td class="text-end fw-bold"><%= formatCurrency(purchases.reduce((s,e)=>s+e.amount,0)) %></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<% } %>
+
+<% if (paymentsIn.length) { %>
+<div class="card mb-3">
+  <div class="card-header bg-info text-white"><strong><i class="bi bi-cash-coin"></i> Payments Received</strong></div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead><tr><th>Ref</th><th>Customer</th><th class="text-end">Amount</th></tr></thead>
+      <tbody>
+        <% paymentsIn.forEach(e => { %>
+        <tr>
+          <td><%= e.ref %></td>
+          <td><%= e.party %></td>
+          <td class="text-end text-success fw-bold"><%= formatCurrency(e.amount) %></td>
+        </tr>
+        <% }) %>
+        <tr class="table-info"><td colspan="2" class="text-end fw-bold">Sub-Total:</td><td class="text-end fw-bold"><%= formatCurrency(paymentsIn.reduce((s,e)=>s+e.amount,0)) %></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<% } %>
+
+<% if (paymentsOut.length) { %>
+<div class="card mb-3">
+  <div class="card-header bg-warning"><strong><i class="bi bi-cash-stack"></i> Payments Made to Vendors</strong></div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead><tr><th>Ref</th><th>Vendor</th><th class="text-end">Amount</th></tr></thead>
+      <tbody>
+        <% paymentsOut.forEach(e => { %>
+        <tr>
+          <td><%= e.ref %></td>
+          <td><%= e.party %></td>
+          <td class="text-end fw-bold"><%= formatCurrency(e.amount) %></td>
+        </tr>
+        <% }) %>
+        <tr class="table-warning"><td colspan="2" class="text-end fw-bold">Sub-Total:</td><td class="text-end fw-bold"><%= formatCurrency(paymentsOut.reduce((s,e)=>s+e.amount,0)) %></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<% } %>
+
+<% if (expenses.length) { %>
+<div class="card mb-3">
+  <div class="card-header bg-danger text-white"><strong><i class="bi bi-wallet2"></i> Expenses</strong></div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead><tr><th>Ref</th><th>Category</th><th class="text-end">Amount</th></tr></thead>
+      <tbody>
+        <% expenses.forEach(e => { %>
+        <tr>
+          <td><a href="/expenses"><%= e.ref %></a></td>
+          <td><%= e.party %></td>
+          <td class="text-end text-danger fw-bold"><%= formatCurrency(e.amount) %></td>
+        </tr>
+        <% }) %>
+        <tr class="table-danger"><td colspan="2" class="text-end fw-bold">Sub-Total:</td><td class="text-end fw-bold"><%= formatCurrency(expenses.reduce((s,e)=>s+e.amount,0)) %></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<% } %>
+
+<% if (creditNotes.length) { %>
+<div class="card mb-3">
+  <div class="card-header bg-secondary text-white"><strong><i class="bi bi-file-earmark-minus"></i> Credit / Debit Notes</strong></div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead><tr><th>Note</th><th>Party</th><th>Type</th><th class="text-end">Amount</th></tr></thead>
+      <tbody>
+        <% creditNotes.forEach(e => { %>
+        <tr>
+          <td><a href="/creditnotes/view/<%= e.id %>"><%= e.ref %></a></td>
+          <td><%= e.party %></td>
+          <td><%= e.type %></td>
+          <td class="text-end fw-bold"><%= formatCurrency(e.amount) %></td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+<% } %>
+
+<% if (!allEntries.length) { %>
+<div class="card"><div class="card-body text-center text-muted py-5"><i class="bi bi-calendar-x fs-1 d-block mb-2"></i>No transactions for this date.</div></div>
+<% } %>
+
+<%- include('../partials/footer') %>

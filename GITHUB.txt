@@ -1,0 +1,98 @@
+HOW TO COMMIT MARKAZ ERP TO GITHUB
+====================================
+
+STEP 1: Install Git
+-------------------
+Download and install Git from: https://git-scm.com/download/win
+During install, keep all defaults. Click Next until done.
+
+STEP 2: Create a GitHub Account
+---------------------------------
+Go to: https://github.com
+Sign up for a free account if you don't have one.
+
+STEP 3: Create a New Repository on GitHub
+------------------------------------------
+1. Log in to GitHub
+2. Click the "+" icon at the top right → "New repository"
+3. Repository name: markaz-erp  (or any name you like)
+4. Description: Plastic Markaz ERP System
+5. Choose "Private" (recommended - keeps your business data safe)
+6. Do NOT initialize with README (we already have one)
+7. Click "Create repository"
+8. Copy the repository URL shown (looks like: https://github.com/yourusername/markaz-erp.git)
+
+STEP 4: Create .gitignore File
+--------------------------------
+Before committing, create a file named ".gitignore" in the Markaz ERP folder
+with this content (to exclude your database from being uploaded):
+
+    markaz_erp.db
+    node_modules/
+    *.log
+    .env
+
+IMPORTANT: Never upload markaz_erp.db to GitHub - it contains private business data!
+
+STEP 5: Open Command Prompt
+-----------------------------
+Press Windows Key + R → type "cmd" → press Enter
+Then navigate to your folder:
+
+    cd "C:\Users\sheik\Downloads\Sofware\Markaz ERP"
+
+STEP 6: Initialize Git and Make First Commit
+---------------------------------------------
+Run these commands one by one (press Enter after each):
+
+    git init
+    git add .
+    git commit -m "Initial commit: Plastic Markaz ERP System"
+
+STEP 7: Connect to GitHub and Push
+------------------------------------
+Replace YOUR-URL below with the URL you copied in Step 3:
+
+    git remote add origin YOUR-URL
+    git branch -M main
+    git push -u origin main
+
+GitHub will ask for your username and password (use your GitHub credentials).
+
+STEP 8: Done!
+--------------
+Your code is now on GitHub. You can verify by visiting your repository URL.
+
+====================================
+HOW TO UPDATE GITHUB IN THE FUTURE
+====================================
+
+Whenever you make changes to the system:
+
+    cd "C:\Users\sheik\Downloads\Sofware\Markaz ERP"
+    git add .
+    git commit -m "Short description of what you changed"
+    git push
+
+That's it!
+
+====================================
+HOW TO DOWNLOAD ON ANOTHER COMPUTER
+====================================
+
+    git clone https://github.com/yourusername/markaz-erp.git
+    cd markaz-erp
+    npm install
+    node index.js
+
+Note: You will need to restore your markaz_erp.db backup manually,
+since the database is excluded from GitHub.
+
+====================================
+TIPS
+====================================
+
+- Always back up markaz_erp.db separately (USB, Google Drive, email to yourself)
+- GitHub stores your CODE, not your business DATA
+- The database backup is what contains all your orders, customers, invoices, etc.
+- Commit regularly (at least after major feature additions or bug fixes)

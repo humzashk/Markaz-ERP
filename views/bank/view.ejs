@@ -1,0 +1,97 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-bank"></i> <%= account.account_name %></h2>
+  <div class="d-flex gap-2">
+    <a href="/bank" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+    <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#txnModal"><i class="bi bi-plus"></i> Manual Entry</button>
+  </div>
+</div>
+
+<div class="row mb-3">
+  <div class="col-md-3"><div class="stat-card stat-card-blue"><div class="stat-value"><%= formatCurrency(account.balance) %></div><div class="stat-label">Current Balance</div></div></div>
+  <div class="col-md-3"><div class="stat-card stat-card-green"><div class="stat-value"><%= formatCurrency(account.opening_balance || 0) %></div><div class="stat-label">Opening Balance</div></div></div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <form method="GET" class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label mb-1 small">From</label>
+        <input type="date" name="from" class="form-control form-control-sm" value="<%= from %>">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label mb-1 small">To</label>
+        <input type="date" name="to" class="form-control form-control-sm" value="<%= to %>">
+      </div>
+      <div class="col-md-4">
+        <button class="btn btn-sm btn-secondary w-100">Filter</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Reference</th><th class="text-success">Credit</th><th class="text-danger">Debit</th><th>Balance</th></tr></thead>
+        <tbody>
+          <% transactions.forEach(t => { %>
+          <tr>
+            <td><%= formatDate(t.txn_date) %></td>
+            <td><span class="badge bg-<%= t.txn_type==='credit'?'success':'danger' %>"><%= t.txn_type %></span></td>
+            <td><%= t.description || '-' %></td>
+            <td><%= t.reference || '-' %></td>
+            <td class="text-success"><%= t.txn_type==='credit' ? formatCurrency(t.amount) : '' %></td>
+            <td class="text-danger"><%= t.txn_type==='debit' ? formatCurrency(t.amount) : '' %></td>
+            <td class="fw-bold"><%= formatCurrency(t.balance) %></td>
+          </tr>
+          <% }) %>
+          <% if (!transactions.length) { %><tr><td colspan="7" class="text-center text-muted py-4">No transactions yet</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Manual Transaction Modal -->
+<div class="modal fade" id="txnModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Manual Transaction</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <form method="POST" action="/bank/transaction">
+        <input type="hidden" name="account_id" value="<%= account.id %>">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Type</label>
+            <select name="txn_type" class="form-select">
+              <option value="credit">Deposit (Credit)</option>
+              <option value="debit">Withdrawal (Debit)</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Amount</label>
+            <div class="input-group"><span class="input-group-text">Rs.</span><input type="number" name="amount" class="form-control" step="0.01" required></div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Date</label>
+            <input type="date" name="txn_date" class="form-control" value="<%= new Date().toISOString().split('T')[0] %>" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Description</label>
+            <input type="text" name="description" class="form-control">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Reference</label>
+            <input type="text" name="reference" class="form-control">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

@@ -1,0 +1,68 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-boxes"></i> New Stock Adjustment</h2>
+  <a href="/stock" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+</div>
+<div class="row justify-content-center">
+  <div class="col-md-7">
+    <div class="card">
+      <div class="card-body">
+        <form method="POST" action="/stock/add">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Product *</label>
+            <select name="product_id" class="form-select" required>
+              <option value="">— Select Product —</option>
+              <% products.forEach(p => { %>
+              <option value="<%= p.id %>"><%= p.name %> (Stock: <%= p.stock %>)</option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Adjustment Type *</label>
+            <select name="adjustment_type" class="form-select" required>
+              <option value="add" <%= adjType==='add'?'selected':'' %>>Add Stock (Purchase/Arrival)</option>
+              <option value="reduce" <%= adjType==='reduce'?'selected':'' %>>Reduce Stock (Manual)</option>
+              <option value="damage" <%= adjType==='damage'?'selected':'' %>>Damage / Write-off</option>
+              <option value="return" <%= adjType==='return'?'selected':'' %>>Return to Stock</option>
+              <option value="transfer_in" <%= adjType==='transfer_in'?'selected':'' %>>Transfer In</option>
+              <option value="transfer_out" <%= adjType==='transfer_out'?'selected':'' %>>Transfer Out</option>
+            </select>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Quantity (pcs) *</label>
+              <input type="number" name="quantity" class="form-control" min="1" required>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Date *</label>
+              <input type="date" name="adj_date" class="form-control" value="<%= new Date().toISOString().split('T')[0] %>" required>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Warehouse (optional)</label>
+            <select name="warehouse_id" class="form-select">
+              <option value="">— General / No Warehouse —</option>
+              <% warehouses.forEach(w => { %>
+              <option value="<%= w.id %>"><%= w.name %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Reason *</label>
+            <input type="text" name="reason" class="form-control" placeholder="e.g. Physical count, damaged goods..." required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Reference</label>
+            <input type="text" name="reference" class="form-control" placeholder="Optional ref no.">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Notes</label>
+            <textarea name="notes" class="form-control" rows="2"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary w-100"><i class="bi bi-check"></i> Save Adjustment</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

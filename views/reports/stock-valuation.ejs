@@ -1,0 +1,11 @@
+<%- include('../partials/header') %>
+<div class="page-header"><h2><i class="bi bi-currency-rupee"></i> Stock Valuation</h2><button onclick="window.print()" class="btn btn-outline-secondary no-print"><i class="bi bi-printer"></i></button></div>
+<div class="mb-3"><div class="stat-card stat-teal" style="max-width:300px"><div class="stat-info"><h3><%= formatCurrency(totalValue) %></h3><p>Total Inventory Value</p></div></div></div>
+<div class="card"><div class="card-body p-0"><div class="table-responsive">
+  <table class="table table-hover mb-0"><thead><tr><th>#</th><th>Product</th><th class="text-end">Stock</th><th class="text-end">Rate/Pc</th><th class="text-end">Value</th></tr></thead><tbody>
+    <% products.forEach((p, i) => { %><tr><td><%= i+1 %></td><td><strong><%= p.name %></strong></td><td class="text-end"><%= p.stock %></td><td class="text-end"><%= formatCurrency(p.rate) %></td><td class="text-end fw-bold text-success"><%= formatCurrency(p.value) %></td></tr><% }) %>
+  </tbody>
+  <tfoot class="table-light"><tr class="fs-5 fw-bold"><td colspan="4" class="text-end">Total Value:</td><td class="text-end text-success"><%= formatCurrency(totalValue) %></td></tr></tfoot>
+  </table>
+</div></div></div>
+<%- include('../partials/footer') %>

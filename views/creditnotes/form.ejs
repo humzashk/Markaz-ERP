@@ -1,0 +1,135 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-file-earmark-minus"></i> New <%= noteType === 'credit' ? 'Credit Note (Sales Return)' : 'Debit Note (Purchase Return)' %></h2>
+  <a href="/creditnotes" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+</div>
+<div class="card">
+  <div class="card-body">
+    <form method="POST" action="/creditnotes/add">
+      <input type="hidden" name="note_type" value="<%= noteType %>">
+      <div class="row mb-3">
+        <% if (noteType === 'credit') { %>
+        <div class="col-md-4">
+          <label class="form-label fw-semibold">Customer *</label>
+          <select name="customer_id" class="form-select" required>
+            <option value="">— Select Customer —</option>
+            <% customers.forEach(c => { %>
+            <option value="<%= c.id %>"><%= c.name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-semibold">Against Invoice (optional)</label>
+          <select name="invoice_id" class="form-select">
+            <option value="">— General Return —</option>
+            <% invoices.forEach(inv => { %>
+            <option value="<%= inv.id %>"><%= inv.invoice_no %> — <%= inv.customer_name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <% } else { %>
+        <div class="col-md-4">
+          <label class="form-label fw-semibold">Vendor *</label>
+          <select name="vendor_id" class="form-select" required>
+            <option value="">— Select Vendor —</option>
+            <% vendors.forEach(v => { %>
+            <option value="<%= v.id %>"><%= v.name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-semibold">Against Purchase (optional)</label>
+          <select name="purchase_id" class="form-select">
+            <option value="">— General Return —</option>
+            <% purchases.forEach(p => { %>
+            <option value="<%= p.id %>"><%= p.purchase_no %> — <%= p.vendor_name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <% } %>
+        <div class="col-md-4">
+          <label class="form-label fw-semibold">Date *</label>
+          <input type="date" name="note_date" class="form-control" value="<%= new Date().toISOString().split('T')[0] %>" required>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Reason / Description *</label>
+        <input type="text" name="reason" class="form-control" placeholder="e.g. Defective goods, wrong item..." required>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Items Returned</label>
+        <table class="table table-bordered" id="itemsTable">
+          <thead class="table-light">
+            <tr><th>Product</th><th>Qty</th><th>Rate</th><th>Amount</th><th></th></tr>
+          </thead>
+          <tbody id="itemRows">
+            <tr>
+              <td>
+                <select name="product_id[]" class="form-select form-select-sm" onchange="calcRow(this)">
+                  <option value="">— Select —</option>
+                  <% products.forEach(p => { %>
+                  <option value="<%= p.id %>" data-rate="<%= p.rate %>"><%= p.name %></option>
+                  <% }) %>
+                </select>
+              </td>
+              <td><input type="number" name="quantity[]" class="form-control form-control-sm" min="1" onchange="calcRow(this)"></td>
+              <td><input type="number" name="rate[]" class="form-control form-control-sm" step="0.01" onchange="calcRow(this)"></td>
+              <td><input type="number" name="amount[]" class="form-control form-control-sm" readonly></td>
+              <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove();calcTotal()"><i class="bi bi-trash"></i></button></td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="3" class="text-end fw-bold">Total:</td>
+              <td colspan="2"><strong id="grandTotal">Rs. 0.00</strong></td>
+            </tr>
+          </tfoot>
+        </table>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addItemRow()"><i class="bi bi-plus"></i> Add Row</button>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Notes</label>
+        <textarea name="notes" class="form-control" rows="2"></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary btn-lg"><i class="bi bi-check"></i> Save <%= noteType === 'credit' ? 'Credit' : 'Debit' %> Note</button>
+    </form>
+  </div>
+</div>
+
+<script>
+const products = <%- JSON.stringify(products) %>;
+function calcRow(el) {
+  const row = el.closest('tr');
+  const sel = row.querySelector('select[name="product_id[]"]');
+  const qty = parseFloat(row.querySelector('input[name="quantity[]"]').value) || 0;
+  let rate = parseFloat(row.querySelector('input[name="rate[]"]').value) || 0;
+  if (sel.value && !rate) {
+    const opt = sel.options[sel.selectedIndex];
+    rate = parseFloat(opt.dataset.rate) || 0;
+    row.querySelector('input[name="rate[]"]').value = rate;
+  }
+  row.querySelector('input[name="amount[]"]').value = (qty * rate).toFixed(2);
+  calcTotal();
+}
+function calcTotal() {
+  let t = 0;
+  document.querySelectorAll('input[name="amount[]"]').forEach(i => t += parseFloat(i.value)||0);
+  document.getElementById('grandTotal').textContent = 'Rs. ' + t.toLocaleString('en-PK', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function addItemRow() {
+  const opts = products.map(p => `<option value="${p.id}" data-rate="${p.rate}">${p.name}</option>`).join('');
+  const row = document.createElement('tr');
+  row.innerHTML = `
+    <td><select name="product_id[]" class="form-select form-select-sm" onchange="calcRow(this)"><option value="">— Select —</option>${opts}</select></td>
+    <td><input type="number" name="quantity[]" class="form-control form-control-sm" min="1" onchange="calcRow(this)"></td>
+    <td><input type="number" name="rate[]" class="form-control form-control-sm" step="0.01" onchange="calcRow(this)"></td>
+    <td><input type="number" name="amount[]" class="form-control form-control-sm" readonly></td>
+    <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove();calcTotal()"><i class="bi bi-trash"></i></button></td>
+  `;
+  document.getElementById('itemRows').appendChild(row);
+}
+</script>
+<%- include('../partials/footer') %>

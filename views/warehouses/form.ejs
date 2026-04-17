@@ -1,0 +1,48 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-building"></i> <%= edit ? 'Edit' : 'Add' %> Warehouse</h2>
+  <a href="/warehouses" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+</div>
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-body">
+        <form method="POST" action="/warehouses/<%= edit ? 'edit/' + warehouse.id : 'add' %>">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Warehouse Name *</label>
+            <input type="text" name="name" class="form-control" value="<%= edit ? warehouse.name : '' %>" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Location / Address</label>
+            <input type="text" name="location" class="form-control" value="<%= edit ? (warehouse.location||'') : '' %>">
+          </div>
+          <div class="row">
+            <div class="col mb-3">
+              <label class="form-label fw-semibold">Manager Name</label>
+              <input type="text" name="manager" class="form-control" value="<%= edit ? (warehouse.manager||'') : '' %>">
+            </div>
+            <div class="col mb-3">
+              <label class="form-label fw-semibold">Phone</label>
+              <input type="text" name="phone" class="form-control" value="<%= edit ? (warehouse.phone||'') : '' %>">
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Notes</label>
+            <textarea name="notes" class="form-control" rows="2"><%= edit ? (warehouse.notes||'') : '' %></textarea>
+          </div>
+          <% if (edit) { %>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Status</label>
+            <select name="status" class="form-select">
+              <option value="active" <%= warehouse.status==='active'?'selected':'' %>>Active</option>
+              <option value="inactive" <%= warehouse.status==='inactive'?'selected':'' %>>Inactive</option>
+            </select>
+          </div>
+          <% } %>
+          <button type="submit" class="btn btn-primary w-100"><i class="bi bi-check"></i> <%= edit ? 'Update' : 'Create' %> Warehouse</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

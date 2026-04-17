@@ -1,0 +1,61 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-cash-stack"></i> Record Payment</h2>
+  <a href="/payments" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+</div>
+<div class="card" style="max-width:600px">
+  <div class="card-body">
+    <form method="post" action="/payments/add<%= typeof entityId !== 'undefined' && entityId ? '?redirect=/payments' : '' %>">
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label">Payment Type *</label>
+          <select name="entity_type" class="form-select" id="entityType" onchange="toggleEntity()" required>
+            <option value="customer" <%= type==='customer'?'selected':'' %>>Customer (Receive)</option>
+            <option value="vendor" <%= type==='vendor'?'selected':'' %>>Vendor (Pay)</option>
+          </select>
+        </div>
+        <div class="col-md-6" id="customerSelect">
+          <label class="form-label">Customer *</label>
+          <select name="entity_id" class="form-select" id="customerEntity">
+            <option value="">Select Customer</option>
+            <% customers.forEach(c => { %><option value="<%= c.id %>" <%= (type==='customer' && entityId==c.id)?'selected':'' %>><%= c.name %> (Bal: Rs.<%= c.balance.toFixed(2) %>)</option><% }) %>
+          </select>
+        </div>
+        <div class="col-md-6 d-none" id="vendorSelect">
+          <label class="form-label">Vendor *</label>
+          <select name="entity_id" class="form-select" id="vendorEntity" disabled>
+            <option value="">Select Vendor</option>
+            <% vendors.forEach(v => { %><option value="<%= v.id %>" <%= (type==='vendor' && entityId==v.id)?'selected':'' %>><%= v.name %> (Bal: Rs.<%= Math.abs(v.balance).toFixed(2) %>)</option><% }) %>
+          </select>
+        </div>
+        <div class="col-md-6"><label class="form-label">Amount (Rs.) *</label><input type="number" name="amount" class="form-control form-control-lg" step="0.01" min="0.01" required></div>
+        <div class="col-md-6"><label class="form-label">Date *</label><input type="date" name="payment_date" class="form-control" value="<%= new Date().toISOString().split('T')[0] %>" required></div>
+        <div class="col-md-6"><label class="form-label">Payment Method</label>
+          <select name="payment_method" class="form-select">
+            <% ['cash','bank','cheque','online'].forEach(m => { %><option value="<%= m %>"><%= m.charAt(0).toUpperCase()+m.slice(1) %></option><% }) %>
+          </select>
+        </div>
+        <div class="col-md-6"><label class="form-label">Reference</label><input type="text" name="reference" class="form-control" placeholder="Cheque no, txn ID..."></div>
+        <div class="col-12"><label class="form-label">Notes</label><textarea name="notes" class="form-control" rows="2"></textarea></div>
+        <div class="col-12"><button type="submit" class="btn btn-primary btn-lg px-4"><i class="bi bi-save"></i> Save Payment</button></div>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+function toggleEntity() {
+  const type = document.getElementById('entityType').value;
+  const cs = document.getElementById('customerSelect');
+  const vs = document.getElementById('vendorSelect');
+  const ce = document.getElementById('customerEntity');
+  const ve = document.getElementById('vendorEntity');
+  if (type === 'customer') {
+    cs.classList.remove('d-none'); vs.classList.add('d-none');
+    ce.disabled = false; ce.name = 'entity_id'; ve.disabled = true; ve.name = '';
+  } else {
+    vs.classList.remove('d-none'); cs.classList.add('d-none');
+    ve.disabled = false; ve.name = 'entity_id'; ce.disabled = true; ce.name = '';
+  }
+}
+document.addEventListener('DOMContentLoaded', toggleEntity);
+</script>
+<%- include('../partials/footer') %>

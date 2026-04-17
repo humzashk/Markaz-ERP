@@ -1,0 +1,69 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-building"></i> <%= warehouse.name %></h2>
+  <div class="d-flex gap-2">
+    <a href="/warehouses/transfer" class="btn btn-outline-secondary"><i class="bi bi-arrow-left-right"></i> Transfer Stock</a>
+    <a href="/warehouses/edit/<%= warehouse.id %>" class="btn btn-outline-primary"><i class="bi bi-pencil"></i> Edit</a>
+    <a href="/warehouses" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+</div>
+
+<div class="row mb-3">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-body">
+        <p class="mb-1"><strong>Location:</strong> <%= warehouse.location || 'N/A' %></p>
+        <p class="mb-0"><strong>Status:</strong> <span class="badge bg-<%= warehouse.status==='active'?'success':'secondary' %>"><%= warehouse.status %></span></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <strong>Stock Inventory</strong>
+    <a href="/stock/add?warehouse=<%= warehouse.id %>" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> Adjust Stock</a>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr><th>Product</th><th>Category</th><th>Qty (pcs)</th><th>Rate</th><th>Value</th><th>Min Stock</th></tr></thead>
+        <tbody>
+          <% stock.forEach(s => { %>
+          <tr class="<%= s.quantity <= s.min_stock ? 'table-warning' : '' %>">
+            <td><strong><%= s.product_name %></strong></td>
+            <td><%= s.category || '-' %></td>
+            <td class="<%= s.quantity <= s.min_stock ? 'text-danger fw-bold' : '' %>"><%= s.quantity.toLocaleString() %></td>
+            <td><%= formatCurrency(s.rate) %></td>
+            <td><%= formatCurrency(s.value) %></td>
+            <td><%= s.min_stock || 0 %></td>
+          </tr>
+          <% }) %>
+          <% if (!stock.length) { %><tr><td colspan="6" class="text-center text-muted py-3">No stock recorded for this warehouse</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><strong>Recent Adjustments</strong></div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead><tr><th>Date</th><th>Product</th><th>Type</th><th>Qty</th><th>Reason</th></tr></thead>
+      <tbody>
+        <% adjustments.forEach(a => { %>
+        <tr>
+          <td><%= formatDate(a.adj_date) %></td>
+          <td><%= a.product_name %></td>
+          <td><span class="badge bg-secondary"><%= a.adjustment_type %></span></td>
+          <td><%= a.quantity %></td>
+          <td><%= a.reason || '-' %></td>
+        </tr>
+        <% }) %>
+        <% if (!adjustments.length) { %><tr><td colspan="5" class="text-center text-muted">No adjustments yet</td></tr><% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+<%- include('../partials/footer') %>

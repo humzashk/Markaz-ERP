@@ -1,0 +1,63 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-bar-chart"></i> Reports</h2>
+</div>
+<div class="row g-4">
+  <!-- Financial -->
+  <div class="col-md-4">
+    <div class="report-group">
+      <h5><i class="bi bi-cash-coin"></i> Financial Reports</h5>
+      <a href="/reports/profit-loss" class="report-link"><i class="bi bi-graph-up"></i> Profit & Loss</a>
+      <a href="/reports/balance-sheet" class="report-link"><i class="bi bi-clipboard-data"></i> Balance Sheet</a>
+      <a href="/reports/trial-balance" class="report-link"><i class="bi bi-journal-check"></i> Trial Balance</a>
+    </div>
+  </div>
+  <!-- Sales -->
+  <div class="col-md-4">
+    <div class="report-group">
+      <h5><i class="bi bi-receipt"></i> Sales Reports</h5>
+      <a href="/reports/sales-monthly" class="report-link"><i class="bi bi-calendar3"></i> Sales by Month</a>
+      <a href="/reports/product-sales" class="report-link"><i class="bi bi-box"></i> Product Sales</a>
+      <a href="/reports/customer-analysis" class="report-link"><i class="bi bi-people"></i> Customer Analysis</a>
+      <a href="/reports/sale-performance" class="report-link"><i class="bi bi-speedometer"></i> Sale Performance</a>
+      <a href="/reports/delivery-returns" class="report-link"><i class="bi bi-truck"></i> Delivery & Returns</a>
+    </div>
+  </div>
+  <!-- Purchase -->
+  <div class="col-md-4">
+    <div class="report-group">
+      <h5><i class="bi bi-bag"></i> Purchase Reports</h5>
+      <a href="/reports/purchase-invoices" class="report-link"><i class="bi bi-file-text"></i> Purchase Invoices</a>
+      <a href="/reports/vendor-payments" class="report-link"><i class="bi bi-wallet"></i> Vendor Payments</a>
+    </div>
+  </div>
+  <!-- Accounts -->
+  <div class="col-md-4">
+    <div class="report-group">
+      <h5><i class="bi bi-journal-text"></i> Accounts Reports</h5>
+      <a href="/reports/aged-receivable" class="report-link"><i class="bi bi-clock-history"></i> Aged Receivable</a>
+      <a href="/reports/aged-payable" class="report-link"><i class="bi bi-hourglass-split"></i> Aged Payable</a>
+      <a href="/reports/customer-balances" class="report-link"><i class="bi bi-person-lines-fill"></i> Customer Balances</a>
+    </div>
+  </div>
+  <!-- Inventory -->
+  <div class="col-md-4">
+    <div class="report-group">
+      <h5><i class="bi bi-box-seam"></i> Inventory Reports</h5>
+      <a href="/reports/low-stock" class="report-link"><i class="bi bi-exclamation-circle"></i> Low Stock Alert</a>
+      <a href="/reports/stock-ledger" class="report-link"><i class="bi bi-journal-text"></i> Stock Ledger</a>
+      <a href="/reports/stock-valuation" class="report-link"><i class="bi bi-currency-rupee"></i> Stock Valuation</a>
+    </div>
+  </div>
+  <!-- Other -->
+  <div class="col-md-4">
+    <div class="report-group">
+      <h5><i class="bi bi-file-earmark-text"></i> Other Reports</h5>
+      <a href="/reports/expense-report" class="report-link"><i class="bi bi-wallet2"></i> Expense Report</a>
+      <a href="/reports/breakage-report" class="report-link"><i class="bi bi-exclamation-triangle"></i> Breakage Report</a>
+      <a href="/reports/bilty-report" class="report-link"><i class="bi bi-send"></i> Bilty / Delivery Report</a>
+      <a href="/reports/audit-log" class="report-link"><i class="bi bi-shield-check"></i> Audit Log</a>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

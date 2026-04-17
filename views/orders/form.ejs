@@ -1,0 +1,73 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-cart-plus"></i> <%= edit ? 'Edit Order' : 'New Order' %></h2>
+  <a href="/orders" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+</div>
+<form method="post" action="/orders/<%= edit ? 'edit/'+order.id : 'add' %>">
+  <div class="row g-3 mb-3">
+    <div class="col-md-4">
+      <div class="card">
+        <div class="card-header">Order Details</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">Customer *</label>
+            <select name="customer_id" class="form-select" required onchange="loadCustomerCommission(this)">
+              <option value="">Select Customer</option>
+              <% customers.forEach(c => { %><option value="<%= c.id %>" data-commission="<%= c.commission || 0 %>" <%= (order && c.id==order.customer_id)?'selected':'' %>><%= c.name %></option><% }) %>
+            </select>
+          </div>
+          <div class="mb-3"><label class="form-label">Order Date *</label><input type="date" name="order_date" class="form-control" value="<%= order?.order_date || new Date().toISOString().split('T')[0] %>" required></div>
+          <div class="mb-3"><label class="form-label">Delivery Date</label><input type="date" name="delivery_date" class="form-control" value="<%= order?.delivery_date || '' %>"></div>
+          <% if (edit) { %>
+          <div class="mb-3">
+            <label class="form-label">Status</label>
+            <select name="status" class="form-select">
+              <% ['pending','confirmed','delivered','cancelled'].forEach(s => { %>
+              <option value="<%= s %>" <%= order.status===s?'selected':'' %>><%= s.charAt(0).toUpperCase()+s.slice(1) %></option>
+              <% }) %>
+            </select>
+          </div>
+          <% } %>
+          <div class="mb-3">
+            <label class="form-label">Commission % <small class="text-muted">(auto-loaded from customer)</small></label>
+            <div class="input-group">
+              <input type="number" id="commission_pct" name="commission_pct" class="form-control" value="<%= order?.commission_pct || 0 %>" step="0.01" min="0" max="100" onchange="calcTotal()">
+              <span class="input-group-text">%</span>
+            </div>
+          </div>
+          <div class="mb-3"><label class="form-label">Notes</label><textarea name="notes" class="form-control" rows="2"><%= order?.notes || '' %></textarea></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-8">
+      <div class="card">
+        <div class="card-header">
+          <span>Order Items</span>
+          <small class="text-muted ms-2">Ctns × Pcs/Ctn = Total Pcs</small>
+        </div>
+        <div class="card-body">
+          <%- include('../partials/item-rows') %>
+          <div class="text-end border-top pt-3">
+            <div class="d-flex justify-content-end gap-4 mb-2">
+              <span class="text-muted">Subtotal:</span><strong id="subtotal">0.00</strong>
+            </div>
+            <div class="d-flex justify-content-end gap-4 mb-2">
+              <span class="fs-5 fw-bold">TOTAL:</span><strong class="fs-5 text-success" id="grandTotal">0.00</strong>
+            </div>
+            <div class="d-flex justify-content-end gap-4 mb-2 text-info">
+              <span>Less Commission (<span id="commPctDisp">0</span>%):</span><strong id="commAmount">0.00</strong>
+            </div>
+            <div class="d-flex justify-content-end gap-4 border-top pt-2">
+              <span class="fs-5 fw-bold text-warning">GROSS:</span><strong class="fs-5 text-warning" id="grossAmount">0.00</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary btn-lg px-5"><i class="bi bi-save"></i> <%= edit ? 'Update Order' : 'Create Order' %></button>
+    <a href="/orders" class="btn btn-outline-secondary btn-lg">Cancel</a>
+  </div>
+</form>
+<%- include('../partials/footer') %>

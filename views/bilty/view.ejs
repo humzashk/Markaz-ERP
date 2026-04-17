@@ -1,0 +1,27 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-send"></i> Bilty: <%= bilty.bilty_no || 'N/A' %></h2>
+  <div class="d-flex gap-2">
+    <a href="/bilty/edit/<%= bilty.id %>" class="btn btn-warning"><i class="bi bi-pencil"></i> Edit</a>
+    <a href="/bilty" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+</div>
+<div class="card" style="max-width:600px">
+  <div class="card-body">
+    <table class="table table-borderless">
+      <tr><th width="140">Transport</th><td><strong><%= bilty.transport_name %></strong></td></tr>
+      <tr><th>Bilty No</th><td><%= bilty.bilty_no || '-' %></td></tr>
+      <tr><th>Route</th><td><strong><%= bilty.from_city %></strong> → <strong><%= bilty.to_city %></strong></td></tr>
+      <tr><th>Date</th><td><%= formatDate(bilty.bilty_date) %></td></tr>
+      <tr><th>Freight</th><td class="fs-5 fw-bold text-success"><%= formatCurrency(bilty.freight_charges) %></td></tr>
+      <tr><th>Weight</th><td><%= bilty.weight || '-' %></td></tr>
+      <tr><th>Packages</th><td><%= bilty.packages_count %></td></tr>
+      <tr><th>Customer</th><td><%= bilty.customer_name || '-' %></td></tr>
+      <% if (bilty.order_no) { %><tr><th>Order</th><td><a href="/orders/view/<%= bilty.order_id %>"><%= bilty.order_no %></a></td></tr><% } %>
+      <% if (bilty.invoice_no) { %><tr><th>Invoice</th><td><a href="/invoices/view/<%= bilty.invoice_id %>"><%= bilty.invoice_no %></a></td></tr><% } %>
+      <tr><th>Status</th><td><span class="badge bg-<%= statusBadge(bilty.status) %> fs-6"><%= bilty.status %></span></td></tr>
+      <% if (bilty.notes) { %><tr><th>Notes</th><td><%= bilty.notes %></td></tr><% } %>
+    </table>
+  </div>
+</div>
+<%- include('../partials/footer') %>

@@ -1,0 +1,46 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-wallet2"></i> Expenses</h2>
+  <a href="/expenses/add" class="btn btn-primary"><i class="bi bi-plus"></i> Add Expense</a>
+</div>
+<div class="filter-bar">
+  <form class="row g-2" method="get">
+    <div class="col-md-3">
+      <select name="category" class="form-select"><option value="">All Categories</option>
+        <% categories.forEach(c => { %><option value="<%= c %>" <%= category===c?'selected':'' %>><%= c %></option><% }) %>
+      </select>
+    </div>
+    <div class="col-md-2"><input type="date" name="from" class="form-control" value="<%= from %>" placeholder="From"></div>
+    <div class="col-md-2"><input type="date" name="to" class="form-control" value="<%= to %>" placeholder="To"></div>
+    <div class="col-auto"><button class="btn btn-primary"><i class="bi bi-search"></i> Filter</button></div>
+    <% if (category||from||to) { %><div class="col-auto"><a href="/expenses" class="btn btn-outline-secondary">Clear</a></div><% } %>
+    <div class="col-auto ms-auto"><strong class="text-danger fs-5">Total: <%= formatCurrency(totalAmount) %></strong></div>
+  </form>
+</div>
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr><th>#</th><th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>Method</th><th>Actions</th></tr></thead>
+        <tbody>
+          <% expenses.forEach((e, i) => { %>
+          <tr>
+            <td><%= i+1 %></td>
+            <td><%= formatDate(e.expense_date) %></td>
+            <td><span class="badge bg-secondary"><%= e.category %></span></td>
+            <td><%= e.description || '-' %></td>
+            <td class="fw-bold text-danger"><%= formatCurrency(e.amount) %></td>
+            <td><%= e.payment_method %></td>
+            <td>
+              <a href="/expenses/edit/<%= e.id %>" class="btn btn-sm btn-outline-warning"><i class="bi bi-pencil"></i></a>
+              <form class="d-inline delete-form" method="post" action="/expenses/delete/<%= e.id %>"><button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form>
+            </td>
+          </tr>
+          <% }) %>
+          <% if (!expenses.length) { %><tr><td colspan="7" class="text-center text-muted py-4">No expenses found</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

@@ -1,0 +1,383 @@
+<%- include('partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-speedometer2"></i> Dashboard</h2>
+  <div class="d-flex gap-2">
+    <a href="/orders/add" class="btn btn-primary btn-lg"><i class="bi bi-cart-plus"></i> New Order</a>
+    <a href="/purchases/add" class="btn btn-warning btn-lg"><i class="bi bi-bag-plus"></i> New Purchase</a>
+  </div>
+</div>
+<!-- Quick Action Strip -->
+<div class="d-flex gap-2 mb-3 flex-wrap">
+  <a href="/invoices/add" class="btn btn-outline-primary"><i class="bi bi-receipt"></i> New Invoice</a>
+  <a href="/payments/receive" class="btn btn-outline-success"><i class="bi bi-cash-coin"></i> Receive Payment</a>
+  <a href="/payments/pay" class="btn btn-outline-warning"><i class="bi bi-cash-stack"></i> Pay Vendor</a>
+  <a href="/customers/add" class="btn btn-outline-secondary"><i class="bi bi-person-plus"></i> Add Customer</a>
+  <a href="/products/add" class="btn btn-outline-secondary"><i class="bi bi-box-seam"></i> Add Product</a>
+</div>
+
+<!-- Period Selector -->
+<div class="period-bar mb-4">
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    <span class="text-muted small fw-semibold me-1">PERIOD:</span>
+    <% ['today','week','month','year'].forEach(p => { %>
+    <a href="?period=<%= p %>" class="period-btn <%= period === p ? 'active' : '' %>">
+      <%= p === 'today' ? 'Today' : p === 'week' ? 'Last 7 Days' : p === 'month' ? 'This Month' : 'This Year' %>
+    </a>
+    <% }) %>
+    <a href="#" class="period-btn <%= period === 'custom' ? 'active' : '' %>" onclick="document.getElementById('customRange').classList.toggle('d-none');return false">
+      <i class="bi bi-calendar3"></i> Custom
+    </a>
+    <span class="ms-2 badge bg-light text-dark border fw-normal" style="font-size:13px"><i class="bi bi-calendar2-check text-primary me-1"></i><%= rangeLabel %></span>
+  </div>
+  <form id="customRange" method="GET" class="d-none mt-2 d-flex align-items-center gap-2 flex-wrap">
+    <input type="hidden" name="period" value="custom">
+    <div class="d-flex align-items-center gap-2">
+      <label class="small text-muted">From</label>
+      <input type="text" name="from" id="dash_from" class="form-control form-control-sm datepicker" value="<%= rangeStart %>" style="width:140px">
+      <label class="small text-muted">To</label>
+      <input type="text" name="to" id="dash_to" class="form-control form-control-sm datepicker" value="<%= rangeEnd %>" style="width:140px">
+      <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+    </div>
+  </form>
+</div>
+
+<!-- Row 1: Key Financials for selected period -->
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="stat-card stat-blue">
+      <div class="stat-icon"><i class="bi bi-receipt"></i></div>
+      <div class="stat-info"><h3><%= formatCurrency(rangeRev) %></h3><p>Sales</p><small style="opacity:.8"><%= rangeLabel %></small></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="stat-card stat-green">
+      <div class="stat-icon"><i class="bi bi-graph-up"></i></div>
+      <div class="stat-info"><h3><%= formatCurrency(rangeProfit) %></h3><p>Profit</p><small style="opacity:.8"><%= rangeLabel %></small></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="stat-card stat-orange">
+      <div class="stat-icon"><i class="bi bi-bag"></i></div>
+      <div class="stat-info"><h3><%= formatCurrency(rangePurchases) %></h3><p>Purchases</p><small style="opacity:.8"><%= rangeLabel %></small></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="stat-card stat-teal">
+      <div class="stat-icon"><i class="bi bi-arrow-down-circle"></i></div>
+      <div class="stat-info"><h3><%= formatCurrency(totalReceivables) %></h3><p>Receivables</p></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="stat-card stat-red">
+      <div class="stat-icon"><i class="bi bi-arrow-up-circle"></i></div>
+      <div class="stat-info"><h3><%= formatCurrency(totalPayables) %></h3><p>Payables</p></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="stat-card stat-purple">
+      <div class="stat-icon"><i class="bi bi-bank"></i></div>
+      <div class="stat-info"><h3><%= formatCurrency(bankBalance) %></h3><p>Bank Balance</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- Row 2: Status & Alerts -->
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <a href="/invoices?status=unpaid" class="text-decoration-none">
+      <div class="stat-card stat-red" style="cursor:pointer">
+        <div class="stat-icon"><i class="bi bi-receipt-cutoff"></i></div>
+        <div class="stat-info"><h3><%= unpaidInvoices %></h3><p>Unpaid Invoices</p><small class="opacity-75"><%= formatCurrency(unpaidAmount) %></small></div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card" style="background:linear-gradient(135deg,#8e44ad,#9b59b6);color:#fff;">
+      <div class="stat-icon"><i class="bi bi-alarm"></i></div>
+      <div class="stat-info"><h3><%= overdueInvoices %></h3><p>Overdue</p><small class="opacity-75"><%= formatCurrency(overdueAmount) %></small></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <a href="/orders?status=pending" class="text-decoration-none">
+      <div class="stat-card stat-orange" style="cursor:pointer">
+        <div class="stat-icon"><i class="bi bi-cart-check"></i></div>
+        <div class="stat-info"><h3><%= pendingOrders %></h3><p>Pending Orders</p></div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card stat-teal">
+      <div class="stat-icon"><i class="bi bi-people"></i></div>
+      <div class="stat-info"><h3><%= totalCustomers %></h3><p>Active Customers</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <!-- Revenue vs Expense Chart -->
+  <div class="col-lg-8">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-bar-chart"></i> Revenue vs Expenses (Last 6 Months)</span>
+        <a href="/reports" class="btn btn-sm btn-outline-secondary">All Reports</a>
+      </div>
+      <div class="card-body">
+        <canvas id="revenueChart" height="90"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Year Overview -->
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-calendar3"></i> Year Overview</div>
+      <div class="card-body p-0">
+        <div class="list-group list-group-flush">
+          <div class="list-group-item d-flex justify-content-between py-2">
+            <span class="text-muted">Year Sales</span><strong class="text-success"><%= formatCurrency(yearRev) %></strong>
+          </div>
+          <div class="list-group-item d-flex justify-content-between py-2">
+            <span class="text-muted">Year Expenses</span><strong class="text-danger"><%= formatCurrency(yearExp) %></strong>
+          </div>
+          <div class="list-group-item d-flex justify-content-between py-2">
+            <span class="text-muted">Year Profit</span><strong class="<%= yearProfit >= 0 ? 'text-success' : 'text-danger' %>"><%= formatCurrency(yearProfit) %></strong>
+          </div>
+          <div class="list-group-item d-flex justify-content-between py-2">
+            <span class="text-muted">Today Sales</span><strong><%= formatCurrency(todayRev) %></strong>
+          </div>
+          <div class="list-group-item d-flex justify-content-between py-2">
+            <span class="text-muted">Today Expenses</span><strong><%= formatCurrency(todayExp) %></strong>
+          </div>
+          <div class="list-group-item d-flex justify-content-between py-2">
+            <span class="text-muted">Month Expenses</span><strong class="text-danger"><%= formatCurrency(monthExp) %></strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <!-- Top Customers -->
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-trophy text-warning"></i> Top Customers (<%= rangeLabel %>)</div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+          <% topCustomers.forEach((c, i) => { %>
+          <li class="list-group-item d-flex justify-content-between align-items-center py-2">
+            <span><span class="badge bg-secondary me-1"><%= i+1 %></span> <%= c.name %></span>
+            <strong class="text-success"><%= formatCurrency(c.total_sales) %></strong>
+          </li>
+          <% }) %>
+          <% if (!topCustomers.length) { %><li class="list-group-item text-muted small">No sales this month</li><% } %>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Products -->
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-box text-primary"></i> Top Products (<%= rangeLabel %>)</div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+          <% topProducts.forEach((p, i) => { %>
+          <li class="list-group-item d-flex justify-content-between align-items-center py-2">
+            <span><span class="badge bg-secondary me-1"><%= i+1 %></span> <%= p.name %></span>
+            <strong><%= p.total_qty.toLocaleString() %> pcs</strong>
+          </li>
+          <% }) %>
+          <% if (!topProducts.length) { %><li class="list-group-item text-muted small">No data</li><% } %>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Low Stock -->
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-header text-danger"><i class="bi bi-exclamation-circle"></i> Low Stock Alert</div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+          <% lowStock.forEach(p => { %>
+          <li class="list-group-item d-flex justify-content-between align-items-center py-2">
+            <span><%= p.name %></span>
+            <span class="badge bg-danger"><%= p.stock %> / min <%= p.min_stock %></span>
+          </li>
+          <% }) %>
+          <% if (!lowStock.length) { %>
+          <li class="list-group-item text-success small"><i class="bi bi-check-circle"></i> All stock levels OK</li>
+          <% } %>
+        </ul>
+        <% if (lowStock.length) { %>
+        <div class="p-2 text-center border-top"><a href="/reports/low-stock" class="btn btn-sm btn-outline-danger">View Full Report</a></div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Rate Fluctuations + Stock Velocity -->
+<div class="row g-3 mb-3">
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-graph-up-arrow"></i> Rate Changes</span>
+        <small class="text-muted">Recent product rate updates</small>
+      </div>
+      <div class="card-body p-0">
+        <% if (rateChanges.length) { %>
+        <table class="table table-sm mb-0">
+          <thead class="table-light"><tr><th>Product</th><th>Old Rate</th><th>New Rate</th><th>Change</th><th>Date</th></tr></thead>
+          <tbody>
+            <% rateChanges.forEach(r => { %>
+            <tr>
+              <td><strong><%= r.name %></strong></td>
+              <td class="text-muted"><%= formatCurrency(r.old_rate) %></td>
+              <td class="fw-bold"><%= formatCurrency(r.new_rate) %></td>
+              <td>
+                <% if (r.pct_change > 0) { %>
+                <span class="badge bg-danger"><i class="bi bi-arrow-up"></i> <%= r.pct_change %>%</span>
+                <% } else { %>
+                <span class="badge bg-success"><i class="bi bi-arrow-down"></i> <%= Math.abs(r.pct_change) %>%</span>
+                <% } %>
+              </td>
+              <td class="text-muted small"><%= formatDate(r.changed_at) %></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        <% } else { %>
+        <div class="p-4 text-center text-muted small">No rate changes recorded yet.<br>Rate changes are logged automatically when you edit a product's rate.</div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-speedometer"></i> Stock Forecast</span>
+        <small class="text-muted">Days of stock left (based on 30d sales)</small>
+      </div>
+      <div class="card-body p-0">
+        <% if (stockVelocity.length) { %>
+        <table class="table table-sm mb-0">
+          <thead class="table-light"><tr><th>Product</th><th>Stock</th><th>Sold/30d</th><th>Days Left</th></tr></thead>
+          <tbody>
+            <% stockVelocity.forEach(s => { %>
+            <tr class="<%= s.days_left <= 7 ? 'table-danger' : s.days_left <= 14 ? 'table-warning' : '' %>">
+              <td><strong><%= s.name %></strong></td>
+              <td><%= s.stock.toLocaleString() %></td>
+              <td><%= s.sold_30d.toLocaleString() %></td>
+              <td>
+                <% if (s.days_left <= 7) { %>
+                <span class="badge bg-danger fw-bold"><%= s.days_left %>d ⚠</span>
+                <% } else if (s.days_left <= 14) { %>
+                <span class="badge bg-warning text-dark"><%= s.days_left %>d</span>
+                <% } else { %>
+                <span class="badge bg-success"><%= s.days_left %>d</span>
+                <% } %>
+              </td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        <% } else { %>
+        <div class="p-4 text-center text-muted small">No sales data yet.<br>Stock forecast will appear after invoices are recorded.</div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <!-- Recent Orders -->
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-clock-history"></i> Recent Orders</span>
+        <a href="/orders" class="btn btn-sm btn-outline-primary">View All</a>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0 table-sm">
+            <thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Total</th><th>Status</th></tr></thead>
+            <tbody>
+              <% recentOrders.forEach(o => { %>
+              <tr>
+                <td><a href="/orders/view/<%= o.id %>" class="fw-bold"><%= o.order_no %></a></td>
+                <td><%= o.customer_name %></td>
+                <td><%= formatDate(o.order_date) %></td>
+                <td class="text-success fw-bold"><%= formatCurrency(o.total) %></td>
+                <td><span class="badge bg-<%= statusBadge(o.status) %>"><%= o.status %></span></td>
+              </tr>
+              <% }) %>
+              <% if (!recentOrders.length) { %><tr><td colspan="5" class="text-center text-muted py-3">No orders yet</td></tr><% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Payments -->
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-cash-coin"></i> Recent Payments</span>
+        <a href="/payments" class="btn btn-sm btn-outline-success">View All</a>
+      </div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+          <% recentPayments.forEach(p => { %>
+          <li class="list-group-item py-2 px-3">
+            <div class="d-flex justify-content-between align-items-center">
+              <div>
+                <span class="badge bg-<%= p.entity_type==='customer'?'success':'primary' %> me-1"><%= p.entity_type==='customer'?'In':'Out' %></span>
+                <strong><%= p.entity_name || '-' %></strong>
+              </div>
+              <strong class="<%= p.entity_type==='customer'?'text-success':'text-primary' %>"><%= formatCurrency(p.amount) %></strong>
+            </div>
+            <div class="text-muted small mt-1"><%= formatDate(p.payment_date) %> &nbsp;·&nbsp; <%= p.payment_method %></div>
+          </li>
+          <% }) %>
+          <% if (!recentPayments.length) { %><li class="list-group-item text-muted small">No payments yet</li><% } %>
+        </ul>
+        <div class="p-2 text-center border-top d-flex gap-2 justify-content-center">
+          <a href="/payments/receive" class="btn btn-sm btn-success">+ Receive</a>
+          <a href="/payments/pay" class="btn btn-sm btn-primary">+ Pay</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const chartData = <%- JSON.stringify(chartData) %>;
+const ctx = document.getElementById('revenueChart').getContext('2d');
+new Chart(ctx, {
+  type: 'bar',
+  data: {
+    labels: chartData.map(d => d.month),
+    datasets: [
+      { label: 'Revenue', data: chartData.map(d => d.revenue), backgroundColor: 'rgba(52,152,219,0.75)', borderRadius: 5 },
+      { label: 'Expenses', data: chartData.map(d => d.expense), backgroundColor: 'rgba(231,76,60,0.65)', borderRadius: 5 }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'top' },
+      tooltip: {
+        callbacks: {
+          label: ctx => ' Rs. ' + ctx.parsed.y.toLocaleString('en-PK', {minimumFractionDigits:0})
+        }
+      }
+    },
+    scales: { y: { beginAtZero: true, ticks: { callback: v => 'Rs.' + (v>=1000 ? (v/1000).toFixed(0)+'k' : v) } } }
+  }
+});
+</script>
+<%- include('partials/footer') %>

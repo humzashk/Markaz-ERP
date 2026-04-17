@@ -1,0 +1,68 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-truck"></i> Vendors</h2>
+  <a href="/vendors/add" class="btn btn-primary"><i class="bi bi-plus"></i> Add Vendor</a>
+</div>
+<div class="filter-bar">
+  <form class="row g-2" method="get">
+    <div class="col-md-3">
+      <input type="text" name="search" class="form-control form-control-sm" placeholder="Name, phone, city..." value="<%= search %>">
+    </div>
+    <div class="col-md-2">
+      <select name="region" class="form-select form-select-sm">
+        <option value="">All Regions</option>
+        <% regions.forEach(r => { %><option value="<%= r.name %>" <%= region===r.name?'selected':'' %>><%= r.name %></option><% }) %>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <select name="party_type" class="form-select form-select-sm">
+        <option value="">All Types</option>
+        <% types.forEach(t => { %><option value="<%= t.name %>" <%= party_type===t.name?'selected':'' %>><%= t.name %></option><% }) %>
+      </select>
+    </div>
+    <div class="col-auto"><button class="btn btn-primary btn-sm">Filter</button></div>
+    <% if (search || region || party_type) { %><div class="col-auto"><a href="/vendors" class="btn btn-outline-secondary btn-sm">Clear</a></div><% } %>
+  </form>
+</div>
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr><th>#</th><th>Name</th><th>Region / Type</th><th>Phone</th><th>City</th><th>Balance</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+          <% vendors.forEach((v, i) => { %>
+          <tr>
+            <td class="text-muted"><%= i+1 %></td>
+            <td>
+              <strong><%= v.name %></strong>
+              <% if(v.notes){ %><br><small class="text-muted"><%= v.notes %></small><% } %>
+            </td>
+            <td>
+              <% const regionCat = regions.find(r => r.name === v.region); %>
+              <% const typeCat = types.find(t => t.name === v.party_type); %>
+              <% if(regionCat){ %><span class="badge bg-<%= regionCat.color %>"><%= v.region %></span><% } %>
+              <% if(typeCat){ %> <span class="badge bg-<%= typeCat.color %>"><%= v.party_type %></span><% } %>
+              <% if(!v.region && !v.party_type){ %><span class="text-muted small">—</span><% } %>
+            </td>
+            <td><%= v.phone || '-' %></td>
+            <td><%= v.city || '-' %></td>
+            <td class="<%= v.balance > 0 ? 'text-danger fw-bold' : '' %>">
+              <%= formatCurrency(v.balance) %>
+              <% if (v.balance > 0) { %><small class="d-block text-danger">Payable</small><% } %>
+            </td>
+            <td><span class="badge bg-<%= statusBadge(v.status) %>"><%= v.status %></span></td>
+            <td>
+              <a href="/vendors/view/<%= v.id %>" class="btn btn-sm btn-outline-info" title="View"><i class="bi bi-eye"></i></a>
+              <a href="/vendors/edit/<%= v.id %>" class="btn btn-sm btn-outline-warning" title="Edit"><i class="bi bi-pencil"></i></a>
+              <a href="/ledger/vendor/<%= v.id %>" class="btn btn-sm btn-outline-secondary" title="Ledger"><i class="bi bi-journal-text"></i></a>
+              <a href="/payments/pay?vendor_id=<%= v.id %>" class="btn btn-sm btn-outline-primary" title="Pay Vendor"><i class="bi bi-cash-stack"></i></a>
+            </td>
+          </tr>
+          <% }) %>
+          <% if (!vendors.length) { %><tr><td colspan="8" class="text-center text-muted py-4">No vendors found</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

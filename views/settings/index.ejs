@@ -1,0 +1,349 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-gear"></i> Settings</h2>
+</div>
+
+<% if (saved) { %>
+<div class="alert alert-success alert-dismissible fade show border-0 shadow-sm">
+  <i class="bi bi-check-circle-fill me-2"></i> Settings saved successfully.
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+<% } %>
+
+<!-- Tab Nav -->
+<ul class="nav nav-tabs mb-4" id="settingsTabs">
+  <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-business"><i class="bi bi-building me-1"></i>Business</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-invoice"><i class="bi bi-receipt me-1"></i>Invoice & Print</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-numbering"><i class="bi bi-hash me-1"></i>Numbering</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-defaults"><i class="bi bi-sliders me-1"></i>Defaults</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-categories"><i class="bi bi-tags me-1"></i>Categories</a></li>
+</ul>
+
+<form method="POST" action="/settings" id="settingsForm">
+<div class="tab-content">
+
+  <!-- BUSINESS INFO -->
+  <div class="tab-pane fade show active" id="tab-business">
+    <div class="row g-4">
+      <div class="col-lg-7">
+        <div class="card">
+          <div class="card-header"><i class="bi bi-building text-primary me-2"></i>Business Identity</div>
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Business Name <span class="text-danger">*</span></label>
+              <input type="text" name="business_name" class="form-control form-control-lg" value="<%= settings.business_name || '' %>" required placeholder="e.g. PLASTIC MARKAZ">
+              <div class="form-text">This name appears on all invoices, receipts and reports.</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Tagline / Business Type</label>
+              <input type="text" name="business_tagline" class="form-control" value="<%= settings.business_tagline || '' %>" placeholder="e.g. Plastic Products & Trading">
+            </div>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Phone</label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="bi bi-telephone"></i></span>
+                  <input type="text" name="business_phone" class="form-control" value="<%= settings.business_phone || '' %>" placeholder="03XX-XXXXXXX">
+                </div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Mobile / WhatsApp</label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="bi bi-whatsapp"></i></span>
+                  <input type="text" name="business_mobile" class="form-control" value="<%= settings.business_mobile || '' %>" placeholder="03XX-XXXXXXX">
+                </div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Email</label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                  <input type="email" name="business_email" class="form-control" value="<%= settings.business_email || '' %>">
+                </div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">City</label>
+                <input type="text" name="business_city" class="form-control" value="<%= settings.business_city || '' %>">
+              </div>
+              <div class="col-12">
+                <label class="form-label fw-semibold">Full Address</label>
+                <textarea name="business_address" class="form-control" rows="2" placeholder="Shop/Office address..."><%= settings.business_address || '' %></textarea>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">NTN / Tax Number</label>
+                <input type="text" name="business_ntn" class="form-control" value="<%= settings.business_ntn || '' %>" placeholder="Optional">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">STRN / Sales Tax No.</label>
+                <input type="text" name="business_strn" class="form-control" value="<%= settings.business_strn || '' %>" placeholder="Optional">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-5">
+        <div class="card">
+          <div class="card-header"><i class="bi bi-eye text-primary me-2"></i>Invoice Preview</div>
+          <div class="card-body bg-light rounded-bottom">
+            <div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:20px;font-size:12px;">
+              <div style="font-size:18px;font-weight:800;color:#2c3e50;" id="prev-name"><%= settings.business_name || 'BUSINESS NAME' %></div>
+              <div style="color:#888;" id="prev-tagline"><%= settings.business_tagline || 'Business Type' %></div>
+              <div style="color:#555;margin-top:6px;" id="prev-contact">
+                <% if(settings.business_address){ %><%= settings.business_address %><% } %>
+                <% if(settings.business_city){ %>, <%= settings.business_city %><% } %><br>
+                <% if(settings.business_phone){ %>📞 <%= settings.business_phone %><% } %>
+                <% if(settings.business_email){ %> ✉ <%= settings.business_email %><% } %>
+              </div>
+              <hr style="margin:10px 0">
+              <div style="font-size:16px;font-weight:700;color:#3498db;">INVOICE</div>
+              <div style="color:#555;font-size:11px;">INV-00001 &nbsp;|&nbsp; Date: Today</div>
+            </div>
+          </div>
+        </div>
+        <div class="card mt-3">
+          <div class="card-header"><i class="bi bi-currency-dollar text-primary me-2"></i>Currency</div>
+          <div class="card-body">
+            <label class="form-label fw-semibold">Currency Symbol</label>
+            <div class="input-group" style="max-width:160px">
+              <span class="input-group-text">Symbol</span>
+              <input type="text" name="currency_symbol" class="form-control" value="<%= settings.currency_symbol || 'Rs.' %>" placeholder="Rs.">
+            </div>
+            <div class="form-text">Used throughout the system for amounts.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INVOICE & PRINT -->
+  <div class="tab-pane fade" id="tab-invoice">
+    <div class="row g-4">
+      <div class="col-lg-6">
+        <div class="card">
+          <div class="card-header"><i class="bi bi-file-text text-primary me-2"></i>Invoice Content</div>
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Payment Terms</label>
+              <input type="text" name="invoice_terms" class="form-control" value="<%= settings.invoice_terms || '' %>" placeholder="e.g. Payment due within 30 days.">
+              <div class="form-text">Shown on every printed invoice.</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Invoice Footer Message</label>
+              <input type="text" name="invoice_footer" class="form-control" value="<%= settings.invoice_footer || '' %>" placeholder="e.g. Thank you for your business!">
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Invoice Notes (default)</label>
+              <textarea name="invoice_default_notes" class="form-control" rows="2" placeholder="Default notes to pre-fill on new invoices..."><%= settings.invoice_default_notes || '' %></textarea>
+            </div>
+            <div class="mb-0">
+              <label class="form-label fw-semibold">Bank Details on Invoice</label>
+              <textarea name="invoice_bank_details" class="form-control" rows="3" placeholder="e.g. Bank: HBL&#10;Account: 12345678&#10;Title: Plastic Markaz"><%= settings.invoice_bank_details || '' %></textarea>
+              <div class="form-text">Appears at the bottom of printed invoices.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card">
+          <div class="card-header"><i class="bi bi-printer text-primary me-2"></i>Print Options</div>
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Default Due Days</label>
+              <div class="input-group" style="max-width:160px">
+                <input type="number" name="default_due_days" class="form-control" value="<%= settings.default_due_days || '30' %>" min="0">
+                <span class="input-group-text">days</span>
+              </div>
+              <div class="form-text">Auto-fills due date on new invoices.</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Show Tax on Invoice?</label>
+              <select name="show_tax" class="form-select">
+                <option value="no" <%= (settings.show_tax||'no')==='no'?'selected':'' %>>No (hide tax)</option>
+                <option value="yes" <%= settings.show_tax==='yes'?'selected':'' %>>Yes (show tax line)</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Tax Rate (%)</label>
+              <div class="input-group" style="max-width:160px">
+                <input type="number" name="tax_rate" class="form-control" value="<%= settings.tax_rate || '0' %>" min="0" step="0.1">
+                <span class="input-group-text">%</span>
+              </div>
+            </div>
+            <div class="mb-0">
+              <label class="form-label fw-semibold">Paper Size</label>
+              <select name="paper_size" class="form-select" style="max-width:200px">
+                <option value="A4" <%= (settings.paper_size||'A4')==='A4'?'selected':'' %>>A4</option>
+                <option value="Letter" <%= settings.paper_size==='Letter'?'selected':'' %>>Letter</option>
+                <option value="A5" <%= settings.paper_size==='A5'?'selected':'' %>>A5 (Half page)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NUMBERING -->
+  <div class="tab-pane fade" id="tab-numbering">
+    <div class="row g-4">
+      <div class="col-lg-6">
+        <div class="card">
+          <div class="card-header"><i class="bi bi-hash text-primary me-2"></i>Document Prefixes</div>
+          <div class="card-body">
+            <p class="text-muted small">Change the prefix used when auto-generating document numbers. The system appends a 5-digit number (e.g. INV-00001).</p>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Invoice Prefix</label>
+                <input type="text" name="prefix_invoice" class="form-control" value="<%= settings.prefix_invoice || 'INV' %>" maxlength="6">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Order Prefix</label>
+                <input type="text" name="prefix_order" class="form-control" value="<%= settings.prefix_order || 'ORD' %>" maxlength="6">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Purchase Prefix</label>
+                <input type="text" name="prefix_purchase" class="form-control" value="<%= settings.prefix_purchase || 'PUR' %>" maxlength="6">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Credit Note Prefix</label>
+                <input type="text" name="prefix_creditnote" class="form-control" value="<%= settings.prefix_creditnote || 'CN' %>" maxlength="6">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Debit Note Prefix</label>
+                <input type="text" name="prefix_debitnote" class="form-control" value="<%= settings.prefix_debitnote || 'DN' %>" maxlength="6">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card">
+          <div class="card-header"><i class="bi bi-info-circle text-primary me-2"></i>How Numbering Works</div>
+          <div class="card-body">
+            <div class="alert alert-info py-2 mb-3 border-0 bg-light">
+              <strong>Format:</strong> PREFIX-00001<br>
+              Numbers increment automatically based on total records in the database.
+            </div>
+            <div class="table-responsive">
+              <table class="table table-sm">
+                <thead><tr><th>Document</th><th>Current Prefix</th><th>Example</th></tr></thead>
+                <tbody>
+                  <tr><td>Invoice</td><td><span class="badge bg-primary"><%= settings.prefix_invoice || 'INV' %></span></td><td class="text-muted"><%= settings.prefix_invoice || 'INV' %>-00001</td></tr>
+                  <tr><td>Order</td><td><span class="badge bg-secondary"><%= settings.prefix_order || 'ORD' %></span></td><td class="text-muted"><%= settings.prefix_order || 'ORD' %>-00001</td></tr>
+                  <tr><td>Purchase</td><td><span class="badge bg-warning text-dark"><%= settings.prefix_purchase || 'PUR' %></span></td><td class="text-muted"><%= settings.prefix_purchase || 'PUR' %>-00001</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEFAULTS -->
+  <div class="tab-pane fade" id="tab-defaults">
+    <div class="row g-4">
+      <div class="col-lg-6">
+        <div class="card">
+          <div class="card-header"><i class="bi bi-sliders text-primary me-2"></i>Order & Invoice Defaults</div>
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Auto-confirm order on invoice generation?</label>
+              <select name="auto_confirm_order" class="form-select">
+                <option value="yes" <%= (settings.auto_confirm_order||'yes')==='yes'?'selected':'' %>>Yes — mark order as Confirmed</option>
+                <option value="no" <%= settings.auto_confirm_order==='no'?'selected':'' %>>No — keep order status unchanged</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Auto-deduct stock on invoice creation?</label>
+              <select name="auto_deduct_stock" class="form-select">
+                <option value="yes" <%= (settings.auto_deduct_stock||'yes')==='yes'?'selected':'' %>>Yes — deduct immediately</option>
+                <option value="no" <%= settings.auto_deduct_stock==='no'?'selected':'' %>>No — manual adjustment only</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Low Stock Alert Threshold</label>
+              <div class="input-group" style="max-width:200px">
+                <input type="number" name="low_stock_threshold" class="form-control" value="<%= settings.low_stock_threshold || '10' %>" min="0">
+                <span class="input-group-text">pcs</span>
+              </div>
+              <div class="form-text">Default min stock for new products.</div>
+            </div>
+            <div class="mb-0">
+              <label class="form-label fw-semibold">Financial Year Start Month</label>
+              <select name="fy_start_month" class="form-select" style="max-width:220px">
+                <% const months = ['January','February','March','April','May','June','July','August','September','October','November','December']; %>
+                <% months.forEach((m, i) => { %>
+                <option value="<%= i+1 %>" <%= (settings.fy_start_month||'1') == (i+1) ? 'selected':'' %>><%= m %></option>
+                <% }) %>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card">
+          <div class="card-header"><i class="bi bi-shield-check text-primary me-2"></i>Security & Audit</div>
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Require confirmation before delete?</label>
+              <select name="confirm_delete" class="form-select">
+                <option value="yes" <%= (settings.confirm_delete||'yes')==='yes'?'selected':'' %>>Yes (recommended)</option>
+                <option value="no" <%= settings.confirm_delete==='no'?'selected':'' %>>No</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Allow editing posted invoices?</label>
+              <select name="allow_invoice_edit" class="form-select">
+                <option value="yes" <%= (settings.allow_invoice_edit||'yes')==='yes'?'selected':'' %>>Yes</option>
+                <option value="no" <%= settings.allow_invoice_edit==='no'?'selected':'' %>>No (lock after creation)</option>
+              </select>
+            </div>
+            <div class="alert alert-warning py-2 border-0 mb-0 small">
+              <i class="bi bi-info-circle me-1"></i> Audit logs for all changes are always recorded in the system regardless of these settings.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CATEGORIES shortcut -->
+  <div class="tab-pane fade" id="tab-categories">
+    <div class="card">
+      <div class="card-body text-center py-5">
+        <i class="bi bi-tags display-4 text-primary d-block mb-3"></i>
+        <h5>Party Categories are managed on a dedicated page</h5>
+        <p class="text-muted">Add, edit, and delete Region and Type categories for Customers and Vendors.</p>
+        <a href="/categories" class="btn btn-primary btn-lg"><i class="bi bi-arrow-right-circle me-2"></i>Go to Categories Manager</a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="mt-3 d-flex gap-2 align-items-center border-top pt-3">
+  <button type="submit" class="btn btn-primary btn-lg px-5"><i class="bi bi-save me-2"></i>Save All Settings</button>
+  <span class="text-muted small">Changes apply immediately after saving.</span>
+</div>
+</form>
+
+<script>
+// Live preview update
+['business_name','business_tagline','business_phone','business_email','business_address','business_city'].forEach(f => {
+  const el = document.querySelector(`[name="${f}"]`);
+  if (el) el.addEventListener('input', updatePreview);
+});
+function updatePreview() {
+  const n = document.querySelector('[name="business_name"]')?.value;
+  const t = document.querySelector('[name="business_tagline"]')?.value;
+  if (n) document.getElementById('prev-name').textContent = n;
+  if (t) document.getElementById('prev-tagline').textContent = t;
+}
+// Remember active tab
+const savedTab = localStorage.getItem('settingsTab');
+if (savedTab) { const el = document.querySelector(`[href="${savedTab}"]`); if(el) new bootstrap.Tab(el).show(); }
+document.querySelectorAll('#settingsTabs .nav-link').forEach(t => {
+  t.addEventListener('shown.bs.tab', e => localStorage.setItem('settingsTab', e.target.getAttribute('href')));
+});
+</script>
+<%- include('../partials/footer') %>

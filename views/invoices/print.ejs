@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invoice <%= invoice.invoice_no %></title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #222; background: #f5f5f5; }
+    .invoice-wrap { max-width: 800px; margin: 20px auto; background: #fff; padding: 40px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
+    .no-print { text-align: center; margin-bottom: 20px; }
+    .no-print button, .no-print a { padding: 8px 20px; margin: 0 5px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; text-decoration: none; display: inline-block; }
+    .btn-print { background: #2c3e50; color: #fff; }
+    .btn-pdf { background: #e74c3c; color: #fff; }
+
+    /* Header */
+    .inv-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #2c3e50; padding-bottom: 18px; margin-bottom: 22px; }
+    .company-name { font-size: 24px; font-weight: 800; color: #2c3e50; letter-spacing: 0.5px; }
+    .company-sub { font-size: 12px; color: #888; margin-top: 2px; }
+    .company-contact { font-size: 11px; color: #666; margin-top: 5px; line-height: 1.7; }
+    .inv-title-block { text-align: right; }
+    .inv-title { font-size: 26px; font-weight: 700; color: #3498db; letter-spacing: 3px; }
+    .inv-no { font-size: 13px; font-weight: 700; color: #333; margin-top: 4px; background:#f0f7ff; display:inline-block; padding: 2px 10px; border-radius: 4px; }
+    .inv-date { font-size: 12px; color: #777; margin-top: 3px; }
+
+    /* Status badge */
+    .status-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 6px; }
+    .status-paid { background: #d4edda; color: #155724; }
+    .status-unpaid { background: #f8d7da; color: #721c24; }
+    .status-partial { background: #fff3cd; color: #856404; }
+
+    /* Bill To / Ship To */
+    .addresses { display: flex; gap: 30px; margin-bottom: 25px; }
+    .address-block { flex: 1; background: #f8f9fa; border-left: 4px solid #2c3e50; padding: 14px 16px; border-radius: 0 6px 6px 0; }
+    .address-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 6px; }
+    .address-name { font-size: 16px; font-weight: 700; color: #2c3e50; }
+    .address-detail { font-size: 12px; color: #555; margin-top: 3px; line-height: 1.5; }
+
+    /* Items table */
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    thead tr { background: #2c3e50; color: #fff; }
+    thead th { padding: 10px 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    tbody tr { border-bottom: 1px solid #eee; }
+    tbody tr:nth-child(even) { background: #fafafa; }
+    tbody td { padding: 9px 12px; font-size: 13px; }
+    .text-right { text-align: right; }
+    .text-center { text-align: center; }
+
+    /* Totals */
+    .totals-section { display: flex; justify-content: flex-end; }
+    .totals-table { width: 280px; }
+    .totals-table td { padding: 5px 10px; font-size: 13px; }
+    .totals-table .subtotal-row td { color: #555; }
+    .totals-table .discount-row td { color: #e74c3c; }
+    .totals-table .grand-row { border-top: 2px solid #2c3e50; }
+    .totals-table .grand-row td { font-size: 16px; font-weight: 700; color: #2c3e50; padding-top: 8px; }
+
+    /* Transport */
+    .transport-box { border: 1px dashed #aaa; padding: 12px 16px; border-radius: 6px; margin-top: 20px; }
+    .transport-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 6px; }
+    .transport-info { font-size: 12px; color: #444; display: flex; gap: 20px; flex-wrap: wrap; }
+    .transport-item strong { color: #2c3e50; }
+
+    /* Footer */
+    .inv-footer { margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px; display: flex; justify-content: space-between; align-items: flex-end; }
+    .terms { font-size: 11px; color: #888; max-width: 350px; }
+    .terms strong { color: #555; display: block; margin-bottom: 4px; }
+    .signature-area { text-align: center; }
+    .signature-line { border-top: 1px solid #888; width: 160px; padding-top: 4px; font-size: 11px; color: #888; }
+    .thank-you { text-align: center; margin-top: 20px; font-size: 12px; color: #888; font-style: italic; }
+
+    @media print {
+      body { background: #fff; }
+      .no-print { display: none; }
+      .invoice-wrap { box-shadow: none; margin: 0; padding: 25px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="no-print">
+  <button class="btn-print" onclick="window.print()">🖨 Print</button>
+  <a class="btn-pdf" href="/invoices/pdf/<%= invoice.id %>">⬇ Download PDF</a>
+  <a style="background:#6c757d;color:#fff;padding:8px 20px;border-radius:4px;" href="/invoices/view/<%= invoice.id %>">← Back</a>
+</div>
+
+<div class="invoice-wrap">
+  <!-- Header -->
+  <div class="inv-header">
+    <div>
+      <div class="company-name"><%= settings.business_name || 'PLASTIC MARKAZ' %></div>
+      <div class="company-sub"><%= settings.business_tagline || 'Plastic Products & Trading' %></div>
+      <div class="company-contact">
+        <% if (settings.business_address) { %><%= settings.business_address %><% } %>
+        <% if (settings.business_city) { %>, <%= settings.business_city %><% } %><br>
+        <% if (settings.business_phone) { %>📞 <%= settings.business_phone %><% } %>
+        <% if (settings.business_email) { %> &nbsp;✉ <%= settings.business_email %><% } %>
+      </div>
+    </div>
+    <div class="inv-title-block">
+      <div class="inv-title">INVOICE</div>
+      <div class="inv-no"><%= invoice.invoice_no %></div>
+      <div class="inv-date">Date: <strong><%= new Date(invoice.invoice_date).toLocaleDateString('en-PK', {day:'2-digit',month:'short',year:'numeric'}) %></strong></div>
+      <% if (invoice.due_date) { %>
+      <div class="inv-date">Due: <strong><%= new Date(invoice.due_date).toLocaleDateString('en-PK', {day:'2-digit',month:'short',year:'numeric'}) %></strong></div>
+      <% } %>
+      <div>
+        <span class="status-badge status-<%= invoice.status %>"><%= invoice.status === 'paid' ? '✓ Paid' : invoice.status === 'partial' ? '⚡ Partial' : '⚠ Unpaid' %></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bill To -->
+  <div class="addresses">
+    <div class="address-block">
+      <div class="address-label">Bill To</div>
+      <div class="address-name"><%= invoice.customer_name %></div>
+      <div class="address-detail">
+        <% if (invoice.customer_phone) { %>📞 <%= invoice.customer_phone %><br><% } %>
+        <% if (invoice.customer_address) { %><%= invoice.customer_address %><br><% } %>
+        <% if (invoice.customer_city) { %>📍 <%= invoice.customer_city %><% } %>
+        <% if (invoice.customer_category && invoice.customer_category !== 'general') { %> &nbsp;<span style="background:#e3f2fd;color:#1565c0;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:600;text-transform:capitalize;"><%= invoice.customer_category %></span><% } %>
+      </div>
+    </div>
+    <% if (bilty) { %>
+    <div class="address-block" style="border-left-color:#27ae60;">
+      <div class="address-label">Ship Via</div>
+      <div class="address-name"><%= bilty.transport_name %></div>
+      <div class="address-detail">
+        <%= bilty.from_city %> → <%= bilty.to_city %><br>
+        <% if (bilty.bilty_no) { %>Bilty: <%= bilty.bilty_no %><br><% } %>
+        Freight: <strong><%= (bilty.freight_charges || 0).toLocaleString('en-PK', {minimumFractionDigits:2}) %></strong>
+      </div>
+    </div>
+    <% } %>
+  </div>
+
+  <!-- Items Table -->
+  <table>
+    <thead>
+      <tr>
+        <th style="width:35px">#</th>
+        <th>Product / Description</th>
+        <th class="text-right" style="width:75px">Cartons</th>
+        <th class="text-right" style="width:70px">Pcs/Ctn</th>
+        <th class="text-right" style="width:80px">Total Pcs</th>
+        <th class="text-right" style="width:80px">Rate/Pc</th>
+        <th class="text-right" style="width:95px">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% items.forEach((item, i) => { %>
+      <tr>
+        <td class="text-center"><%= i+1 %></td>
+        <td><strong><%= item.product_name %></strong></td>
+        <td class="text-right"><%= item.packages || 0 %></td>
+        <td class="text-right"><%= item.packaging || '-' %></td>
+        <td class="text-right"><strong><%= (item.quantity || 0).toLocaleString() %></strong></td>
+        <td class="text-right"><%= (item.rate || 0).toFixed(2) %></td>
+        <td class="text-right"><strong><%= (item.amount || 0).toLocaleString('en-PK', {minimumFractionDigits:2}) %></strong></td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+
+  <!-- Totals -->
+  <div class="totals-section">
+    <table class="totals-table">
+      <tr class="subtotal-row">
+        <td>Subtotal</td>
+        <td class="text-right"><%= (invoice.subtotal || 0).toLocaleString('en-PK', {minimumFractionDigits:2}) %></td>
+      </tr>
+      <% if (invoice.discount > 0) { %>
+      <tr class="discount-row">
+        <td>Discount</td>
+        <td class="text-right">− <%= (invoice.discount || 0).toLocaleString('en-PK', {minimumFractionDigits:2}) %></td>
+      </tr>
+      <% } %>
+      <tr class="grand-row">
+        <td>TOTAL</td>
+        <td class="text-right"><%= settings.currency_symbol || 'Rs.' %> <%= (invoice.total || 0).toLocaleString('en-PK', {minimumFractionDigits:2}) %></td>
+      </tr>
+      <% if (invoice.commission_amount > 0) { %>
+      <tr style="color:#3498db;">
+        <td>Less Commission (<%= invoice.customer_commission || '' %>%)</td>
+        <td class="text-right">− <%= (invoice.commission_amount || 0).toLocaleString('en-PK', {minimumFractionDigits:2}) %></td>
+      </tr>
+      <tr style="font-weight:700; border-top:2px solid #f39c12; color:#2c3e50;">
+        <td>GROSS AMOUNT</td>
+        <td class="text-right"><%= settings.currency_symbol || 'Rs.' %> <%= ((invoice.total || 0) - (invoice.commission_amount || 0)).toLocaleString('en-PK', {minimumFractionDigits:2}) %></td>
+      </tr>
+      <% } %>
+      <% if (invoice.paid > 0) { %>
+      <tr style="color:#27ae60;">
+        <td>Amount Paid</td>
+        <td class="text-right">− <%= (invoice.paid || 0).toLocaleString('en-PK', {minimumFractionDigits:2}) %></td>
+      </tr>
+      <tr style="color:#e74c3c; font-weight:700;">
+        <td>Balance Due</td>
+        <td class="text-right"><%= ((invoice.total || 0) - (invoice.paid || 0)).toLocaleString('en-PK', {minimumFractionDigits:2}) %></td>
+      </tr>
+      <% } %>
+    </table>
+  </div>
+
+  <!-- Notes -->
+  <% if (invoice.notes) { %>
+  <div style="margin-top:16px; padding:10px 14px; background:#fffbf0; border-left:3px solid #f39c12; border-radius:0 4px 4px 0; font-size:12px; color:#555;">
+    <strong>Notes:</strong> <%= invoice.notes %>
+  </div>
+  <% } %>
+
+  <!-- Footer -->
+  <div class="inv-footer">
+    <div class="terms">
+      <% if (settings.invoice_terms) { %><strong>Payment Terms:</strong> <%= settings.invoice_terms %><% } %>
+      <% if (settings.business_phone) { %>For queries: <%= settings.business_phone %><% } %>
+    </div>
+    <div class="signature-area">
+      <div style="height:40px;"></div>
+      <div class="signature-line">Authorized Signature</div>
+    </div>
+  </div>
+
+  <div class="thank-you"><%= settings.invoice_footer || 'Thank you for your business!' %></div>
+</div>
+
+<script>window.onload = () => { if (!window.location.search.includes('noprint')) window.print(); }</script>
+</body>
+</html>

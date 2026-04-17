@@ -1,0 +1,52 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-arrow-left-right"></i> Transfer Stock Between Warehouses</h2>
+  <a href="/warehouses" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+</div>
+<div class="row justify-content-center">
+  <div class="col-md-7">
+    <div class="card">
+      <div class="card-body">
+        <form method="POST" action="/warehouses/transfer">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">From Warehouse *</label>
+            <select name="from_warehouse_id" class="form-select" required>
+              <option value="">— Select Source —</option>
+              <% warehouses.forEach(w => { %>
+              <option value="<%= w.id %>"><%= w.name %> (<%= w.location || 'No location' %>)</option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">To Warehouse *</label>
+            <select name="to_warehouse_id" class="form-select" required>
+              <option value="">— Select Destination —</option>
+              <% warehouses.forEach(w => { %>
+              <option value="<%= w.id %>"><%= w.name %> (<%= w.location || 'No location' %>)</option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Product *</label>
+            <select name="product_id" class="form-select" required>
+              <option value="">— Select Product —</option>
+              <% products.forEach(p => { %>
+              <option value="<%= p.id %>"><%= p.name %> (Total Stock: <%= p.stock %>)</option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Quantity (pieces) *</label>
+            <input type="number" name="quantity" class="form-control" min="1" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Notes</label>
+            <textarea name="notes" class="form-control" rows="2"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary w-100"><i class="bi bi-arrow-left-right"></i> Transfer Stock</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

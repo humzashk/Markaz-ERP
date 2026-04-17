@@ -1,0 +1,45 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-journal-text"></i> Ledger</h2>
+</div>
+<div class="row g-4">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-people text-primary"></i> Customer Ledgers</div>
+      <div class="card-body p-0">
+        <div class="list-group list-group-flush">
+          <% customers.forEach(c => { %>
+          <a href="/ledger/customer/<%= c.id %>" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+            <div><strong><%= c.name %></strong></div>
+            <div class="text-end">
+              <span class="<%= c.balance > 0 ? 'due-amount' : c.balance < 0 ? 'credit-amount' : '' %>"><%= formatCurrency(c.balance) %></span>
+              <% if (c.balance > 0) { %><br><small class="text-danger">Due</small><% } %>
+            </div>
+          </a>
+          <% }) %>
+          <% if (!customers.length) { %><div class="list-group-item text-muted">No customers</div><% } %>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-truck text-warning"></i> Vendor Ledgers</div>
+      <div class="card-body p-0">
+        <div class="list-group list-group-flush">
+          <% vendors.forEach(v => { %>
+          <a href="/ledger/vendor/<%= v.id %>" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+            <div><strong><%= v.name %></strong></div>
+            <div class="text-end">
+              <span class="<%= v.balance < 0 ? 'due-amount' : '' %>"><%= formatCurrency(Math.abs(v.balance)) %></span>
+              <% if (v.balance < 0) { %><br><small class="text-danger">Payable</small><% } %>
+            </div>
+          </a>
+          <% }) %>
+          <% if (!vendors.length) { %><div class="list-group-item text-muted">No vendors</div><% } %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

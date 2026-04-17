@@ -1,0 +1,95 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-arrow-left-right"></i> Import / Export Data</h2>
+</div>
+
+<% if (error) { %>
+<div class="alert alert-danger"><i class="bi bi-exclamation-circle"></i> <%= error %></div>
+<% } %>
+
+<% if (result) { %>
+<div class="alert alert-<%= result.errors.length ? 'warning' : 'success' %> mb-4">
+  <h5 class="alert-heading"><i class="bi bi-check-circle"></i> Import Complete</h5>
+  <div><strong><%= result.imported %></strong> records imported &nbsp;|&nbsp; <strong><%= result.skipped %></strong> skipped (duplicates)</div>
+  <% if (result.unrecognized.length) { %>
+  <hr>
+  <strong>Unrecognized data (not in system):</strong>
+  <ul class="mb-0 mt-1">
+    <% result.unrecognized.forEach(u => { %><li><%= u %></li><% }) %>
+  </ul>
+  <% } %>
+  <% if (result.errors.length) { %>
+  <hr>
+  <strong>Errors:</strong>
+  <ul class="mb-0 mt-1">
+    <% result.errors.forEach(e => { %><li class="text-danger"><%= e %></li><% }) %>
+  </ul>
+  <% } %>
+</div>
+<% } %>
+
+<div class="row g-4">
+  <!-- EXPORT -->
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header fw-semibold"><i class="bi bi-download text-success"></i> Export to Excel</div>
+      <div class="card-body">
+        <p class="text-muted small">Select which data to export. Downloaded as an Excel file you can open in Microsoft Excel or Google Sheets.</p>
+        <form method="post" action="/importexport/export">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Select tables to export</label>
+            <div class="row g-2">
+              <% Object.entries(exportable).forEach(([key, meta]) => { %>
+              <div class="col-6">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="tables" value="<%= key %>" id="exp_<%= key %>">
+                  <label class="form-check-label" for="exp_<%= key %>"><%= meta.label %></label>
+                </div>
+              </div>
+              <% }) %>
+            </div>
+          </div>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.querySelectorAll('[name=tables]').forEach(c=>c.checked=true)">Select All</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.querySelectorAll('[name=tables]').forEach(c=>c.checked=false)">Clear</button>
+          </div>
+          <hr>
+          <button type="submit" class="btn btn-success w-100"><i class="bi bi-file-earmark-spreadsheet"></i> Download Excel</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- IMPORT -->
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header fw-semibold"><i class="bi bi-upload text-primary"></i> Import from Excel / CSV</div>
+      <div class="card-body">
+        <p class="text-muted small">Upload an Excel or CSV file. The system will match column names automatically. Any unrecognized values will be noted for your review.</p>
+        <form method="post" action="/importexport/import" enctype="multipart/form-data">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">What are you importing?</label>
+            <select name="import_type" class="form-select" required>
+              <option value="">— Select type —</option>
+              <option value="customers">Customers</option>
+              <option value="vendors">Vendors / Suppliers</option>
+              <option value="products">Products</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Upload File (.xlsx or .csv)</label>
+            <input type="file" name="file" class="form-control" accept=".xlsx,.xls,.csv" required>
+          </div>
+          <div class="alert alert-info py-2 small">
+            <strong>Expected columns:</strong><br>
+            Customers: <code>name, phone, city, balance, region, party_type, notes</code><br>
+            Vendors: <code>name, phone, city, balance</code><br>
+            Products: <code>name, category, packaging, rate, stock</code>
+          </div>
+          <button type="submit" class="btn btn-primary w-100"><i class="bi bi-upload"></i> Import Data</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

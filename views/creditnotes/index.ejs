@@ -1,0 +1,64 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-file-earmark-minus"></i> Credit / Debit Notes</h2>
+  <div class="d-flex gap-2">
+    <a href="/creditnotes/add?type=credit" class="btn btn-success"><i class="bi bi-plus"></i> Credit Note (Sales Return)</a>
+    <a href="/creditnotes/add?type=debit" class="btn btn-primary"><i class="bi bi-plus"></i> Debit Note (Purchase Return)</a>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <form method="GET" class="row g-2">
+      <div class="col-md-4">
+        <select name="type" class="form-select form-select-sm">
+          <option value="" <%= !type?'selected':'' %>>All Notes</option>
+          <option value="credit" <%= type==='credit'?'selected':'' %>>Credit Notes (Sales Returns)</option>
+          <option value="debit" <%= type==='debit'?'selected':'' %>>Debit Notes (Purchase Returns)</option>
+        </select>
+      </div>
+      <div class="col-md-2"><button class="btn btn-sm btn-secondary w-100">Filter</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr><th>Note #</th><th>Date</th><th>Type</th><th>Party</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+          <% notes.forEach(n => { %>
+          <tr>
+            <td><a href="/creditnotes/view/<%= n.id %>" class="fw-bold"><%= n.note_no %></a></td>
+            <td><%= formatDate(n.note_date) %></td>
+            <td>
+              <% if (n.note_type === 'credit') { %>
+              <span class="badge bg-success">Credit Note</span>
+              <% } else { %>
+              <span class="badge bg-primary">Debit Note</span>
+              <% } %>
+            </td>
+            <td><%= n.customer_name || n.vendor_name || '-' %></td>
+            <td class="fw-bold"><%= formatCurrency(n.amount) %></td>
+            <td><span class="badge bg-<%= n.status==='applied'?'success':'warning' %>"><%= n.status %></span></td>
+            <td>
+              <a href="/creditnotes/view/<%= n.id %>" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
+              <% if (n.status !== 'applied') { %>
+              <form method="POST" action="/creditnotes/apply/<%= n.id %>" class="d-inline">
+                <button class="btn btn-sm btn-success" title="Apply to Ledger"><i class="bi bi-check-circle"></i> Apply</button>
+              </form>
+              <% } %>
+              <form method="POST" action="/creditnotes/delete/<%= n.id %>" class="d-inline confirm-delete">
+                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+              </form>
+            </td>
+          </tr>
+          <% }) %>
+          <% if (!notes.length) { %><tr><td colspan="7" class="text-center text-muted py-4">No notes found</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

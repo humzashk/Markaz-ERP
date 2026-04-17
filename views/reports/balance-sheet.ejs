@@ -1,0 +1,36 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-clipboard-data"></i> Balance Sheet</h2>
+  <button onclick="window.print()" class="btn btn-outline-secondary no-print"><i class="bi bi-printer"></i> Print</button>
+</div>
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header text-success"><i class="bi bi-arrow-up-circle"></i> Assets</div>
+      <div class="card-body">
+        <div class="d-flex justify-content-between border-bottom py-2"><span>Accounts Receivable (from Customers)</span><strong class="text-success"><%= formatCurrency(totalReceivable) %></strong></div>
+        <div class="d-flex justify-content-between border-bottom py-2"><span>Inventory Value</span><strong class="text-success"><%= formatCurrency(inventoryValue) %></strong></div>
+        <div class="d-flex justify-content-between py-3 fs-5"><span><strong>Total Assets</strong></span><strong class="text-success"><%= formatCurrency(totalReceivable + inventoryValue) %></strong></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header text-danger"><i class="bi bi-arrow-down-circle"></i> Liabilities</div>
+      <div class="card-body">
+        <div class="d-flex justify-content-between border-bottom py-2"><span>Accounts Payable (to Vendors)</span><strong class="text-danger"><%= formatCurrency(totalPayable) %></strong></div>
+        <div class="d-flex justify-content-between py-3 fs-5"><span><strong>Total Liabilities</strong></span><strong class="text-danger"><%= formatCurrency(totalPayable) %></strong></div>
+      </div>
+    </div>
+    <div class="card mt-3">
+      <div class="card-header"><i class="bi bi-bank"></i> Equity</div>
+      <div class="card-body">
+        <div class="d-flex justify-content-between border-bottom py-2"><span>Total Revenue</span><strong><%= formatCurrency(totalRevenue) %></strong></div>
+        <div class="d-flex justify-content-between border-bottom py-2"><span>Total Purchases</span><strong><%= formatCurrency(totalPurchases) %></strong></div>
+        <div class="d-flex justify-content-between border-bottom py-2"><span>Total Expenses</span><strong><%= formatCurrency(totalExpenses) %></strong></div>
+        <div class="d-flex justify-content-between py-3 fs-5"><span><strong>Net Equity</strong></span><strong class="text-primary"><%= formatCurrency(totalRevenue - totalPurchases - totalExpenses) %></strong></div>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

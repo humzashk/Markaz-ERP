@@ -1,0 +1,43 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-send"></i> <%= edit ? 'Edit' : 'Add' %> Bilty</h2>
+  <a href="/bilty" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+</div>
+<div class="card" style="max-width:700px">
+  <div class="card-body">
+    <form method="post" action="/bilty/<%= edit ? 'edit/'+bilty.id : 'add' %>">
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label">Transport Name *</label><input type="text" name="transport_name" class="form-control" required value="<%= bilty?.transport_name || '' %>"></div>
+        <div class="col-md-6"><label class="form-label">Bilty Number</label><input type="text" name="bilty_no" class="form-control" value="<%= bilty?.bilty_no || '' %>"></div>
+        <div class="col-md-6"><label class="form-label">From City *</label><input type="text" name="from_city" class="form-control" required value="<%= bilty?.from_city || '' %>"></div>
+        <div class="col-md-6"><label class="form-label">To City *</label><input type="text" name="to_city" class="form-control" required value="<%= bilty?.to_city || '' %>"></div>
+        <div class="col-md-4"><label class="form-label">Date *</label><input type="date" name="bilty_date" class="form-control" required value="<%= bilty?.bilty_date || new Date().toISOString().split('T')[0] %>"></div>
+        <div class="col-md-4"><label class="form-label">Freight (Rs.)</label><input type="number" name="freight_charges" class="form-control" step="0.01" value="<%= bilty?.freight_charges || 0 %>"></div>
+        <div class="col-md-4"><label class="form-label">Packages Count</label><input type="number" name="packages_count" class="form-control" value="<%= bilty?.packages_count || 0 %>"></div>
+        <div class="col-md-6"><label class="form-label">Link to Order</label>
+          <select name="order_id" class="form-select">
+            <option value="">-- None --</option>
+            <% orders.forEach(o => { %><option value="<%= o.id %>" <%= (bilty && bilty.order_id==o.id)?'selected':'' %>><%= o.order_no %> - <%= o.customer_name %></option><% }) %>
+          </select>
+        </div>
+        <div class="col-md-6"><label class="form-label">Link to Invoice</label>
+          <select name="invoice_id" class="form-select">
+            <option value="">-- None --</option>
+            <% invoices.forEach(inv => { %><option value="<%= inv.id %>" <%= (bilty && bilty.invoice_id==inv.id)?'selected':'' %>><%= inv.invoice_no %> - <%= inv.customer_name %></option><% }) %>
+          </select>
+        </div>
+        <div class="col-md-6"><label class="form-label">Weight</label><input type="text" name="weight" class="form-control" value="<%= bilty?.weight || '' %>" placeholder="e.g. 50 kg"></div>
+        <% if (edit) { %>
+        <div class="col-md-6"><label class="form-label">Status</label>
+          <select name="status" class="form-select">
+            <% ['in_transit','delivered','cancelled'].forEach(s => { %><option value="<%= s %>" <%= bilty.status===s?'selected':'' %>><%= s.replace('_',' ').charAt(0).toUpperCase()+s.replace('_',' ').slice(1) %></option><% }) %>
+          </select>
+        </div>
+        <% } %>
+        <div class="col-12"><label class="form-label">Notes</label><textarea name="notes" class="form-control" rows="2"><%= bilty?.notes || '' %></textarea></div>
+        <div class="col-12"><button type="submit" class="btn btn-primary btn-lg px-4"><i class="bi bi-save"></i> <%= edit ? 'Update' : 'Save' %> Bilty</button></div>
+      </div>
+    </form>
+  </div>
+</div>
+<%- include('../partials/footer') %>

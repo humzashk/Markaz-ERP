@@ -1,0 +1,23 @@
+<%- include('../partials/header') %>
+<div class="page-header"><h2><i class="bi bi-speedometer"></i> Sale Performance</h2><button onclick="window.print()" class="btn btn-outline-secondary no-print"><i class="bi bi-printer"></i></button></div>
+<div class="filter-bar no-print">
+  <form class="row g-2" method="get">
+    <div class="col-md-3"><input type="date" name="from" class="form-control" value="<%= from %>"></div>
+    <div class="col-md-3"><input type="date" name="to" class="form-control" value="<%= to %>"></div>
+    <div class="col-auto"><button class="btn btn-primary"><i class="bi bi-filter"></i></button></div>
+  </form>
+</div>
+<div class="row g-3 mb-3">
+  <div class="col-md-4"><div class="stat-card stat-blue"><div class="stat-info"><h3><%= formatCurrency(totalSales) %></h3><p>Total Sales</p></div></div></div>
+  <div class="col-md-4"><div class="stat-card stat-green"><div class="stat-info"><h3><%= formatCurrency(avgDaily) %></h3><p>Avg Daily Sales</p></div></div></div>
+  <div class="col-md-4"><div class="stat-card stat-purple"><div class="stat-info"><h3><%= daily.length %></h3><p>Active Days</p></div></div></div>
+</div>
+<div class="card"><div class="card-body"><canvas id="perfChart" height="80"></canvas></div></div>
+<script>
+const d = <%- JSON.stringify(daily) %>;
+new Chart(document.getElementById('perfChart'), {
+  type: 'line', data: { labels: d.map(x=>x.date), datasets: [{ label: 'Daily Sales', data: d.map(x=>x.total), borderColor: '#3498db', fill: true, backgroundColor: 'rgba(52,152,219,0.1)', tension: 0.3 }] },
+  options: { responsive: true, scales: { y: { beginAtZero: true } } }
+});
+</script>
+<%- include('../partials/footer') %>

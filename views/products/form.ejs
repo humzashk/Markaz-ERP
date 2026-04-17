@@ -1,0 +1,30 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-box"></i> <%= edit ? 'Edit' : 'Add' %> Product</h2>
+  <a href="/products" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+</div>
+<div class="card" style="max-width:600px">
+  <div class="card-body">
+    <form method="post" action="/products/<%= edit ? 'edit/'+product.id : 'add' %>">
+      <div class="row g-3">
+        <div class="col-12"><label class="form-label">Product Name *</label><input type="text" name="name" class="form-control form-control-lg" required value="<%= product?.name || '' %>"></div>
+        <div class="col-md-6"><label class="form-label">Category</label>
+          <input type="text" name="category" class="form-control" value="<%= product?.category || '' %>" placeholder="Select or type category..." list="catList">
+          <datalist id="catList"><% allCats.forEach(c => { %><option value="<%= c %>"><% }) %></datalist>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Packaging (Pcs per Carton)</label>
+          <input type="number" name="packaging" class="form-control" value="<%= product?.packaging || 1 %>" min="1" required>
+          <small class="text-muted">How many pieces in one carton/package</small>
+        </div>
+        <div class="col-md-6"><label class="form-label">Rate per Piece (Rs.)</label><input type="number" name="rate" class="form-control" value="<%= product?.rate || 0 %>" step="0.01" min="0" required></div>
+        <div class="col-md-6"><label class="form-label">Manufacturer / Vendor</label><select name="vendor_id" class="form-select"><option value="">— Not Set —</option><% vendors.forEach(v => { %><option value="<%= v.id %>" <%= product?.vendor_id === v.id ? 'selected' : '' %>><%= v.name %></option><% }) %></select></div>
+        <div class="col-md-6"><label class="form-label">Current Stock (Pcs)</label><input type="number" name="stock" class="form-control" value="<%= product?.stock || 0 %>" min="0" required></div>
+        <div class="col-md-6"><label class="form-label">Minimum Stock Alert</label><input type="number" name="min_stock" class="form-control" value="<%= product?.min_stock || 10 %>" min="0"></div>
+        <% if (edit) { %><div class="col-md-6"><label class="form-label">Status</label><select name="status" class="form-select"><option value="active" <%= product.status==='active'?'selected':'' %>>Active</option><option value="inactive" <%= product.status==='inactive'?'selected':'' %>>Inactive</option></select></div><% } %>
+        <div class="col-12"><button type="submit" class="btn btn-primary btn-lg px-4"><i class="bi bi-save"></i> <%= edit ? 'Update' : 'Save' %></button></div>
+      </div>
+    </form>
+  </div>
+</div>
+<%- include('../partials/footer') %>

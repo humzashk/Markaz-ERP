@@ -1,0 +1,20 @@
+<%- include('../partials/header') %>
+<div class="page-header"><h2><i class="bi bi-shield-check"></i> Audit Log</h2></div>
+<div class="filter-bar no-print">
+  <form class="row g-2" method="get">
+    <div class="col-md-3">
+      <select name="module" class="form-select"><option value="">All Modules</option>
+        <% modules.forEach(m => { %><option value="<%= m %>" <%= module===m?'selected':'' %>><%= m %></option><% }) %>
+      </select>
+    </div>
+    <div class="col-auto"><button class="btn btn-primary"><i class="bi bi-filter"></i></button></div>
+    <% if (module) { %><div class="col-auto"><a href="/reports/audit-log" class="btn btn-outline-secondary">Clear</a></div><% } %>
+  </form>
+</div>
+<div class="card"><div class="card-body p-0"><div class="table-responsive">
+  <table class="table table-hover mb-0"><thead><tr><th>#</th><th>Date/Time</th><th>Action</th><th>Module</th><th>Record ID</th><th>Details</th></tr></thead><tbody>
+    <% logs.forEach((l, i) => { %><tr><td><%= i+1 %></td><td><%= formatDate(l.created_at) %></td><td><span class="badge bg-<%= l.action==='create'?'success':l.action==='update'?'info':'danger' %>"><%= l.action %></span></td><td><%= l.module %></td><td><%= l.record_id || '-' %></td><td><%= l.details || '-' %></td></tr><% }) %>
+    <% if (!logs.length) { %><tr><td colspan="6" class="text-center text-muted py-3">No audit logs</td></tr><% } %>
+  </tbody></table>
+</div></div></div>
+<%- include('../partials/footer') %>

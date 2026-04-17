@@ -1,0 +1,20 @@
+<%- include('../partials/header') %>
+<div class="page-header"><h2><i class="bi bi-exclamation-triangle"></i> Breakage Report</h2><button onclick="window.print()" class="btn btn-outline-secondary no-print"><i class="bi bi-printer"></i></button></div>
+<div class="filter-bar no-print">
+  <form class="row g-2" method="get">
+    <div class="col-md-3"><input type="date" name="from" class="form-control" value="<%= from %>"></div>
+    <div class="col-md-3"><input type="date" name="to" class="form-control" value="<%= to %>"></div>
+    <div class="col-auto"><button class="btn btn-primary"><i class="bi bi-filter"></i></button></div>
+  </form>
+</div>
+<div class="row g-3 mb-3">
+  <div class="col-md-4"><div class="stat-card stat-red"><div class="stat-info"><h3><%= totalQty %> pcs</h3><p>Total Damaged</p></div></div></div>
+  <div class="col-md-4"><div class="stat-card stat-orange"><div class="stat-info"><h3><%= formatCurrency(totalAdj) %></h3><p>Total Adjustment</p></div></div></div>
+</div>
+<div class="card"><div class="card-body p-0"><div class="table-responsive">
+  <table class="table table-hover mb-0"><thead><tr><th>Date</th><th>Product</th><th class="text-end">Qty</th><th>Customer/Vendor</th><th>Reason</th><th class="text-end">Adjustment</th><th>Status</th></tr></thead><tbody>
+    <% breakages.forEach(b => { %><tr><td><%= formatDate(b.breakage_date) %></td><td><strong><%= b.product_name %></strong></td><td class="text-end"><%= b.quantity %></td><td><%= b.customer_name || b.vendor_name || '-' %></td><td><%= b.reason || '-' %></td><td class="text-end fw-bold text-danger"><%= formatCurrency(b.adjustment_amount) %></td><td><span class="badge bg-<%= statusBadge(b.claim_status) %>"><%= b.claim_status %></span></td></tr><% }) %>
+    <% if (!breakages.length) { %><tr><td colspan="7" class="text-center text-muted py-3">No breakage records</td></tr><% } %>
+  </tbody></table>
+</div></div></div>
+<%- include('../partials/footer') %>

@@ -1,0 +1,102 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-cash-coin"></i> Receive Payment</h2>
+  <a href="/payments" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> All Payments</a>
+</div>
+<div class="row">
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-body">
+        <form method="POST" action="/payments/receive">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Customer *</label>
+            <select name="customer_id" class="form-select" required onchange="if(this.value) window.location='/payments/receive?customer_id='+this.value; else window.location='/payments/receive';">
+              <option value="">— Select Customer —</option>
+              <% customers.forEach(c => { %>
+              <option value="<%= c.id %>" <%= customerId == c.id ? 'selected' : '' %>><%= c.name %> <% if(c.balance > 0) { %>(Bal: <%= formatCurrency(c.balance) %>)<% } %></option>
+              <% }) %>
+            </select>
+          </div>
+          <% if (selectedCustomer) { %>
+          <div class="alert alert-info py-2">
+            <strong><%= selectedCustomer.name %></strong> &mdash; Outstanding Balance: <span class="fw-bold"><%= formatCurrency(selectedCustomer.balance) %></span>
+          </div>
+          <% } %>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Amount *</label>
+              <div class="input-group">
+                <span class="input-group-text">Rs.</span>
+                <input type="number" name="amount" class="form-control" step="0.01" min="0" required>
+              </div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Date *</label>
+              <input type="date" name="payment_date" class="form-control" value="<%= new Date().toISOString().split('T')[0] %>" required>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Payment Method</label>
+              <select name="payment_method" class="form-select">
+                <option value="cash">Cash</option>
+                <option value="bank_transfer">Bank Transfer</option>
+                <option value="cheque">Cheque</option>
+                <option value="online">Online</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Bank Account</label>
+              <select name="account_id" class="form-select">
+                <option value="">— Cash / None —</option>
+                <% accounts.forEach(a => { %>
+                <option value="<%= a.id %>"><%= a.account_name %> (<%= a.account_type %>)</option>
+                <% }) %>
+              </select>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Link to Invoice (optional)</label>
+            <select name="invoice_id" class="form-select">
+              <option value="">— General Payment —</option>
+              <% unpaidInvoices.forEach(inv => { %>
+              <option value="<%= inv.id %>"><%= inv.invoice_no %> — <%= formatDate(inv.invoice_date) %> — Due: <%= formatCurrency(inv.total - (inv.paid||0)) %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Reference / Cheque No.</label>
+            <input type="text" name="reference" class="form-control" placeholder="Optional">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Notes</label>
+            <textarea name="notes" class="form-control" rows="2"></textarea>
+          </div>
+          <button type="submit" class="btn btn-success btn-lg w-100"><i class="bi bi-check-circle"></i> Record Payment Received</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <% if (selectedCustomer && unpaidInvoices.length) { %>
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header"><strong>Unpaid Invoices</strong></div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <thead><tr><th>Invoice</th><th>Date</th><th>Due</th></tr></thead>
+          <tbody>
+            <% unpaidInvoices.forEach(inv => { %>
+            <tr>
+              <td><a href="/invoices/view/<%= inv.id %>"><%= inv.invoice_no %></a></td>
+              <td><%= formatDate(inv.invoice_date) %></td>
+              <td class="text-danger fw-bold"><%= formatCurrency(inv.total - (inv.paid||0)) %></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <% } %>
+</div>
+<%- include('../partials/footer') %>

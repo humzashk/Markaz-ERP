@@ -1,0 +1,78 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-list-check"></i> All Payments</h2>
+  <div class="d-flex gap-2">
+    <a href="/payments/receive" class="btn btn-success"><i class="bi bi-cash-coin"></i> Receive Payment</a>
+    <a href="/payments/pay" class="btn btn-primary"><i class="bi bi-cash-stack"></i> Pay Vendor</a>
+  </div>
+</div>
+
+<div class="row mb-3">
+  <div class="col-md-4"><div class="stat-card stat-card-green"><div class="stat-value"><%= formatCurrency(totalReceived) %></div><div class="stat-label">Total Received</div></div></div>
+  <div class="col-md-4"><div class="stat-card stat-card-red"><div class="stat-value"><%= formatCurrency(totalPaid) %></div><div class="stat-label">Total Paid Out</div></div></div>
+  <div class="col-md-4"><div class="stat-card stat-card-blue"><div class="stat-value"><%= formatCurrency(totalReceived - totalPaid) %></div><div class="stat-label">Net</div></div></div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <form method="GET" class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label mb-1 small">Type</label>
+        <select name="type" class="form-select form-select-sm">
+          <option value="" <%= !type ? 'selected':'' %>>All</option>
+          <option value="customer" <%= type==='customer'?'selected':'' %>>Received (Customers)</option>
+          <option value="vendor" <%= type==='vendor'?'selected':'' %>>Paid (Vendors)</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label mb-1 small">From</label>
+        <input type="date" name="from" class="form-control form-control-sm" value="<%= from %>">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label mb-1 small">To</label>
+        <input type="date" name="to" class="form-control form-control-sm" value="<%= to %>">
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-sm btn-secondary w-100">Filter</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th>#</th><th>Date</th><th>Type</th><th>Party</th><th>Amount</th><th>Method</th><th>Reference</th><th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% payments.forEach((p, i) => { %>
+          <tr>
+            <td><%= i+1 %></td>
+            <td><%= formatDate(p.payment_date) %></td>
+            <td>
+              <% if (p.entity_type === 'customer') { %>
+              <span class="badge bg-success">Received</span>
+              <% } else { %>
+              <span class="badge bg-primary">Paid Out</span>
+              <% } %>
+            </td>
+            <td><strong><%= p.entity_name || '-' %></strong></td>
+            <td class="fw-bold <%= p.entity_type==='customer'?'text-success':'text-primary' %>"><%= formatCurrency(p.amount) %></td>
+            <td><span class="badge bg-light text-dark"><%= p.payment_method || 'cash' %></span></td>
+            <td><%= p.reference || '-' %></td>
+            <td class="text-muted small"><%= p.notes || '' %></td>
+          </tr>
+          <% }) %>
+          <% if (!payments.length) { %>
+          <tr><td colspan="8" class="text-center text-muted py-4">No payments found</td></tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>
