@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd //c \"cd C:\\\\Users\\\\sheik\\\\Downloads\\\\Sofware\\\\Markaz ERP && rmdir /s /q .claude\\\\worktrees 2>&1 || echo Deletion in progress\")",
+      "Read(//c/Users/sheik/Downloads/**)",
+      "Bash(cmd //c \"rmdir /s /q \\\\\"Sofware\\\\Markaz ERP\\\\.claude\\\\worktrees\\\\\"\")",
+      "Bash(powershell -Command \"Remove-Item -Path 'C:\\\\Users\\\\sheik\\\\Downloads\\\\Sofware\\\\Markaz ERP\\\\.claude\\\\worktrees' -Recurse -Force -ErrorAction SilentlyContinue; echo '✓ Worktree removed'\")",
+      "Bash(powershell -Command ' *)",
+      "Bash(timeout 5 node index.js)"
+    ]
+  }
+}
