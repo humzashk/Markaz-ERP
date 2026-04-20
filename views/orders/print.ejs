@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Sales Invoice <%= invoice.invoice_no %></title>
+  <title>Sale Order <%= order.order_no %></title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', 'Trebuchet MS', sans-serif; font-size: 12px; color: #2c3e50; background: #fff; line-height: 1.4; }
@@ -65,7 +65,7 @@
       letter-spacing: 0.5px;
     }
 
-    /* ── Meta row: Invoice # | SALES INVOICE | Date ── */
+    /* ── Meta row: Order # | SALE ORDER | Date ── */
     .meta-row {
       display: grid;
       grid-template-columns: 1fr auto 1fr;
@@ -197,18 +197,6 @@
     }
     .summary-tbl .comm-row { background: #ffe5e5; color: #c0392b; }
 
-    /* In words section */
-    .in-words {
-      background: linear-gradient(135deg, #ecf0f1 0%, #f5f7fa 100%);
-      border: 2px solid #34495e;
-      border-radius: 4px;
-      padding: 10px 12px;
-      margin-top: 12px;
-      font-size: 12px;
-    }
-    .in-words .label { font-weight: 700; color: #1a252f; }
-    .in-words strong { color: #2c3e50; }
-
     /* Spacer */
     .spacer { flex: 1; min-height: 18mm; }
 
@@ -262,33 +250,16 @@
   var fmt = function(v){ return (v||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); };
   var fmtQty = function(v){ return (v||0).toLocaleString('en-US'); };
 
-  var grossTotal = items.reduce(function(s,i){ return s + (i.quantity||0)*(i.rate||0); }, 0);
-  var totalComm  = items.reduce(function(s,i){ return s + (i.quantity||0)*(i.rate||0)*(i.commission_pct||0)/100; }, 0);
-  var netTotal   = grossTotal - totalComm;
-  var totalPkg   = items.reduce(function(s,i){ return s + (i.packages||0); }, 0);
-  var invDate    = invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'}) : '';
-
-  // Number to words (Lakh/Crore system)
-  function n2w(num) {
-    var ones = ['','ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE','TEN','ELEVEN','TWELVE','THIRTEEN','FOURTEEN','FIFTEEN','SIXTEEN','SEVENTEEN','EIGHTEEN','NINETEEN'];
-    var tens = ['','','TWENTY','THIRTY','FORTY','FIFTY','SIXTY','SEVENTY','EIGHTY','NINETY'];
-    function w(n) {
-      if (n===0) return '';
-      if (n<20) return ones[n]+' ';
-      if (n<100) return tens[Math.floor(n/10)]+(n%10?'-'+ones[n%10]:'')+' ';
-      if (n<1000) return ones[Math.floor(n/100)]+' HUNDRED '+w(n%100);
-      if (n<100000) return w(Math.floor(n/1000))+'THOUSAND '+w(n%1000);
-      if (n<10000000) return w(Math.floor(n/100000))+'LAKH '+w(n%100000);
-      return w(Math.floor(n/10000000))+'CRORE '+w(n%10000000);
-    }
-    var amt = Math.round(num);
-    return amt===0 ? 'ZERO ONLY' : w(amt).trim()+' ONLY';
-  }
+  var totalPkg = items.reduce(function(s,i){ return s + (i.packages||0); }, 0);
+  var grossTotal = items.reduce(function(s,i){ return s + (i.amount||0); }, 0);
+  var commission = order.commission_amount || 0;
+  var netTotal = grossTotal - commission;
+  var orderDate = order.order_date ? new Date(order.order_date).toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'}) : '';
 %>
 
 <div class="no-print">
-  <button class="btn-print" onclick="window.print()">🖶 Print Invoice</button>
-  <a class="btn-back" href="/invoices/view/<%= invoice.id %>">← Back</a>
+  <button class="btn-print" onclick="window.print()">🖶 Print Order</button>
+  <a class="btn-back" href="/orders/view/<%= order.id %>">← Back</a>
 </div>
 
 <div class="page">
@@ -299,14 +270,14 @@
   <div class="company-tagline"><%= bizAddr %><% if(bizCity){ %>, <%= bizCity %><% } %><% if(bizPhone){ %> | Tel: <%= bizPhone %><% } %></div>
   <% } %>
 
-  <!-- Invoice # | SALES INVOICE | Date -->
+  <!-- Order # | SALE ORDER | Date -->
   <div class="meta-row">
     <div class="meta-left">
-      <span class="meta-label">Invoice #:</span> <strong><%= invoice.invoice_no %></strong>
+      <span class="meta-label">Order #:</span> <strong><%= order.order_no %></strong>
     </div>
-    <div class="meta-title">Sales Invoice</div>
+    <div class="meta-title">Sale Order</div>
     <div class="meta-right">
-      <span class="meta-label">Date:</span> <strong><%= invDate %></strong>
+      <span class="meta-label">Date:</span> <strong><%= orderDate %></strong>
     </div>
   </div>
 
@@ -314,14 +285,15 @@
   <div class="party-row">
     <div class="party-left">
       <span style="font-size:11px;color:#555;">Party: </span>
-      <span class="party-name"><%= invoice.customer_name %></span>
-      <% if (invoice.customer_phone) { %><div class="party-info">Tel: <%= invoice.customer_phone %></div><% } %>
-      <% if (invoice.customer_address) { %><div class="party-info">Addr: <%= invoice.customer_address %></div><% } %>
+      <span class="party-name"><%= order.customer_name %></span>
+      <% if (order.customer_phone) { %><div class="party-info">Tel: <%= order.customer_phone %></div><% } %>
+      <% if (order.customer_city) { %><div class="party-info">City: <%= order.customer_city %></div><% } %>
     </div>
     <div class="party-right">
-      <% if (invoice.bilty_no) { %><div><strong>Bilty:</strong> <%= invoice.bilty_no %></div><% } %>
-      <% if (invoice.transporter_name) { %><div><strong>Transport:</strong> <%= invoice.transporter_name %></div><% } %>
-      <% if (invoice.s_tax > 0) { %><div><strong>S.Tax:</strong> <%= invoice.s_tax %>%</div><% } %>
+      <% if (order.notes) { %><div><strong>Notes:</strong> <%= order.notes %></div><% } %>
+      <% if (order.delivery_date) { %>
+      <div style="margin-top:4px;"><strong>Delivery:</strong> <%= new Date(order.delivery_date).toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'}) %></div>
+      <% } %>
     </div>
   </div>
 
@@ -329,18 +301,17 @@
   <table class="items">
     <thead>
       <tr>
-        <th class="desc" style="width:35%">Item Name</th>
+        <th class="desc" style="width:32%">Item Name</th>
         <th style="width:8%">Pkg</th>
         <th style="width:9%">Qty/Pkg</th>
         <th style="width:11%">Qty</th>
-        <th style="width:8%">Rate</th>
-        <th style="width:8%">Comm%</th>
-        <th style="width:13%">Gross</th>
+        <th style="width:10%">Rate</th>
+        <th style="width:13%">Amount</th>
       </tr>
     </thead>
     <tbody>
       <% items.forEach(function(item, i) {
-        var lineGross = (item.quantity||0) * (item.rate||0);
+        var lineAmount = (item.amount||0);
         var unit = item.base_unit || 'PCS';
       %>
       <tr>
@@ -349,19 +320,18 @@
         <td class="tc"><%= item.packaging || 1 %></td>
         <td class="tc fw"><%= fmtQty(item.quantity) %> <span style="font-size:10px;color:#999;font-weight:normal;"><%= unit %></span></td>
         <td class="tr"><%= fmt(item.rate) %></td>
-        <td class="tc"><%= (item.commission_pct||0).toFixed(2) %></td>
-        <td class="tr fw"><%= fmt(lineGross) %></td>
+        <td class="tr fw"><%= fmt(lineAmount) %></td>
       </tr>
       <% }); %>
       <!-- Filler rows to minimum 5 lines -->
       <% for(var r = items.length; r < 5; r++) { %>
-      <tr style="height:22px;"><td colspan="7"></td></tr>
+      <tr style="height:22px;"><td colspan="6"></td></tr>
       <% } %>
       <!-- Total row -->
       <tr class="total-row">
         <td colspan="2" class="tc">Total</td>
         <td class="tc"><%= fmtQty(totalPkg) %></td>
-        <td></td><td></td><td></td>
+        <td></td><td></td>
         <td class="tr"><%= fmt(grossTotal) %></td>
       </tr>
     </tbody>
@@ -378,10 +348,10 @@
         <td class="label">Gross Total:</td>
         <td class="fw"><%= fmt(grossTotal) %></td>
       </tr>
-      <% if (totalComm > 0) { %>
+      <% if (commission > 0) { %>
       <tr class="comm-row">
         <td class="label">Less: Commission:</td>
-        <td><%= fmt(totalComm) %></td>
+        <td><%= fmt(commission) %></td>
       </tr>
       <% } %>
       <tr class="grand">
@@ -391,20 +361,15 @@
     </table>
   </div>
 
-  <!-- In Words -->
-  <div class="in-words">
-    <span class="label">In Words:</span> <strong><%= n2w(netTotal) %></strong>
-  </div>
-
   <!-- Spacer -->
   <div class="spacer"></div>
 
   <!-- Footer -->
   <div class="footer">
-    <div class="footer-note">Payment Terms: As per agreement | Thank you for your business</div>
+    <div class="footer-note">Order valid for 30 days | Terms: As per agreement</div>
     <div class="sig-row">
       <div class="sig-block">
-        <div class="sig-line">Receiver's Signature</div>
+        <div class="sig-line">Customer Signature</div>
       </div>
       <div class="sig-block" style="text-align:right;">
         <div style="font-size:12px;font-weight:700;text-transform:uppercase;margin-bottom:2px;">For: <%= bizName %></div>

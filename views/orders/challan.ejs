@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Sales Invoice <%= invoice.invoice_no %></title>
+  <title>Delivery Challan - <%= order.order_no %></title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', 'Trebuchet MS', sans-serif; font-size: 12px; color: #2c3e50; background: #fff; line-height: 1.4; }
@@ -33,7 +33,7 @@
     .btn-print:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(26,37,47,0.3); }
     .btn-back  { background: #6c757d; color: #fff; }
 
-    /* ── Company Letterhead ── */
+    /* ── Company name ── */
     .company-name {
       text-align: center;
       font-size: 26px;
@@ -65,7 +65,7 @@
       letter-spacing: 0.5px;
     }
 
-    /* ── Meta row: Invoice # | SALES INVOICE | Date ── */
+    /* ── Meta row: D/c # | Title | Date ── */
     .meta-row {
       display: grid;
       grid-template-columns: 1fr auto 1fr;
@@ -105,9 +105,7 @@
       background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
       box-shadow: 0 2px 4px rgba(0,0,0,0.03);
     }
-    .party-left  { flex: 1; }
-    .party-name  { font-size: 15px; font-weight: 800; text-transform: uppercase; color: #1a252f; margin-top: 2px; }
-    .party-info  { font-size: 11px; color: #7f8c8d; margin-top: 3px; }
+    .party-name { font-size: 15px; font-weight: 800; text-transform: uppercase; color: #1a252f; margin-top: 2px; }
     .party-right { text-align: right; font-size: 11px; color: #34495e; }
 
     /* ── Items table ── */
@@ -157,62 +155,10 @@
       border-bottom: none;
     }
 
-    /* Summary section */
-    .summary {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-top: 14px;
-      padding: 12px 0;
-    }
-    .summary-left {
-      font-size: 12px;
-      line-height: 1.9;
-      color: #2c3e50;
-    }
-    .summary-right {
-      text-align: right;
-    }
-    .summary-tbl {
-      border-collapse: collapse;
-      font-size: 12px;
-      background: #f8f9fa;
-      border: 1px solid #ecf0f1;
-      border-radius: 4px;
-      overflow: hidden;
-    }
-    .summary-tbl td {
-      padding: 6px 12px;
-      text-align: right;
-      border-bottom: 1px solid #ecf0f1;
-    }
-    .summary-tbl tr:last-child td { border-bottom: none; }
-    .summary-tbl .label { text-align: right; font-weight: 600; padding-right: 12px; color: #34495e; }
-    .summary-tbl .grand td {
-      font-size: 14px;
-      font-weight: 900;
-      background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-      color: #fff;
-      padding: 8px 12px;
-    }
-    .summary-tbl .comm-row { background: #ffe5e5; color: #c0392b; }
+    /* ── Spacer (fills remaining page height) ── */
+    .spacer { flex: 1; min-height: 28mm; }
 
-    /* In words section */
-    .in-words {
-      background: linear-gradient(135deg, #ecf0f1 0%, #f5f7fa 100%);
-      border: 2px solid #34495e;
-      border-radius: 4px;
-      padding: 10px 12px;
-      margin-top: 12px;
-      font-size: 12px;
-    }
-    .in-words .label { font-weight: 700; color: #1a252f; }
-    .in-words strong { color: #2c3e50; }
-
-    /* Spacer */
-    .spacer { flex: 1; min-height: 18mm; }
-
-    /* Footer */
+    /* ── Footer ── */
     .footer {
       border-top: 2px solid #34495e;
       padding-top: 10px;
@@ -243,7 +189,13 @@
       margin-top: 32px;
       color: #1a252f;
     }
-    .sig-block div[style*="font-size:12px"] { color: #34495e; letter-spacing: 1px; }
+    .for-company {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #34495e;
+      letter-spacing: 1px;
+    }
 
     @media print {
       body { background: #fff; }
@@ -256,72 +208,56 @@
 <%
   var bizName = (settings && settings.business_name) ? settings.business_name : 'PLASTIC MARKAZ';
   var bizAddr = (settings && settings.business_address) ? settings.business_address : '';
-  var bizCity = (settings && settings.business_city) ? settings.business_city : '';
-  var bizPhone = (settings && settings.business_phone) ? settings.business_phone : '';
+  var bizPhone= (settings && settings.business_phone)  ? settings.business_phone  : '';
+  var bizCity = (settings && settings.business_city)   ? settings.business_city   : '';
+
+  var totalPkg = items.reduce(function(s,i){ return s + (i.packages||0); }, 0);
+  var totalQty = items.reduce(function(s,i){ return s + (i.quantity||0); }, 0);
 
   var fmt = function(v){ return (v||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); };
   var fmtQty = function(v){ return (v||0).toLocaleString('en-US'); };
 
-  var grossTotal = items.reduce(function(s,i){ return s + (i.quantity||0)*(i.rate||0); }, 0);
-  var totalComm  = items.reduce(function(s,i){ return s + (i.quantity||0)*(i.rate||0)*(i.commission_pct||0)/100; }, 0);
-  var netTotal   = grossTotal - totalComm;
-  var totalPkg   = items.reduce(function(s,i){ return s + (i.packages||0); }, 0);
-  var invDate    = invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'}) : '';
+  var today = new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});
 
-  // Number to words (Lakh/Crore system)
-  function n2w(num) {
-    var ones = ['','ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE','TEN','ELEVEN','TWELVE','THIRTEEN','FOURTEEN','FIFTEEN','SIXTEEN','SEVENTEEN','EIGHTEEN','NINETEEN'];
-    var tens = ['','','TWENTY','THIRTY','FORTY','FIFTY','SIXTY','SEVENTY','EIGHTY','NINETY'];
-    function w(n) {
-      if (n===0) return '';
-      if (n<20) return ones[n]+' ';
-      if (n<100) return tens[Math.floor(n/10)]+(n%10?'-'+ones[n%10]:'')+' ';
-      if (n<1000) return ones[Math.floor(n/100)]+' HUNDRED '+w(n%100);
-      if (n<100000) return w(Math.floor(n/1000))+'THOUSAND '+w(n%1000);
-      if (n<10000000) return w(Math.floor(n/100000))+'LAKH '+w(n%100000);
-      return w(Math.floor(n/10000000))+'CRORE '+w(n%10000000);
-    }
-    var amt = Math.round(num);
-    return amt===0 ? 'ZERO ONLY' : w(amt).trim()+' ONLY';
-  }
+  // D/c number: DC- prefix + order_no suffix, or order counter
+  var dcNo = 'DC-' + order.order_no;
 %>
 
 <div class="no-print">
-  <button class="btn-print" onclick="window.print()">🖶 Print Invoice</button>
-  <a class="btn-back" href="/invoices/view/<%= invoice.id %>">← Back</a>
+  <button class="btn-print" onclick="window.print()">&#128438; Print Challan</button>
+  <a class="btn-back" href="/orders/view/<%= order.id %>">&#8592; Back</a>
 </div>
 
 <div class="page">
 
-  <!-- Company Letterhead -->
+  <!-- Company Name -->
   <div class="company-name"><%= bizName %></div>
-  <% if (bizAddr || bizCity || bizPhone) { %>
-  <div class="company-tagline"><%= bizAddr %><% if(bizCity){ %>, <%= bizCity %><% } %><% if(bizPhone){ %> | Tel: <%= bizPhone %><% } %></div>
+  <% if (bizAddr || bizPhone) { %>
+  <div class="company-tagline"><%= bizAddr %><% if(bizCity){ %>, <%= bizCity %><% } %><% if(bizPhone){ %> &nbsp;|&nbsp; Tel: <%= bizPhone %><% } %></div>
   <% } %>
 
-  <!-- Invoice # | SALES INVOICE | Date -->
+  <!-- D/c # | DELIVERY CHALLAN | Date -->
   <div class="meta-row">
     <div class="meta-left">
-      <span class="meta-label">Invoice #:</span> <strong><%= invoice.invoice_no %></strong>
+      <span class="meta-label">D/c.#:</span> <strong><%= dcNo %></strong>
     </div>
-    <div class="meta-title">Sales Invoice</div>
+    <div class="meta-title">Delivery Challan</div>
     <div class="meta-right">
-      <span class="meta-label">Date:</span> <strong><%= invDate %></strong>
+      <span class="meta-label">Date:</span> <strong><%= today %></strong>
     </div>
   </div>
 
-  <!-- Customer Info -->
+  <!-- Customer | Transport -->
   <div class="party-row">
-    <div class="party-left">
-      <span style="font-size:11px;color:#555;">Party: </span>
-      <span class="party-name"><%= invoice.customer_name %></span>
-      <% if (invoice.customer_phone) { %><div class="party-info">Tel: <%= invoice.customer_phone %></div><% } %>
-      <% if (invoice.customer_address) { %><div class="party-info">Addr: <%= invoice.customer_address %></div><% } %>
+    <div>
+      <span style="font-size:11px;color:#555;">Customer: </span>
+      <span class="party-name"><%= order.customer_name %></span>
+      <% if (order.customer_city) { %><span style="font-size:11px;color:#666;margin-left:6px;">(<%= order.customer_city %>)</span><% } %>
+      <% if (order.customer_phone) { %><div style="font-size:11px;color:#555;margin-top:2px;">Tel: <%= order.customer_phone %></div><% } %>
     </div>
     <div class="party-right">
-      <% if (invoice.bilty_no) { %><div><strong>Bilty:</strong> <%= invoice.bilty_no %></div><% } %>
-      <% if (invoice.transporter_name) { %><div><strong>Transport:</strong> <%= invoice.transporter_name %></div><% } %>
-      <% if (invoice.s_tax > 0) { %><div><strong>S.Tax:</strong> <%= invoice.s_tax %>%</div><% } %>
+      <% if (order.notes) { %><div><strong>Note:</strong> <%= order.notes %></div><% } %>
+      <div>Order Ref: <strong><%= order.order_no %></strong></div>
     </div>
   </div>
 
@@ -329,85 +265,57 @@
   <table class="items">
     <thead>
       <tr>
-        <th class="desc" style="width:35%">Item Name</th>
-        <th style="width:8%">Pkg</th>
-        <th style="width:9%">Qty/Pkg</th>
-        <th style="width:11%">Qty</th>
-        <th style="width:8%">Rate</th>
-        <th style="width:8%">Comm%</th>
-        <th style="width:13%">Gross</th>
+        <th class="desc" style="width:36%">Description</th>
+        <th style="width:9%">Packs</th>
+        <th style="width:10%">Qty / Pack</th>
+        <th style="width:10%">Qty</th>
+        <th style="width:8%">Unit</th>
+        <th style="width:11%">Rate</th>
+        <th style="width:16%">Amount</th>
       </tr>
     </thead>
     <tbody>
-      <% items.forEach(function(item, i) {
-        var lineGross = (item.quantity||0) * (item.rate||0);
-        var unit = item.base_unit || 'PCS';
-      %>
+      <% items.forEach(function(item, i) { %>
       <tr>
         <td class="fw"><%= item.product_name %></td>
         <td class="tc"><%= item.packages || 0 %></td>
         <td class="tc"><%= item.packaging || 1 %></td>
-        <td class="tc fw"><%= fmtQty(item.quantity) %> <span style="font-size:10px;color:#999;font-weight:normal;"><%= unit %></span></td>
+        <td class="tc fw"><%= fmtQty(item.quantity) %></td>
+        <td class="tc"><%= item.base_unit || 'PCS' %></td>
         <td class="tr"><%= fmt(item.rate) %></td>
-        <td class="tc"><%= (item.commission_pct||0).toFixed(2) %></td>
-        <td class="tr fw"><%= fmt(lineGross) %></td>
+        <td class="tr fw"><%= fmt(item.amount) %></td>
       </tr>
       <% }); %>
-      <!-- Filler rows to minimum 5 lines -->
-      <% for(var r = items.length; r < 5; r++) { %>
-      <tr style="height:22px;"><td colspan="7"></td></tr>
+      <!-- Filler rows to minimum 6 lines -->
+      <% for(var r = items.length; r < 6; r++) { %>
+      <tr style="height:26px;">
+        <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+      </tr>
       <% } %>
       <!-- Total row -->
       <tr class="total-row">
-        <td colspan="2" class="tc">Total</td>
+        <td class="tr" style="padding-right:16px;">Total</td>
         <td class="tc"><%= fmtQty(totalPkg) %></td>
-        <td></td><td></td><td></td>
-        <td class="tr"><%= fmt(grossTotal) %></td>
+        <td></td>
+        <td class="tc"><%= fmtQty(totalQty) %></td>
+        <td colspan="2"></td>
+        <td class="tr"><%= fmt(items.reduce(function(s,i){return s+(i.amount||0);},0)) %></td>
       </tr>
     </tbody>
   </table>
-
-  <!-- Summary Section -->
-  <div class="summary">
-    <div class="summary-left">
-      <strong>Total Items:</strong> <%= items.length %><br>
-      <strong>Total Packages:</strong> <%= fmtQty(totalPkg) %>
-    </div>
-    <table class="summary-tbl">
-      <tr>
-        <td class="label">Gross Total:</td>
-        <td class="fw"><%= fmt(grossTotal) %></td>
-      </tr>
-      <% if (totalComm > 0) { %>
-      <tr class="comm-row">
-        <td class="label">Less: Commission:</td>
-        <td><%= fmt(totalComm) %></td>
-      </tr>
-      <% } %>
-      <tr class="grand">
-        <td class="label">Net Total:</td>
-        <td><%= fmt(netTotal) %></td>
-      </tr>
-    </table>
-  </div>
-
-  <!-- In Words -->
-  <div class="in-words">
-    <span class="label">In Words:</span> <strong><%= n2w(netTotal) %></strong>
-  </div>
 
   <!-- Spacer -->
   <div class="spacer"></div>
 
   <!-- Footer -->
   <div class="footer">
-    <div class="footer-note">Payment Terms: As per agreement | Thank you for your business</div>
+    <div class="footer-note">Note: All Items are received in good Condition</div>
     <div class="sig-row">
       <div class="sig-block">
         <div class="sig-line">Receiver's Signature</div>
       </div>
       <div class="sig-block" style="text-align:right;">
-        <div style="font-size:12px;font-weight:700;text-transform:uppercase;margin-bottom:2px;">For: <%= bizName %></div>
+        <div class="for-company">For: <%= bizName %></div>
         <div class="sig-line" style="margin-left:auto;">Authorized Signature</div>
       </div>
     </div>

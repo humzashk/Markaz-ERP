@@ -3,7 +3,7 @@ const path = require('path');
 const { initDatabase } = require('./database');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.set('view engine', 'ejs');
@@ -60,6 +60,7 @@ async function startServer() {
   app.use('/categories', require('./routes/categories'));
   app.use('/journal', require('./routes/journal'));
   app.use('/importexport', require('./routes/importexport'));
+  app.use('/admin/seed', require('./routes/seed'));
 
   // API endpoints for AJAX
   const dbModule = require('./database');
@@ -70,11 +71,18 @@ async function startServer() {
     res.json(dbModule.db.prepare('SELECT id, name, phone, city, balance FROM vendors WHERE status = ? ORDER BY name').all('active'));
   });
   app.get('/api/products', (req, res) => {
-    res.json(dbModule.db.prepare('SELECT id, name, category, packaging, stock, rate FROM products WHERE status = ? ORDER BY name').all('active'));
+    res.json(dbModule.db.prepare('SELECT id, name, category, packaging, stock, rate, base_unit, purchase_price, selling_price FROM products WHERE status = ? ORDER BY name').all('active'));
   });
   app.get('/api/products/:id', (req, res) => {
     const p = dbModule.db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
     res.json(p || {});
+  });
+  app.get('/api/reports/stock-position', (req, res) => {
+    const dateFrom = req.query.from || new Date().toISOString().split('T')[0];
+    const dateTo = req.query.to || new Date().toISOString().split('T')[0];
+    const warehouseId = req.query.warehouse_id ? parseInt(req.query.warehouse_id) : null;
+    const stockPosition = dbModule.getStockPosition(dateFrom, dateTo, warehouseId);
+    res.json(stockPosition);
   });
 
   app.listen(PORT, () => {
