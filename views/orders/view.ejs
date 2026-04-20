@@ -7,6 +7,7 @@
     <% } else { %>
     <a href="/invoices/view/<%= invoice.id %>" class="btn btn-success"><i class="bi bi-receipt"></i> View Invoice</a>
     <% } %>
+    <a href="/orders/challan/<%= order.id %>?noprint=1" target="_blank" class="btn btn-secondary"><i class="bi bi-printer"></i> Delivery Challan</a>
     <a href="/bilty/add?order_id=<%= order.id %>" class="btn btn-info"><i class="bi bi-send"></i> Add Bilty</a>
     <a href="/orders/edit/<%= order.id %>" class="btn btn-warning"><i class="bi bi-pencil"></i> Edit</a>
     <a href="/orders" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>

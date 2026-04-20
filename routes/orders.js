@@ -132,6 +132,17 @@ router.get('/view/:id', (req, res) => {
   res.render('orders/view', { page: 'orders', order, items, invoice, bilty });
 });
 
+// Delivery Challan Print
+router.get('/challan/:id', (req, res) => {
+  const order = db.prepare('SELECT o.*, c.name as customer_name, c.phone as customer_phone, c.address as customer_address, c.city as customer_city FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = ?').get(req.params.id);
+  if (!order) return res.status(404).send('Order not found');
+  const items = db.prepare('SELECT oi.*, p.name as product_name FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ?').all(req.params.id);
+  items.forEach(item => { item.base_unit = 'PCS'; }); // Default unit
+  const { getSettings } = require('../database');
+  const settings = getSettings();
+  res.render('orders/challan', { page: 'orders', order, items, settings, layout: false });
+});
+
 // Generate Invoice from Order — show editable preview first
 router.get('/generate-invoice/:id', (req, res) => {
   const order = db.prepare(`SELECT o.*, c.name as customer_name FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = ?`).get(req.params.id);
