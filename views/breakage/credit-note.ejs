@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Credit Note - <%= breakage.credit_note_no %></title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 13px; margin: 0; padding: 20px; color: #000; }
+  .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
+  .header h2 { margin: 0; font-size: 22px; }
+  .header p { margin: 3px 0; font-size: 12px; }
+  .title-bar { text-align: center; font-size: 16px; font-weight: bold; border: 2px solid #000; padding: 6px; margin-bottom: 15px; letter-spacing: 2px; }
+  .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+  .meta-box { border: 1px solid #ccc; padding: 10px; }
+  .meta-box label { font-weight: bold; font-size: 11px; color: #666; display: block; margin-bottom: 3px; text-transform: uppercase; }
+  .meta-box span { font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+  th, td { border: 1px solid #000; padding: 8px 10px; text-align: left; }
+  th { background: #2c3e50; color: #fff; font-size: 12px; text-transform: uppercase; }
+  .amount-row { background: #f8f9fa; }
+  .total-row { background: #2c3e50; color: #fff; font-size: 16px; font-weight: bold; }
+  .total-row td { padding: 12px 10px; }
+  .footer-terms { border: 1px solid #ccc; padding: 10px; margin-bottom: 20px; font-size: 11px; background: #f9f9f9; }
+  .sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px; }
+  .sig-line { border-top: 1px solid #000; padding-top: 5px; text-align: center; font-size: 11px; }
+  @media print {
+    body { padding: 10px; }
+    .no-print { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <h2>PLASTIC MARKAZ</h2>
+  <p>Plastic Products &amp; Trading</p>
+</div>
+<div class="title-bar">CREDIT NOTE</div>
+<div class="meta-grid">
+  <div class="meta-box">
+    <label>Credit Note No.</label>
+    <span><strong><%= breakage.credit_note_no || 'CN-DRAFT' %></strong></span>
+  </div>
+  <div class="meta-box">
+    <label>Date</label>
+    <span><strong><%= breakage.breakage_date %></strong></span>
+  </div>
+  <div class="meta-box">
+    <label>Customer</label>
+    <span><strong><%= breakage.customer_name %></strong></span>
+  </div>
+  <div class="meta-box">
+    <label>Type</label>
+    <span>Breakage Adjustment</span>
+  </div>
+</div>
+<table>
+  <thead>
+    <tr>
+      <th width="40">#</th>
+      <th>Product</th>
+      <th width="100" style="text-align:center;">Qty</th>
+      <th width="150" style="text-align:right;">Amount (Rs.)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>
+        <%= breakage.product_name %>
+        <% if (breakage.notes) { %>
+        <br><small style="color:#666;"><%= breakage.notes %></small>
+        <% } %>
+      </td>
+      <td style="text-align:center;"><%= breakage.quantity > 0 ? breakage.quantity + ' pcs' : '-' %></td>
+      <td style="text-align:right;"><strong><%= breakage.adjustment_amount.toFixed(2) %></strong></td>
+    </tr>
+  </tbody>
+  <tfoot>
+    <tr class="total-row">
+      <td colspan="3" style="text-align:right;">TOTAL CREDIT AMOUNT</td>
+      <td style="text-align:right;">Rs. <%= breakage.adjustment_amount.toFixed(2) %></td>
+    </tr>
+  </tfoot>
+</table>
+<div class="footer-terms">
+  <strong>Terms:</strong> This credit note adjusts the outstanding balance of the above customer by the amount stated.
+  The amount will be deducted from future invoices or applied against existing dues.
+</div>
+<div class="sig-grid">
+  <div class="sig-line">Customer Acknowledgment</div>
+  <div class="sig-line">Authorized Signature</div>
+</div>
+<div style="margin-top:20px; text-align:center; font-size:10px; color:#666;">
+  Credit Note — Plastic Markaz — Printed on <%= new Date().toLocaleDateString() %>
+</div>
+<br>
+<div class="no-print" style="text-align:center; margin-top:20px;">
+  <button onclick="window.print()" style="padding:10px 30px; font-size:14px; background:#2c3e50; color:#fff; border:none; cursor:pointer; border-radius:4px;">
+    🖨️ Print Credit Note
+  </button>
+  &nbsp;
+  <button onclick="window.close()" style="padding:10px 20px; font-size:14px; border:1px solid #ccc; background:#fff; cursor:pointer; border-radius:4px;">
+    Close
+  </button>
+</div>
+</body>
+</html>

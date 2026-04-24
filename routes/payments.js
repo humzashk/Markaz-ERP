@@ -34,42 +34,30 @@ router.get('/receive', (req, res) => {
   const customers = db.prepare('SELECT id, name, balance FROM customers WHERE status = ? ORDER BY name').all('active');
   const accounts = db.prepare('SELECT id, account_name, account_type, balance FROM bank_accounts WHERE status = ? ORDER BY account_name').all('active');
   const selectedCustomer = customerId ? db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId) : null;
-  const unpaidInvoices = customerId
-    ? db.prepare(`SELECT * FROM invoices WHERE customer_id = ? AND status != 'paid' ORDER BY invoice_date`).all(customerId)
-    : [];
-  res.render('payments/receive', { page: 'payments', customers, accounts, customerId, selectedCustomer, unpaidInvoices });
+  // Invoice linking removed per spec — only record payment type
+  res.render('payments/receive', { page: 'payments', customers, accounts, customerId, selectedCustomer, unpaidInvoices: [] });
 });
 
 router.post('/receive', (req, res) => {
-  const { customer_id, amount, payment_date, payment_method, account_id, reference, notes, invoice_id } = req.body;
+  const { customer_id, amount, payment_date, payment_method, account_id, notes, account_scope } = req.body;
   const amt = parseFloat(amount) || 0;
+  // Allowed methods: cash / cheque / bank_transfer (no cheque details stored)
+  const method = ['cash','cheque','bank_transfer'].includes(payment_method) ? payment_method : 'cash';
 
   db.transaction(() => {
     const result = db.prepare(
-      `INSERT INTO payments (entity_type, entity_id, amount, payment_date, payment_method, reference, notes) VALUES ('customer', ?, ?, ?, ?, ?, ?)`
-    ).run(customer_id, amt, payment_date, payment_method || 'cash', reference, notes);
+      `INSERT INTO payments (entity_type, entity_id, amount, payment_date, payment_method, notes, account_scope) VALUES ('customer', ?, ?, ?, ?, ?, ?)`
+    ).run(customer_id, amt, payment_date, method, notes, account_scope || 'plastic_markaz');
 
-    // Ledger: credit customer (reduce what they owe)
     addLedgerEntry('customer', customer_id, payment_date,
-      `Payment received${payment_method ? ' - ' + payment_method : ''}${reference ? ' Ref:' + reference : ''}`,
-      0, amt, 'payment', result.lastInsertRowid);
-
-    // If linked to invoice, update it
-    if (invoice_id) {
-      const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoice_id);
-      if (inv) {
-        const newPaid = (inv.paid || 0) + amt;
-        const newStatus = newPaid >= inv.total ? 'paid' : 'partial';
-        db.prepare('UPDATE invoices SET paid = ?, status = ? WHERE id = ?').run(newPaid, newStatus, invoice_id);
-      }
-    }
+      `Payment received - ${method}`, 0, amt, 'payment', result.lastInsertRowid);
 
     // Bank account transaction
     if (account_id) {
       const acc = db.prepare('SELECT balance FROM bank_accounts WHERE id = ?').get(account_id);
       const newBal = (acc?.balance || 0) + amt;
       db.prepare('UPDATE bank_accounts SET balance = ? WHERE id = ?').run(newBal, account_id);
-      db.prepare(`INSERT INTO bank_transactions (account_id, txn_date, txn_type, amount, description, reference, balance, related_type, related_id) VALUES (?, ?, 'credit', ?, ?, ?, ?, 'payment', ?)`).run(account_id, payment_date, amt, `Customer payment received`, reference, newBal, result.lastInsertRowid);
+      db.prepare(`INSERT INTO bank_transactions (account_id, txn_date, txn_type, amount, description, balance, related_type, related_id) VALUES (?, ?, 'credit', ?, ?, ?, 'payment', ?)`).run(account_id, payment_date, amt, `Customer payment received (${method})`, newBal, result.lastInsertRowid);
     }
   })();
 
@@ -90,25 +78,23 @@ router.get('/pay', (req, res) => {
 });
 
 router.post('/pay', (req, res) => {
-  const { vendor_id, amount, payment_date, payment_method, account_id, reference, notes, purchase_id } = req.body;
+  const { vendor_id, amount, payment_date, payment_method, account_id, notes, account_scope } = req.body;
   const amt = parseFloat(amount) || 0;
+  const method = ['cash','cheque','bank_transfer'].includes(payment_method) ? payment_method : 'cash';
 
   db.transaction(() => {
     const result = db.prepare(
-      `INSERT INTO payments (entity_type, entity_id, amount, payment_date, payment_method, reference, notes) VALUES ('vendor', ?, ?, ?, ?, ?, ?)`
-    ).run(vendor_id, amt, payment_date, payment_method || 'cash', reference, notes);
+      `INSERT INTO payments (entity_type, entity_id, amount, payment_date, payment_method, notes, account_scope) VALUES ('vendor', ?, ?, ?, ?, ?, ?)`
+    ).run(vendor_id, amt, payment_date, method, notes, account_scope || 'plastic_markaz');
 
-    // Ledger: debit vendor (reduce what we owe them)
     addLedgerEntry('vendor', vendor_id, payment_date,
-      `Payment made${payment_method ? ' - ' + payment_method : ''}${reference ? ' Ref:' + reference : ''}`,
-      amt, 0, 'payment', result.lastInsertRowid);
+      `Payment made - ${method}`, amt, 0, 'payment', result.lastInsertRowid);
 
-    // Bank account transaction
     if (account_id) {
       const acc = db.prepare('SELECT balance FROM bank_accounts WHERE id = ?').get(account_id);
       const newBal = (acc?.balance || 0) - amt;
       db.prepare('UPDATE bank_accounts SET balance = ? WHERE id = ?').run(newBal, account_id);
-      db.prepare(`INSERT INTO bank_transactions (account_id, txn_date, txn_type, amount, description, reference, balance, related_type, related_id) VALUES (?, ?, 'debit', ?, ?, ?, ?, 'payment', ?)`).run(account_id, payment_date, amt, `Payment to vendor`, reference, newBal, result.lastInsertRowid);
+      db.prepare(`INSERT INTO bank_transactions (account_id, txn_date, txn_type, amount, description, balance, related_type, related_id) VALUES (?, ?, 'debit', ?, ?, ?, 'payment', ?)`).run(account_id, payment_date, amt, `Payment to vendor (${method})`, newBal, result.lastInsertRowid);
     }
   })();
 

@@ -14,7 +14,7 @@
       <div class="card-body">
         <table class="table table-borderless mb-0">
           <tr><th width="130">Category</th><td><%= product.category || '-' %></td></tr>
-          <tr><th>Pcs per Carton</th><td><strong><%= product.packaging %></strong></td></tr>
+          <tr><th>Pcs per Carton</th><td><strong><%= product.qty_per_pack %></strong></td></tr>
           <tr><th>Rate / Piece</th><td><strong class="text-success"><%= formatCurrency(product.rate) %></strong></td></tr>
           <tr><th>Current Stock</th><td><strong class="<%= product.stock <= product.min_stock ? 'text-danger' : 'text-success' %> fs-5"><%= product.stock.toLocaleString() %> pcs</strong></td></tr>
           <tr><th>Min Stock</th><td><%= product.min_stock %></td></tr>
@@ -40,4 +40,61 @@
     </div>
   </div>
 </div>
+
+<!-- Stock Movement Tracking -->
+<div class="card mt-3">
+  <div class="card-header">
+    <h5 class="mb-0"><i class="bi bi-arrow-left-right"></i> Stock Movement Tracking</h5>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Date</th>
+            <th>Party</th>
+            <th>Type</th>
+            <th class="text-end">Quantity</th>
+            <th>Reference</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% movements.forEach(m => { %>
+          <tr>
+            <td><small><%= formatDate(m.movement_date) %></small></td>
+            <td><strong><%= m.party_name %></strong></td>
+            <td>
+              <% if (m.party_type === 'Customer') { %>
+                <span class="badge bg-danger">Outbound</span>
+              <% } else { %>
+                <span class="badge bg-success">Inbound</span>
+              <% } %>
+            </td>
+            <td class="text-end fw-bold"><%= m.quantity.toLocaleString() %></td>
+            <td>
+              <% if (m.doc_type === 'Order') { %>
+                <a href="/orders/view/<%= m.order_id %>" class="btn btn-sm btn-outline-info">
+                  <i class="bi bi-eye"></i> <%= m.reference_number %>
+                </a>
+              <% } else if (m.doc_type === 'Purchase') { %>
+                <a href="/purchases/view/<%= m.purchase_id %>" class="btn btn-sm btn-outline-info">
+                  <i class="bi bi-eye"></i> <%= m.reference_number %>
+                </a>
+              <% } %>
+            </td>
+          </tr>
+          <% }) %>
+          <% if (!movements.length) { %>
+            <tr>
+              <td colspan="5" class="text-center text-muted py-4">
+                No stock movements found for this product
+              </td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <%- include('../partials/footer') %>

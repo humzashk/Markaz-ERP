@@ -49,7 +49,14 @@
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Reason *</label>
-            <input type="text" name="reason" class="form-control" placeholder="e.g. Physical count, damaged goods..." required>
+            <select name="reason" class="form-select" required>
+              <option value="">— Select Reason —</option>
+              <option value="Damaged">Damaged</option>
+              <option value="Adjustment">Adjustment</option>
+              <option value="Manual">Manual</option>
+              <option value="Return">Return</option>
+              <option value="Other">Other</option>
+            </select>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Reference</label>

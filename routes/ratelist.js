@@ -8,7 +8,7 @@ router.get('/', (req, res) => {
     FROM rate_list r JOIN products p ON p.id = r.product_id
     ORDER BY p.name, r.customer_type, r.effective_date DESC
   `).all();
-  const products = db.prepare('SELECT id, name, packaging, rate FROM products WHERE status = ? ORDER BY name').all('active');
+  const products = db.prepare('SELECT id, name, qty_per_pack, rate FROM products WHERE status = ? ORDER BY name').all('active');
   // Fetch rate history for all products in rate list
   const productIds = [...new Set(rates.map(r => r.product_id))];
   let rateHistory = [];
@@ -21,19 +21,19 @@ router.get('/', (req, res) => {
 });
 
 router.post('/add', (req, res) => {
-  const { product_id, customer_type, packaging, rate, commission_pct, effective_date } = req.body;
+  const { product_id, customer_type, rate, effective_date } = req.body;
   db.prepare(
-    `INSERT INTO rate_list (product_id, customer_type, packaging, rate, commission_pct, effective_date) VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(product_id, customer_type || 'retail', parseInt(packaging) || 1, parseFloat(rate), parseFloat(commission_pct) || 0, effective_date);
+    `INSERT INTO rate_list (product_id, customer_type, rate, effective_date) VALUES (?, ?, ?, ?)`
+  ).run(product_id, customer_type || 'retail', parseFloat(rate), effective_date);
   addAuditLog('create', 'rate_list', null, `Added rate for product ${product_id}`);
   res.redirect('/ratelist');
 });
 
 router.post('/edit/:id', (req, res) => {
-  const { rate, packaging, commission_pct, effective_date } = req.body;
+  const { rate, effective_date } = req.body;
   db.prepare(
-    `UPDATE rate_list SET rate=?, packaging=?, commission_pct=?, effective_date=? WHERE id=?`
-  ).run(parseFloat(rate) || 0, parseInt(packaging) || 1, parseFloat(commission_pct) || 0, effective_date, req.params.id);
+    `UPDATE rate_list SET rate=?, effective_date=? WHERE id=?`
+  ).run(parseFloat(rate) || 0, effective_date, req.params.id);
   addAuditLog('update', 'rate_list', req.params.id, `Updated rate`);
   res.redirect('/ratelist');
 });

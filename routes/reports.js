@@ -191,18 +191,41 @@ router.get('/stock-ledger', (req, res) => {
   if (productId) {
     product = db.prepare('SELECT * FROM products WHERE id = ?').get(productId);
     const sales = db.prepare(`
-      SELECT i.invoice_date as date, 'Sale' as type, ii.quantity, i.invoice_no as ref
-      FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id WHERE ii.product_id = ?
+      SELECT i.invoice_date as date, 'Sale' as type, ii.quantity,
+             i.invoice_no as ref, i.id as ref_id, 'invoice' as ref_type,
+             COALESCE(c.name,'-') as party
+      FROM invoice_items ii
+      JOIN invoices i ON i.id = ii.invoice_id
+      LEFT JOIN customers c ON c.id = i.customer_id
+      WHERE ii.product_id = ?
+    `).all(productId);
+    const orders = db.prepare(`
+      SELECT o.order_date as date, 'Order' as type, oi.quantity,
+             o.order_no as ref, o.id as ref_id, 'order' as ref_type,
+             COALESCE(c.name,'-') as party
+      FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+      LEFT JOIN customers c ON c.id = o.customer_id
+      WHERE oi.product_id = ? AND NOT EXISTS (SELECT 1 FROM invoices i2 WHERE i2.order_id = o.id)
     `).all(productId);
     const purchases = db.prepare(`
-      SELECT p.purchase_date as date, 'Purchase' as type, pi.quantity, p.purchase_no as ref
-      FROM purchase_items pi JOIN purchases p ON p.id = pi.purchase_id WHERE pi.product_id = ?
+      SELECT p.purchase_date as date, 'Purchase' as type, pi.quantity,
+             p.purchase_no as ref, p.id as ref_id, 'purchase' as ref_type,
+             COALESCE(v.name,'-') as party
+      FROM purchase_items pi
+      JOIN purchases p ON p.id = pi.purchase_id
+      LEFT JOIN vendors v ON v.id = p.vendor_id
+      WHERE pi.product_id = ?
     `).all(productId);
     const breakages = db.prepare(`
-      SELECT b.breakage_date as date, 'Breakage' as type, b.quantity, 'BRK-' || b.id as ref
-      FROM breakage b WHERE b.product_id = ?
+      SELECT b.breakage_date as date, 'Breakage' as type, b.quantity,
+             ('BRK-' || b.id) as ref, b.id as ref_id, 'breakage' as ref_type,
+             COALESCE(c.name,'-') as party
+      FROM breakage b
+      LEFT JOIN customers c ON c.id = b.customer_id
+      WHERE b.product_id = ?
     `).all(productId);
-    movements = [...sales, ...purchases, ...breakages].sort((a, b) => a.date > b.date ? -1 : 1);
+    movements = [...sales, ...orders, ...purchases, ...breakages].sort((a, b) => a.date > b.date ? -1 : 1);
   }
   res.render('reports/stock-ledger', { page: 'reports', products, productId, product, movements });
 });
@@ -274,6 +297,25 @@ router.get('/bilty-report', (req, res) => {
   `).all(from, to);
   const totalFreight = bilties.reduce((s, b) => s + b.freight_charges, 0);
   res.render('reports/bilty-report', { page: 'reports', from, to, bilties, totalFreight });
+});
+
+// ============ ALL TRANSACTIONS (unified, linked to source) ============
+router.get('/transactions', (req, res) => {
+  const from = req.query.from || new Date().toISOString().substring(0, 7) + '-01';
+  const to = req.query.to || new Date().toISOString().split('T')[0];
+  const scope = req.query.scope || '';
+
+  const scopeFilter = scope ? ` AND account_scope = '${scope.replace(/'/g,"")}'` : '';
+
+  const orders = db.prepare(`SELECT 'order' as type, o.id as ref_id, o.order_no as ref, o.order_date as date, COALESCE(c.name,'-') as party, o.total as amount, o.account_scope FROM orders o LEFT JOIN customers c ON c.id=o.customer_id WHERE o.order_date BETWEEN ? AND ?${scopeFilter}`).all(from, to);
+  const invoices = db.prepare(`SELECT 'invoice' as type, i.id as ref_id, i.invoice_no as ref, i.invoice_date as date, COALESCE(c.name,'-') as party, i.total as amount, i.account_scope FROM invoices i LEFT JOIN customers c ON c.id=i.customer_id WHERE i.invoice_date BETWEEN ? AND ?${scopeFilter}`).all(from, to);
+  const purchases = db.prepare(`SELECT 'purchase' as type, p.id as ref_id, p.purchase_no as ref, p.purchase_date as date, COALESCE(v.name,'-') as party, p.total as amount, p.account_scope FROM purchases p LEFT JOIN vendors v ON v.id=p.vendor_id WHERE p.purchase_date BETWEEN ? AND ?${scopeFilter}`).all(from, to);
+  const payments = db.prepare(`SELECT 'payment' as type, p.id as ref_id, ('PMT-'||p.id) as ref, p.payment_date as date, CASE WHEN p.entity_type='customer' THEN c.name ELSE v.name END as party, p.amount, p.account_scope FROM payments p LEFT JOIN customers c ON p.entity_type='customer' AND c.id=p.entity_id LEFT JOIN vendors v ON p.entity_type='vendor' AND v.id=p.entity_id WHERE p.payment_date BETWEEN ? AND ?${scopeFilter}`).all(from, to);
+
+  const all = [...orders, ...invoices, ...purchases, ...payments]
+    .sort((a,b) => (a.date > b.date ? -1 : 1));
+
+  res.render('reports/transactions', { page: 'reports', from, to, scope, all });
 });
 
 // Generic PDF for any report (print-friendly page approach)

@@ -1,0 +1,89 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-list-check"></i> Stock Movement Ledger</h2>
+</div>
+<div class="alert alert-info mb-3">
+  <strong>Stock Ledger:</strong> View complete stock movement history for any product with running balance.
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-6">
+    <label class="form-label">Select Product</label>
+    <form class="row g-2" method="get">
+      <div class="col-md-10">
+        <select name="product_id" class="form-select" onchange="this.form.submit()">
+          <option value="">-- Choose Product --</option>
+          <% products.forEach(p => { %>
+            <option value="<%= p.id %>" <%= (productId == p.id)?'selected':'' %>><%= p.name %></option>
+          <% }) %>
+        </select>
+      </div>
+    </form>
+  </div>
+</div>
+
+<% if (!productId) { %>
+  <div class="alert alert-info">
+    <i class="bi bi-info-circle"></i> Select a product to view its stock ledger with movement history and running balance.
+  </div>
+<% } else if (!product) { %>
+  <div class="alert alert-warning">Product not found.</div>
+<% } else { %>
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5><%= product.name %></h5>
+      <p class="text-muted mb-0">Current Stock: <strong><%= product.stock %> pcs</strong></p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th style="width:20%">Date</th>
+              <th style="width:15%">Type</th>
+              <th style="width:15%">Quantity</th>
+              <th style="width:20%">Reason / Reference</th>
+              <th style="width:15%; text-align:right;">Balance</th>
+              <th style="width:15%">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (!movements.length) { %>
+              <tr><td colspan="6" class="text-center text-muted py-4">No movements</td></tr>
+            <% } %>
+            <% movements.forEach(m => { %>
+              <tr>
+                <td><small><%= formatDate(m.txn_date) %></small></td>
+                <td>
+                  <% if (m.type === 'Opening') { %>
+                    <span class="badge bg-secondary">Opening</span>
+                  <% } else if (m.type === '+') { %>
+                    <span class="badge bg-success">In</span>
+                  <% } else { %>
+                    <span class="badge bg-danger">Out</span>
+                  <% } %>
+                </td>
+                <td class="fw-bold"><%= m.quantity %></td>
+                <td>
+                  <% if (m.reason) { %><strong><%= m.reason %></strong><% } %>
+                  <% if (m.reference) { %><div class="small text-muted"><%= m.reference %></div><% } %>
+                </td>
+                <td style="text-align:right; font-weight:700;"><%= m.balance %> pcs</td>
+                <td>
+                  <% if (m.source_type === 'adjustment') { %>
+                    <a href="/stock/edit/<%= m.source_id %>" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                  <% } %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+<% } %>
+
+<%- include('../partials/footer') %>

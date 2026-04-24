@@ -1,0 +1,138 @@
+<%- include('../partials/header') %>
+<div class="container-fluid py-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">
+      <i class="bi bi-person-<%= isNew ? 'plus' : 'gear' %>"></i>
+      <%= isNew ? 'New User' : 'Edit User: ' + user.username %>
+    </h4>
+    <a href="/users" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+
+  <% if (err) { %>
+    <div class="alert alert-danger py-2">
+      <% if (err === 'dup') { %>Username already exists.
+      <% } else if (err === 'invalid') { %>Invalid input. Password must be at least 6 characters.
+      <% } else if (err === 'short') { %>Password must be at least 6 characters.
+      <% } else if (err === 'self_role') { %>You cannot demote your own SuperAdmin account.
+      <% } else { %><%= err %><% } %>
+    </div>
+  <% } %>
+
+  <form method="POST" action="<%= isNew ? '/users' : '/users/edit/' + user.id %>" autocomplete="off">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header fw-bold">Account Details</div>
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="form-label">Username *</label>
+              <input type="text" name="username" class="form-control" required
+                     value="<%= user.username || '' %>"
+                     <%= isNew ? '' : 'readonly' %>>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Full Name *</label>
+              <input type="text" name="name" class="form-control" required value="<%= user.name || '' %>">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Email</label>
+              <input type="email" name="email" class="form-control" value="<%= user.email || '' %>">
+            </div>
+            <div class="mb-3">
+              <label class="form-label"><%= isNew ? 'Password *' : 'New Password (leave blank to keep)' %></label>
+              <input type="password" name="<%= isNew ? 'password' : 'new_password' %>"
+                     class="form-control" minlength="6" <%= isNew ? 'required' : '' %>>
+              <div class="form-text">Minimum 6 characters.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card mb-3">
+          <div class="card-header fw-bold">Role & Status</div>
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="form-label">Role *</label>
+              <select name="role" class="form-select" id="roleSel"
+                <%= (user.role === 'superadmin' || currentUser.role !== 'superadmin') ? 'disabled' : '' %>>
+                <% if (currentUser.role === 'superadmin') { %>
+                  <option value="admin"    <%= user.role === 'admin' ? 'selected' : '' %>>Admin (Company Owner)</option>
+                  <option value="employee" <%= user.role === 'employee' ? 'selected' : '' %>>Employee</option>
+                  <% if (user.role === 'superadmin') { %>
+                    <option value="superadmin" selected>SuperAdmin</option>
+                  <% } %>
+                <% } else { %>
+                  <option value="employee" selected>Employee</option>
+                <% } %>
+              </select>
+              <% if (user.role === 'superadmin' || currentUser.role !== 'superadmin') { %>
+                <input type="hidden" name="role" value="<%= user.role || 'employee' %>">
+              <% } %>
+              <div class="form-text">
+                <strong>SuperAdmin/Admin</strong>: full system access. <strong>Employee</strong>: only assigned modules.
+              </div>
+            </div>
+            <div class="mb-0">
+              <label class="form-label">Status</label>
+              <select name="status" class="form-select">
+                <option value="active"   <%= user.status === 'active'   ? 'selected' : '' %>>Active</option>
+                <option value="inactive" <%= user.status === 'inactive' ? 'selected' : '' %>>Inactive</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" id="permsCard">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="fw-bold">Module Permissions</span>
+            <div>
+              <button type="button" class="btn btn-sm btn-outline-primary" onclick="togglePerms(true)">Select All</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="togglePerms(false)">Clear</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <p class="small text-muted mb-2">Only applies when role is <strong>Employee</strong>. Admins/SuperAdmins always get full access.</p>
+            <div class="row">
+              <% ALL_MODULES.forEach(function(m){ %>
+                <div class="col-md-6">
+                  <div class="form-check">
+                    <input class="form-check-input perm-check" type="checkbox"
+                           id="m_<%= m %>" name="modules" value="<%= m %>"
+                           <%= perms.includes(m) ? 'checked' : '' %>>
+                    <label class="form-check-label" for="m_<%= m %>"><%= m %></label>
+                  </div>
+                </div>
+              <% }); %>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-3">
+      <button type="submit" class="btn btn-primary">
+        <i class="bi bi-save"></i> <%= isNew ? 'Create User' : 'Save Changes' %>
+      </button>
+      <a href="/users" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<script>
+  function togglePerms(on) {
+    document.querySelectorAll('.perm-check').forEach(c => c.checked = on);
+  }
+  (function(){
+    var sel = document.getElementById('roleSel');
+    var card = document.getElementById('permsCard');
+    function refresh(){
+      if (!sel) return;
+      var isEmployee = sel.value === 'employee';
+      card.style.opacity = isEmployee ? '1' : '0.55';
+      document.querySelectorAll('.perm-check').forEach(c => c.disabled = !isEmployee);
+    }
+    if (sel) { sel.addEventListener('change', refresh); refresh(); }
+  })();
+</script>
+<%- include('../partials/footer') %>

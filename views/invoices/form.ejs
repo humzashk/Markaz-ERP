@@ -9,14 +9,49 @@
       <div class="card">
         <div class="card-header">Invoice Details</div>
         <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label fw-bold">Account *</label>
+            <select name="account_scope" class="form-select" required>
+              <% var _invScope = (invoice && invoice.account_scope) || 'plastic_markaz'; %>
+              <option value="plastic_markaz"  <%= _invScope === 'plastic_markaz'  ? 'selected' : '' %>>Plastic Markaz</option>
+              <option value="wings_furniture" <%= _invScope === 'wings_furniture' ? 'selected' : '' %>>Wings Furniture</option>
+              <option value="cooler"          <%= _invScope === 'cooler'          ? 'selected' : '' %>>Cooler</option>
+            </select>
+            <div class="form-text">Invoice will be booked under this business account.</div>
+          </div>
           <div class="mb-3"><label class="form-label">Customer *</label>
-            <select name="customer_id" class="form-select" required onchange="loadCustomerCommission(this)">
+            <select name="customer_id" class="form-select" required>
               <option value="">Select Customer</option>
-              <% customers.forEach(c => { %><option value="<%= c.id %>" data-commission="<%= c.commission || 0 %>" <%= (invoice && c.id==invoice.customer_id)?'selected':'' %>><%= c.name %></option><% }) %>
+              <% customers.forEach(c => { %><option value="<%= c.id %>" <%= (invoice && c.id==invoice.customer_id)?'selected':'' %>><%= c.name %></option><% }) %>
             </select>
           </div>
           <div class="mb-3"><label class="form-label">Invoice Date *</label><input type="date" name="invoice_date" class="form-control" value="<%= invoice?.invoice_date || new Date().toISOString().split('T')[0] %>" required></div>
           <div class="mb-3"><label class="form-label">Due Date</label><input type="date" name="due_date" class="form-control" value="<%= invoice?.due_date || '' %>"></div>
+          <div class="mb-3"><label class="form-label">Warehouse</label>
+            <select name="warehouse_id" class="form-select">
+              <option value="">Select Warehouse</option>
+              <% warehouses?.forEach(w => { %><option value="<%= w.id %>" <%= (invoice && w.id==invoice.warehouse_id)?'selected':'' %>><%= w.name %></option><% }) %>
+            </select>
+          </div>
+          <div class="mb-3"><label class="form-label">Bilty #</label><input type="text" name="bilty_no" class="form-control" value="<%= invoice?.bilty_no || '' %>"></div>
+          <div class="mb-3"><label class="form-label">Transporter</label><input type="text" name="transporter_name" class="form-control" value="<%= invoice?.transporter_name || '' %>"></div>
+          <div class="mb-3"><label class="form-label">Transport / Delivery Charges (+/-)</label><input type="number" step="0.01" name="transport_charges" id="transport_charges" class="form-control" value="<%= invoice?.transport_charges || 0 %>" onchange="calcTotal()"></div>
+          <div class="mb-3"><label class="form-label">Account *</label>
+            <select name="account_scope" class="form-select" required>
+              <% ['plastic_markaz','wings_furniture','cooler'].forEach(a => { %>
+                <option value="<%= a %>" <%= (invoice && invoice.account_scope===a) || (!invoice && a==='plastic_markaz') ?'selected':'' %>><%= a.replace('_',' ').replace(/\b\w/g, x=>x.toUpperCase()) %></option>
+              <% }) %>
+            </select>
+          </div>
+          <% if (!edit && typeof pendingOrders !== 'undefined' && pendingOrders && pendingOrders.length) { %>
+          <div class="mb-3"><label class="form-label">Link Orders (optional, multi-select)</label>
+            <select name="order_ids" class="form-select" multiple size="4">
+              <% pendingOrders.forEach(o => { %>
+                <option value="<%= o.id %>"><%= o.order_no %> — <%= o.customer_name %> — Rs.<%= o.total %></option>
+              <% }) %>
+            </select>
+          </div>
+          <% } %>
           <% if (edit) { %>
           <div class="mb-3"><label class="form-label">Status</label>
             <select name="status" class="form-select">
@@ -24,20 +59,13 @@
             </select>
           </div>
           <% } %>
-          <div class="mb-3">
-            <label class="form-label">Commission % <small class="text-muted">(auto-loaded from customer)</small></label>
-            <div class="input-group">
-              <input type="number" id="commission_pct" name="commission_pct" class="form-control" value="<%= invoice?.commission_pct || 0 %>" step="0.01" min="0" max="100" onchange="calcTotal()">
-              <span class="input-group-text">%</span>
-            </div>
-          </div>
           <div class="mb-3"><label class="form-label">Notes</label><textarea name="notes" class="form-control" rows="2"><%= invoice?.notes || '' %></textarea></div>
         </div>
       </div>
     </div>
     <div class="col-md-8">
       <div class="card">
-        <div class="card-header">Invoice Items <small class="text-muted">Ctns × Pcs/Ctn = Total Pcs</small></div>
+        <div class="card-header">Invoice Items <small class="text-muted">Commission per item</small></div>
         <div class="card-body">
           <%- include('../partials/item-rows') %>
           <div class="text-end border-top pt-3">
@@ -46,8 +74,11 @@
             <div class="d-flex justify-content-end gap-4 mb-2 text-info">
               <span>Less Commission (<span id="commPctDisp">0</span>%):</span><strong id="commAmount">0.00</strong>
             </div>
+            <div class="d-flex justify-content-end gap-4 mb-2 text-secondary">
+              <span>Less Discount:</span><strong id="discAmount">0.00</strong>
+            </div>
             <div class="d-flex justify-content-end gap-4 border-top pt-2">
-              <span class="fs-5 fw-bold text-warning">GROSS:</span><strong class="fs-5 text-warning" id="grossAmount">0.00</strong>
+              <span class="fs-5 fw-bold text-warning">NET AMOUNT:</span><strong class="fs-5 text-warning" id="grossAmount">0.00</strong>
             </div>
           </div>
         </div>
@@ -59,4 +90,37 @@
     <a href="/invoices" class="btn btn-outline-secondary btn-lg">Cancel</a>
   </div>
 </form>
+
+<script>
+function calcTotal() {
+  let subtotal = 0;
+  let totalCommission = 0;
+  let totalDiscount = 0;
+  document.querySelectorAll('tbody tr').forEach(row => {
+    const qty = parseFloat(row.querySelector('.qty-input')?.value) || 0;
+    const rate = parseFloat(row.querySelector('.rate-input')?.value) || 0;
+    const discPack = parseFloat(row.querySelector('.discount-input')?.value) || 0;
+    const commPct = parseFloat(row.querySelector('.commission-input')?.value) || 0;
+    const amount = qty * rate;
+    const comm = amount * commPct / 100;
+    const disc = qty * discPack; // discount per pack * qty
+    subtotal += amount;
+    totalCommission += comm;
+    totalDiscount += disc;
+  });
+  const transport = parseFloat(document.getElementById('transport_charges')?.value) || 0;
+  const total = subtotal + transport;
+  const gross = total - totalCommission - totalDiscount;
+  document.getElementById('subtotal').textContent = subtotal.toFixed(2);
+  document.getElementById('commPctDisp').textContent = (totalCommission > 0 ? 'Item-wise' : '0');
+  document.getElementById('commAmount').textContent = totalCommission.toFixed(2);
+  document.getElementById('grandTotal').textContent = total.toFixed(2);
+  document.getElementById('discAmount').textContent = totalDiscount.toFixed(2);
+  document.getElementById('grossAmount').textContent = gross.toFixed(2);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  calcTotal();
+});
+</script>
 <%- include('../partials/footer') %>

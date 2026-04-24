@@ -40,9 +40,8 @@
               <label class="form-label fw-semibold">Payment Method</label>
               <select name="payment_method" class="form-select">
                 <option value="cash">Cash</option>
-                <option value="bank_transfer">Bank Transfer</option>
                 <option value="cheque">Cheque</option>
-                <option value="online">Online</option>
+                <option value="bank_transfer">Bank Transfer</option>
               </select>
             </div>
             <div class="col-md-6 mb-3">
@@ -56,17 +55,12 @@
             </div>
           </div>
           <div class="mb-3">
-            <label class="form-label fw-semibold">Link to Purchase (optional)</label>
-            <select name="purchase_id" class="form-select">
-              <option value="">— General Payment —</option>
-              <% pendingPurchases.forEach(p => { %>
-              <option value="<%= p.id %>"><%= p.purchase_no %> — <%= formatDate(p.purchase_date) %> — Total: <%= formatCurrency(p.total) %></option>
-              <% }) %>
+            <label class="form-label fw-semibold">Account</label>
+            <select name="account_scope" class="form-select">
+              <option value="plastic_markaz">Plastic Markaz</option>
+              <option value="wings_furniture">Wings Furniture</option>
+              <option value="cooler">Cooler</option>
             </select>
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Reference / Cheque No.</label>
-            <input type="text" name="reference" class="form-control" placeholder="Optional">
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Notes</label>
@@ -77,7 +71,7 @@
       </div>
     </div>
   </div>
-  <% if (selectedVendor && pendingPurchases.length) { %>
+  <% if (false && selectedVendor && pendingPurchases.length) { %>
   <div class="col-lg-5">
     <div class="card">
       <div class="card-header"><strong>Pending Purchases</strong></div>

@@ -14,9 +14,21 @@
 <% if (product) { %>
 <div class="mb-3"><strong><%= product.name %></strong> — Current Stock: <span class="badge bg-<%= product.stock <= product.min_stock ? 'danger' : 'success' %> fs-6"><%= product.stock %> pcs</span></div>
 <div class="card"><div class="card-body p-0"><div class="table-responsive">
-  <table class="table table-hover mb-0"><thead><tr><th>Date</th><th>Type</th><th class="text-end">Quantity</th><th>Reference</th></tr></thead><tbody>
-    <% movements.forEach(m => { %><tr><td><%= formatDate(m.date) %></td><td><span class="badge bg-<%= m.type==='Sale'?'info':m.type==='Purchase'?'success':'danger' %>"><%= m.type %></span></td><td class="text-end fw-bold"><%= m.type==='Purchase' ? '+' : '-' %><%= m.quantity %></td><td><%= m.ref %></td></tr><% }) %>
-    <% if (!movements.length) { %><tr><td colspan="4" class="text-center text-muted">No movements found</td></tr><% } %>
+  <table class="table table-hover mb-0"><thead><tr><th>Date</th><th>Type</th><th><%= product ? product.name : 'Product' %></th><th class="text-end">Quantity</th><th>Party</th><th>Reference</th></tr></thead><tbody>
+    <% movements.forEach(m => {
+         const linkMap = { invoice: '/invoices/view/', order: '/orders/view/', purchase: '/purchases/view/', breakage: '/breakage/view/' };
+         const href = m.ref_type && m.ref_id ? (linkMap[m.ref_type] || '#') + m.ref_id : null;
+    %>
+    <tr>
+      <td><%= formatDate(m.date) %></td>
+      <td><span class="badge bg-<%= m.type==='Sale'?'info':m.type==='Purchase'?'success':m.type==='Order'?'warning':'danger' %>"><%= m.type %></span></td>
+      <td><%= product ? product.name : '-' %></td>
+      <td class="text-end fw-bold"><%= m.type==='Purchase' ? '+' : '-' %><%= m.quantity %></td>
+      <td><%= m.party || '-' %></td>
+      <td><% if (href) { %><a href="<%= href %>" target="_blank"><%= m.ref || '-' %></a><% } else { %><%= m.ref || '-' %><% } %></td>
+    </tr>
+    <% }) %>
+    <% if (!movements.length) { %><tr><td colspan="6" class="text-center text-muted">No movements found</td></tr><% } %>
   </tbody></table>
 </div></div></div>
 <% } else { %><div class="text-center text-muted py-5">Select a product to view stock movements</div><% } %>

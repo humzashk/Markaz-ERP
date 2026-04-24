@@ -1,47 +1,54 @@
 <%- include('../partials/header') %>
 <div class="page-header">
-  <h2><i class="bi bi-exclamation-triangle"></i> Breakage / Claims</h2>
+  <h2><i class="bi bi-exclamation-triangle"></i> Breakage / Credit Notes</h2>
   <a href="/breakage/add" class="btn btn-primary"><i class="bi bi-plus"></i> Record Breakage</a>
-</div>
-<div class="filter-bar">
-  <form class="row g-2" method="get">
-    <div class="col-md-3">
-      <select name="status" class="form-select"><option value="">All Status</option>
-        <% ['pending','resolved','rejected'].forEach(s => { %><option value="<%= s %>" <%= status===s?'selected':'' %>><%= s.charAt(0).toUpperCase()+s.slice(1) %></option><% }) %>
-      </select>
-    </div>
-    <div class="col-auto"><button class="btn btn-primary"><i class="bi bi-search"></i> Filter</button></div>
-    <% if (status) { %><div class="col-auto"><a href="/breakage" class="btn btn-outline-secondary">Clear</a></div><% } %>
-  </form>
 </div>
 <div class="card">
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table table-hover mb-0">
-        <thead><tr><th>#</th><th>Date</th><th>Product</th><th>Qty</th><th>Customer/Vendor</th><th>Reason</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr>
+          <th>#</th>
+          <th>Date</th>
+          <th>Product</th>
+          <th>Qty</th>
+          <th>Customer</th>
+          <th>Amount</th>
+          <th>Credit Note</th>
+          <th>Notes</th>
+          <th>Actions</th>
+        </tr></thead>
         <tbody>
           <% breakages.forEach((b, i) => { %>
-          <tr class="<%= b.claim_status==='pending' ? 'table-warning' : '' %>">
+          <tr>
             <td><%= i+1 %></td>
-            <td><%= formatDate(b.breakage_date) %></td>
+            <td><small><%= formatDate(b.breakage_date) %></small></td>
             <td><strong><%= b.product_name %></strong></td>
-            <td><%= b.quantity %> pcs</td>
-            <td><%= b.customer_name || b.vendor_name || '-' %></td>
-            <td><%= b.reason || '-' %></td>
+            <td><%= b.quantity > 0 ? b.quantity + ' pcs' : '-' %></td>
+            <td><%= b.party_name || '-' %></td>
             <td class="fw-bold text-danger"><%= formatCurrency(b.adjustment_amount) %></td>
-            <td><span class="badge bg-<%= statusBadge(b.claim_status) %>"><%= b.claim_status %></span></td>
             <td>
-              <a href="/breakage/edit/<%= b.id %>" class="btn btn-sm btn-outline-warning"><i class="bi bi-pencil"></i></a>
-              <% if (b.claim_status === 'pending') { %>
-              <form class="d-inline" method="post" action="/breakage/resolve/<%= b.id %>">
-                <button class="btn btn-sm btn-outline-success" title="Resolve Claim"><i class="bi bi-check-circle"></i></button>
-              </form>
+              <% if (b.credit_note) { %>
+                <a href="/breakage/credit-note/<%= b.id %>" class="btn btn-sm btn-outline-info" target="_blank">
+                  <i class="bi bi-file-text"></i> <%= b.credit_note %>
+                </a>
+              <% } else { %>
+                <span class="text-muted small">-</span>
               <% } %>
-              <form class="d-inline delete-form" method="post" action="/breakage/delete/<%= b.id %>"><button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form>
+            </td>
+            <td><small class="text-muted"><%= b.notes || '-' %></small></td>
+            <td>
+              <a href="/breakage/view/<%= b.id %>" class="btn btn-sm btn-outline-secondary"><i class="bi bi-eye"></i></a>
+              <a href="/breakage/challan/<%= b.id %>" class="btn btn-sm btn-outline-primary" target="_blank" title="Print Challan"><i class="bi bi-printer"></i></a>
+              <form class="d-inline delete-form" method="post" action="/breakage/delete/<%= b.id %>">
+                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+              </form>
             </td>
           </tr>
           <% }) %>
-          <% if (!breakages.length) { %><tr><td colspan="9" class="text-center text-muted py-4">No breakage records</td></tr><% } %>
+          <% if (!breakages.length) { %>
+          <tr><td colspan="9" class="text-center text-muted py-4">No breakage records found</td></tr>
+          <% } %>
         </tbody>
       </table>
     </div>

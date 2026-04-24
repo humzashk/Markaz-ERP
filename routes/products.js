@@ -23,10 +23,10 @@ router.get('/add', (req, res) => {
 });
 
 router.post('/add', (req, res) => {
-  const { name, category, packaging, stock, rate, min_stock, vendor_id } = req.body;
+  const { name, category, qty_per_pack, stock, rate, min_stock, vendor_id } = req.body;
   const result = db.prepare(
-    `INSERT INTO products (name, category, packaging, stock, rate, min_stock, vendor_id) VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(name, category, parseInt(packaging)||1, parseInt(stock)||0, parseFloat(rate)||0, parseInt(min_stock)||10, vendor_id || null);
+    `INSERT INTO products (name, category, qty_per_pack, stock, rate, min_stock, vendor_id) VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(name, category, parseInt(qty_per_pack)||1, parseInt(stock)||0, parseFloat(rate)||0, parseInt(min_stock)||10, vendor_id || null);
   addAuditLog('create', 'products', result.lastInsertRowid, `Created product: ${name}`);
   res.redirect('/products');
 });
@@ -40,7 +40,7 @@ router.get('/edit/:id', (req, res) => {
 });
 
 router.post('/edit/:id', (req, res) => {
-  const { name, category, packaging, stock, rate, min_stock, status, vendor_id } = req.body;
+  const { name, category, qty_per_pack, stock, rate, min_stock, status, vendor_id } = req.body;
   const newRate = parseFloat(rate) || 0;
   // Log rate change if rate changed
   const old = db.prepare('SELECT rate FROM products WHERE id = ?').get(req.params.id);
@@ -48,8 +48,8 @@ router.post('/edit/:id', (req, res) => {
     db.prepare('INSERT INTO product_rate_history (product_id, old_rate, new_rate, changed_at) VALUES (?, ?, ?, ?)').run(req.params.id, old.rate, newRate, new Date().toISOString().split('T')[0]);
   }
   db.prepare(
-    `UPDATE products SET name=?, category=?, packaging=?, stock=?, rate=?, min_stock=?, status=?, vendor_id=? WHERE id=?`
-  ).run(name, category, parseInt(packaging)||1, parseInt(stock)||0, newRate, parseInt(min_stock)||10, status||'active', vendor_id||null, req.params.id);
+    `UPDATE products SET name=?, category=?, qty_per_pack=?, stock=?, rate=?, min_stock=?, status=?, vendor_id=? WHERE id=?`
+  ).run(name, category, parseInt(qty_per_pack)||1, parseInt(stock)||0, newRate, parseInt(min_stock)||10, status||'active', vendor_id||null, req.params.id);
   addAuditLog('update', 'products', req.params.id, `Updated product: ${name}`);
   res.redirect('/products');
 });
@@ -58,7 +58,49 @@ router.get('/view/:id', (req, res) => {
   const product = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
   if (!product) return res.redirect('/products');
   const rates = db.prepare('SELECT * FROM rate_list WHERE product_id = ? ORDER BY effective_date DESC').all(req.params.id);
-  res.render('products/view', { page: 'products', product, rates });
+
+  // Fetch stock movements from orders (outbound to customers)
+  const orderMovements = db.prepare(`
+    SELECT
+      oi.product_id,
+      c.name as party_name,
+      c.id as party_id,
+      'Customer' as party_type,
+      oi.quantity,
+      o.order_date as movement_date,
+      o.id as order_id,
+      o.order_no as reference_number,
+      'Order' as doc_type
+    FROM order_items oi
+    JOIN orders o ON o.id = oi.order_id
+    JOIN customers c ON c.id = o.customer_id
+    WHERE oi.product_id = ?
+  `).all(req.params.id);
+
+  // Fetch stock movements from purchases (inbound from vendors)
+  const purchaseMovements = db.prepare(`
+    SELECT
+      pi.product_id,
+      v.name as party_name,
+      v.id as party_id,
+      'Vendor' as party_type,
+      pi.quantity,
+      pur.purchase_date as movement_date,
+      pur.id as purchase_id,
+      pur.purchase_no as reference_number,
+      'Purchase' as doc_type
+    FROM purchase_items pi
+    JOIN purchases pur ON pur.id = pi.purchase_id
+    JOIN vendors v ON v.id = pur.vendor_id
+    WHERE pi.product_id = ?
+  `).all(req.params.id);
+
+  // Combine and sort by date descending
+  const movements = [...orderMovements, ...purchaseMovements].sort((a, b) =>
+    new Date(b.movement_date) - new Date(a.movement_date)
+  );
+
+  res.render('products/view', { page: 'products', product, rates, movements });
 });
 
 router.post('/delete/:id', (req, res) => {
@@ -93,7 +135,7 @@ router.post('/bulk', (req, res) => {
     idList.forEach(id => stmt.run(value || '', id));
   } else if (action === 'set_packaging') {
     const pkg = parseInt(value) || 1;
-    const stmt = db.prepare('UPDATE products SET packaging = ? WHERE id = ?');
+    const stmt = db.prepare('UPDATE products SET qty_per_pack = ? WHERE id = ?');
     idList.forEach(id => stmt.run(pkg, id));
   } else if (action === 'set_rate') {
     const newRate = parseFloat(value) || 0;

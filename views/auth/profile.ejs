@@ -1,0 +1,51 @@
+<%- include('../partials/header') %>
+<div class="container-fluid py-3">
+  <h4 class="mb-3"><i class="bi bi-person-circle"></i> My Profile</h4>
+
+  <% if (msg === 'updated') { %><div class="alert alert-success">Password updated successfully.</div><% } %>
+  <% if (err === 'wrong') { %><div class="alert alert-danger">Current password is incorrect.</div><% } %>
+  <% if (err === 'short') { %><div class="alert alert-danger">New password must be at least 6 characters.</div><% } %>
+  <% if (err === 'mismatch') { %><div class="alert alert-danger">New password and confirmation do not match.</div><% } %>
+
+  <div class="row g-3">
+    <div class="col-md-5">
+      <div class="card">
+        <div class="card-header fw-bold">Account Info</div>
+        <div class="card-body">
+          <p><strong>Username:</strong> <%= currentUser.username %></p>
+          <p><strong>Name:</strong> <%= currentUser.name %></p>
+          <p><strong>Email:</strong> <%= currentUser.email || '-' %></p>
+          <p><strong>Role:</strong>
+            <span class="badge bg-<%= currentUser.role === 'superadmin' ? 'danger' : currentUser.role === 'admin' ? 'primary' : 'secondary' %>">
+              <%= currentUser.role.toUpperCase() %>
+            </span>
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-7">
+      <div class="card">
+        <div class="card-header fw-bold">Change Password</div>
+        <div class="card-body">
+          <form method="POST" action="/profile/password">
+            <div class="mb-3">
+              <label class="form-label">Current Password</label>
+              <input type="password" name="current" class="form-control" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">New Password</label>
+              <input type="password" name="new_password" class="form-control" minlength="6" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Confirm New Password</label>
+              <input type="password" name="confirm" class="form-control" minlength="6" required>
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="bi bi-save"></i> Update Password</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

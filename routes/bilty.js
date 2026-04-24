@@ -26,9 +26,11 @@ router.get('/add', (req, res) => {
 
 router.post('/add', (req, res) => {
   const { order_id, invoice_id, transport_name, bilty_no, from_city, to_city, bilty_date, freight_charges, weight, packages_count, notes } = req.body;
+  const allowedScopes = ['plastic_markaz','wings_furniture','cooler'];
+  const account_scope = allowedScopes.includes(req.body.account_scope) ? req.body.account_scope : 'plastic_markaz';
   const result = db.prepare(
-    `INSERT INTO bilty (order_id, invoice_id, transport_name, bilty_no, from_city, to_city, bilty_date, freight_charges, weight, packages_count, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_transit', ?)`
-  ).run(order_id||null, invoice_id||null, transport_name, bilty_no, from_city, to_city, bilty_date, parseFloat(freight_charges)||0, weight, parseInt(packages_count)||0, notes);
+    `INSERT INTO bilty (order_id, invoice_id, transport_name, bilty_no, from_city, to_city, bilty_date, freight_charges, weight, packages_count, status, notes, account_scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_transit', ?, ?)`
+  ).run(order_id||null, invoice_id||null, transport_name, bilty_no, from_city, to_city, bilty_date, parseFloat(freight_charges)||0, weight, parseInt(packages_count)||0, notes, account_scope);
   addAuditLog('create', 'bilty', result.lastInsertRowid, `Created bilty ${bilty_no}`);
   res.redirect('/bilty');
 });
@@ -43,9 +45,11 @@ router.get('/edit/:id', (req, res) => {
 
 router.post('/edit/:id', (req, res) => {
   const { order_id, invoice_id, transport_name, bilty_no, from_city, to_city, bilty_date, freight_charges, weight, packages_count, status, notes } = req.body;
+  const allowedScopes = ['plastic_markaz','wings_furniture','cooler'];
+  const account_scope = allowedScopes.includes(req.body.account_scope) ? req.body.account_scope : 'plastic_markaz';
   db.prepare(
-    `UPDATE bilty SET order_id=?, invoice_id=?, transport_name=?, bilty_no=?, from_city=?, to_city=?, bilty_date=?, freight_charges=?, weight=?, packages_count=?, status=?, notes=? WHERE id=?`
-  ).run(order_id||null, invoice_id||null, transport_name, bilty_no, from_city, to_city, bilty_date, parseFloat(freight_charges)||0, weight, parseInt(packages_count)||0, status||'in_transit', notes, req.params.id);
+    `UPDATE bilty SET order_id=?, invoice_id=?, transport_name=?, bilty_no=?, from_city=?, to_city=?, bilty_date=?, freight_charges=?, weight=?, packages_count=?, status=?, notes=?, account_scope=? WHERE id=?`
+  ).run(order_id||null, invoice_id||null, transport_name, bilty_no, from_city, to_city, bilty_date, parseFloat(freight_charges)||0, weight, parseInt(packages_count)||0, status||'in_transit', notes, account_scope, req.params.id);
   res.redirect('/bilty');
 });
 

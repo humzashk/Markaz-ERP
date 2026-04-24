@@ -1,0 +1,68 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-pencil"></i> Edit Stock Adjustment</h2>
+  <a href="/stock" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+</div>
+<div class="row justify-content-center">
+  <div class="col-md-7">
+    <div class="card">
+      <div class="card-body">
+        <form method="POST" action="/stock/edit/<%= adj.id %>">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Product *</label>
+            <select name="product_id" class="form-select" required>
+              <% products.forEach(p => { %>
+              <option value="<%= p.id %>" <%= p.id==adj.product_id?'selected':'' %>><%= p.name %> (Stock: <%= p.stock %>)</option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Adjustment Type *</label>
+            <select name="adjustment_type" class="form-select" required>
+              <% ['add','reduce','damage','return','transfer_in','transfer_out'].forEach(t => { %>
+                <option value="<%= t %>" <%= adj.adjustment_type===t?'selected':'' %>><%= t.replace('_',' ') %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Quantity *</label>
+              <input type="number" name="quantity" class="form-control" min="1" value="<%= adj.quantity %>" required>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Date *</label>
+              <input type="date" name="adj_date" class="form-control" value="<%= adj.adj_date %>" required>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Warehouse</label>
+            <select name="warehouse_id" class="form-select">
+              <option value="">— None —</option>
+              <% warehouses.forEach(w => { %>
+              <option value="<%= w.id %>" <%= w.id==adj.warehouse_id?'selected':'' %>><%= w.name %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Reason *</label>
+            <select name="reason" class="form-select" required>
+              <% ['Damaged','Adjustment','Manual','Return','Other'].forEach(r => { %>
+                <option value="<%= r %>" <%= adj.reason===r?'selected':'' %>><%= r %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Reference</label>
+            <input type="text" name="reference" class="form-control" value="<%= adj.reference || '' %>">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Notes</label>
+            <textarea name="notes" class="form-control" rows="2"><%= adj.notes || '' %></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary w-100"><i class="bi bi-check"></i> Update</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

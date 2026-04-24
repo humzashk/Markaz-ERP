@@ -3,7 +3,7 @@
 function _buildRowHtml(idx) {
   const opts = window.productsData
     ? window.productsData.map(p =>
-        `<option value="${p.id}" data-packaging="${p.packaging}" data-rate="${p.rate}" data-stock="${p.stock}">${p.name} · Stock: ${p.stock}</option>`
+        `<option value="${p.id}" data-packaging="${p.packaging || p.qty_per_pack || 1}" data-rate="${p.rate || p.selling_price || 0}" data-stock="${p.stock || 0}" data-commission="${p.default_commission_rate || 0}">${p.name} · Stock: ${p.stock || 0}</option>`
       ).join('')
     : '';
   return `
@@ -17,6 +17,8 @@ function _buildRowHtml(idx) {
     <td><input type="number" name="packaging" class="form-control packaging-input text-center text-muted" min="1" value="1" oninput="calcRow(this)"></td>
     <td><input type="number" name="quantity" class="form-control qty-input text-center fw-bold text-primary" min="0" value="" required oninput="onQtyInput(this)" placeholder="0"></td>
     <td><input type="number" name="rate" class="form-control rate-input text-center" min="0" step="0.01" value="" required oninput="calcTotal()" placeholder="0.00"></td>
+    <td><input type="number" name="discount_per_pack" class="form-control discount-input text-center" min="0" step="0.01" value="0" oninput="calcTotal()"></td>
+    <td><input type="number" name="commission_pct" class="form-control commission-input text-center" min="0" step="0.01" max="100" value="0" oninput="calcTotal()"></td>
     <td class="text-center"><span class="row-amount fw-bold text-success">0.00</span></td>
     <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="removeRow(this)"><i class="bi bi-x"></i></button></td>
   `;
@@ -49,8 +51,17 @@ function onProductChange(sel) {
   if (opt.dataset.packaging) {
     row.querySelector('.packaging-input').value = opt.dataset.packaging;
   }
+  // AUTO RATE: auto-fill sell rate from products master (user can still override)
   if (opt.dataset.rate) {
-    row.querySelector('.rate-input').value = parseFloat(opt.dataset.rate).toFixed(2);
+    const rateInput = row.querySelector('.rate-input');
+    if (rateInput) rateInput.value = parseFloat(opt.dataset.rate).toFixed(2);
+  }
+  // Auto-fill default commission % if product has one
+  if (opt.dataset.commission) {
+    const commInput = row.querySelector('.commission-input');
+    if (commInput && (!commInput.value || commInput.value === '0')) {
+      commInput.value = parseFloat(opt.dataset.commission) || 0;
+    }
   }
   // Highlight stock info
   const stock = parseInt(opt.dataset.stock) || 0;
@@ -103,32 +114,34 @@ function calcTotal() {
   const tbody = document.getElementById('itemsBody');
   if (!tbody) return;
   let subtotal = 0;
+  let totalCommission = 0;
+  let totalDiscount = 0;
   Array.from(tbody.rows).forEach(row => {
     const qty = parseFloat(row.querySelector('.qty-input')?.value) || 0;
     const rate = parseFloat(row.querySelector('.rate-input')?.value) || 0;
+    const commPct = parseFloat(row.querySelector('.commission-input')?.value) || 0;
+    const discPack = parseFloat(row.querySelector('.discount-input')?.value) || 0;
     const amount = qty * rate;
+    const comm = amount * commPct / 100;
+    const disc = qty * discPack;
     const amountCell = row.querySelector('.row-amount');
     if (amountCell) amountCell.textContent = amount.toLocaleString('en-PK', {minimumFractionDigits:2, maximumFractionDigits:2});
     subtotal += amount;
+    totalCommission += comm;
+    totalDiscount += disc;
   });
 
-  const subtotalEl = document.getElementById('subtotal');
-  const totalEl = document.getElementById('grandTotal');
-  const commPctEl = document.getElementById('commission_pct');
-  const commAmountEl = document.getElementById('commAmount');
-  const commPctDispEl = document.getElementById('commPctDisp');
-  const grossEl = document.getElementById('grossAmount');
+  const transport = parseFloat(document.getElementById('transport_charges')?.value) || 0;
+  const grand = subtotal + transport;
+  const gross = grand - totalCommission - totalDiscount;
 
-  if (subtotalEl) subtotalEl.textContent = subtotal.toLocaleString('en-PK', {minimumFractionDigits:2});
-  if (totalEl) totalEl.textContent = subtotal.toLocaleString('en-PK', {minimumFractionDigits:2});
-
-  const commPct = parseFloat(commPctEl?.value) || 0;
-  const commAmount = subtotal * commPct / 100;
-  const gross = subtotal - commAmount;
-
-  if (commPctDispEl) commPctDispEl.textContent = commPct;
-  if (commAmountEl) commAmountEl.textContent = commAmount.toLocaleString('en-PK', {minimumFractionDigits:2});
-  if (grossEl) grossEl.textContent = gross.toLocaleString('en-PK', {minimumFractionDigits:2});
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set('subtotal', subtotal.toLocaleString('en-PK', {minimumFractionDigits:2}));
+  set('grandTotal', grand.toLocaleString('en-PK', {minimumFractionDigits:2}));
+  set('commAmount', totalCommission.toLocaleString('en-PK', {minimumFractionDigits:2}));
+  set('commPctDisp', totalCommission > 0 ? 'Item-wise' : '0');
+  set('discAmount', totalDiscount.toLocaleString('en-PK', {minimumFractionDigits:2}));
+  set('grossAmount', gross.toLocaleString('en-PK', {minimumFractionDigits:2}));
 }
 
 function loadCustomerCommission(sel) {

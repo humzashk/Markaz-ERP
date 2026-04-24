@@ -17,6 +17,7 @@
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-numbering"><i class="bi bi-hash me-1"></i>Numbering</a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-defaults"><i class="bi bi-sliders me-1"></i>Defaults</a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-categories"><i class="bi bi-tags me-1"></i>Categories</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-logos" id="logos"><i class="bi bi-image me-1"></i>Logos</a></li>
 </ul>
 
 <form method="POST" action="/settings" id="settingsForm">
@@ -319,13 +320,68 @@
     </div>
   </div>
 
+  <!-- LOGOS TAB placeholder (actual logo forms rendered OUTSIDE main <form> below) -->
+  <div class="tab-pane fade" id="tab-logos">
+    <div id="logosMount"></div>
+  </div>
+
 </div>
 
 <div class="mt-3 d-flex gap-2 align-items-center border-top pt-3">
   <button type="submit" class="btn btn-primary btn-lg px-5"><i class="bi bi-save me-2"></i>Save All Settings</button>
-  <span class="text-muted small">Changes apply immediately after saving.</span>
+  <span class="text-muted small">Changes apply immediately after saving. (Logo uploads save instantly on Upload click.)</span>
 </div>
 </form>
+
+<!-- Logo forms rendered OUTSIDE main settings form to avoid illegal nested-form drop -->
+<div id="logosSection" style="display:none;">
+  <div class="alert alert-info"><strong>Account Logos:</strong> Upload a different logo for each account. The correct logo is auto-selected based on the document's account.</div>
+  <div class="row g-3">
+    <% ['plastic_markaz','wings_furniture','cooler','default'].forEach(scope => {
+      const logoKey = 'logo_' + scope;
+      const current = settings[logoKey];
+    %>
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header fw-semibold"><%= scope.replace('_',' ').replace(/\b\w/g, x=>x.toUpperCase()) %></div>
+        <div class="card-body text-center">
+          <% if (current) { %>
+            <div style="height:140px;display:flex;align-items:center;justify-content:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;">
+              <img src="<%= current %>" style="max-height:120px;max-width:90%;object-fit:contain;" alt="logo">
+            </div>
+            <form method="POST" action="/settings/logo/<%= scope %>/remove" class="mt-2">
+              <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Remove</button>
+            </form>
+          <% } else { %>
+            <div class="text-muted py-4" style="height:140px;display:flex;align-items:center;justify-content:center;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;">
+              <span><i class="bi bi-image"></i> No logo uploaded</span>
+            </div>
+          <% } %>
+          <form method="POST" action="/settings/logo/<%= scope %>" enctype="multipart/form-data" class="mt-2">
+            <div class="input-group input-group-sm">
+              <input type="file" name="logo" accept="image/png,image/jpeg,image/webp,image/svg+xml" class="form-control" required>
+              <button class="btn btn-primary" type="submit"><i class="bi bi-upload"></i> Upload</button>
+            </div>
+            <div class="form-text small mt-1">PNG / JPG / WEBP / SVG. Max 2 MB. Square or wide logos recommended.</div>
+          </form>
+        </div>
+      </div>
+    </div>
+    <% }) %>
+  </div>
+</div>
+
+<script>
+  // Move the logo section into the Logos tab panel so it lives visually with the tab
+  (function(){
+    var src = document.getElementById('logosSection');
+    var tgt = document.getElementById('logosMount');
+    if (src && tgt) {
+      tgt.appendChild(src);
+      src.style.display = '';
+    }
+  })();
+</script>
 
 <script>
 // Live preview update

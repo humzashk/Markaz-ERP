@@ -1,0 +1,140 @@
+const express = require('express');
+const router = express.Router();
+const { db, addAuditLog } = require('../database');
+
+router.get('/', (req, res) => {
+  const search = req.query.search || '';
+  const type = req.query.type || '';
+  let sql = `
+    SELECT sa.*, p.name as product_name, w.name as warehouse_name
+    FROM stock_adjustments sa
+    JOIN products p ON p.id = sa.product_id
+    LEFT JOIN warehouses w ON w.id = sa.warehouse_id
+    WHERE 1=1
+  `;
+  const params = [];
+  if (search) { sql += ` AND p.name LIKE ?`; params.push(`%${search}%`); }
+  if (type) { sql += ` AND sa.adjustment_type = ?`; params.push(type); }
+  sql += ` ORDER BY sa.id DESC`;
+  const adjustments = db.prepare(sql).all(...params);
+  res.render('stock/index', { page: 'stock', adjustments, search, type });
+});
+
+router.get('/add', (req, res) => {
+  const products = db.prepare('SELECT id, name, stock FROM products WHERE status = ? ORDER BY name').all('active');
+  const warehouses = db.prepare('SELECT id, name FROM warehouses WHERE status = ? ORDER BY name').all('active');
+  const adjType = req.query.type || 'add';
+  res.render('stock/form', { page: 'stock', products, warehouses, adjType });
+});
+
+router.post('/add', (req, res) => {
+  const { product_id, warehouse_id, adjustment_type, quantity, reason, reference, adj_date, notes } = req.body;
+  const qty = parseInt(quantity) || 0;
+
+  db.transaction(() => {
+    // Update main product stock
+    if (adjustment_type === 'add' || adjustment_type === 'return' || adjustment_type === 'transfer_in') {
+      db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?').run(qty, product_id);
+    } else if (adjustment_type === 'reduce' || adjustment_type === 'damage' || adjustment_type === 'transfer_out') {
+      db.prepare('UPDATE products SET stock = stock - ? WHERE id = ?').run(qty, product_id);
+    }
+
+    // Update warehouse stock if warehouse selected
+    if (warehouse_id) {
+      const existing = db.prepare('SELECT id FROM warehouse_stock WHERE warehouse_id = ? AND product_id = ?').get(warehouse_id, product_id);
+      if (existing) {
+        if (adjustment_type === 'add' || adjustment_type === 'return' || adjustment_type === 'transfer_in') {
+          db.prepare('UPDATE warehouse_stock SET quantity = quantity + ? WHERE warehouse_id = ? AND product_id = ?').run(qty, warehouse_id, product_id);
+        } else {
+          db.prepare('UPDATE warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_id = ?').run(qty, warehouse_id, product_id);
+        }
+      } else {
+        const whQty = (adjustment_type === 'add' || adjustment_type === 'return') ? qty : -qty;
+        db.prepare('INSERT INTO warehouse_stock (warehouse_id, product_id, quantity) VALUES (?, ?, ?)').run(warehouse_id, product_id, Math.max(0, whQty));
+      }
+    }
+
+    db.prepare(
+      `INSERT INTO stock_adjustments (product_id, warehouse_id, adjustment_type, quantity, reason, reference, adj_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(product_id, warehouse_id || null, adjustment_type, qty, reason, reference, adj_date, notes);
+  })();
+
+  addAuditLog('create', 'stock_adjustments', null, `Stock ${adjustment_type}: ${qty} pcs for product ${product_id}`);
+  res.redirect('/stock');
+});
+
+// Stock Movements - Combined view of all stock movements
+router.get('/movements', (req, res) => {
+  const search = req.query.search || '';
+  const type = req.query.type || '';
+
+  // Fetch order movements (outbound to customers)
+  let orderSql = `
+    SELECT
+      oi.product_id,
+      p.name as product_name,
+      c.name as party_name,
+      'Customer' as party_type,
+      oi.quantity,
+      o.order_date as movement_date,
+      o.id as order_id,
+      o.order_no as reference_number,
+      'Order' as doc_type
+    FROM order_items oi
+    JOIN orders o ON o.id = oi.order_id
+    JOIN customers c ON c.id = o.customer_id
+    JOIN products p ON p.id = oi.product_id
+    WHERE 1=1
+  `;
+  const orderParams = [];
+  if (search) { orderSql += ` AND p.name LIKE ?`; orderParams.push(`%${search}%`); }
+  if (type && type !== 'outbound') { orderSql = ''; }
+
+  // Fetch purchase movements (inbound from vendors)
+  let purchaseSql = `
+    SELECT
+      pi.product_id,
+      p.name as product_name,
+      v.name as party_name,
+      'Vendor' as party_type,
+      pi.quantity,
+      pur.purchase_date as movement_date,
+      pur.id as purchase_id,
+      pur.purchase_no as reference_number,
+      'Purchase' as doc_type
+    FROM purchase_items pi
+    JOIN purchases pur ON pur.id = pi.purchase_id
+    JOIN vendors v ON v.id = pur.vendor_id
+    JOIN products p ON p.id = pi.product_id
+    WHERE 1=1
+  `;
+  const purchaseParams = [];
+  if (search) { purchaseSql += ` AND p.name LIKE ?`; purchaseParams.push(`%${search}%`); }
+  if (type && type !== 'inbound') { purchaseSql = ''; }
+
+  let movements = [];
+  console.log('orderSql:', orderSql);
+  console.log('purchaseSql:', purchaseSql);
+  if (orderSql) {
+    try {
+      movements = [...movements, ...db.prepare(orderSql).all(...orderParams)];
+    } catch(e) {
+      console.log('Order query error:', e.message);
+    }
+  }
+  if (purchaseSql) {
+    try {
+      console.log('About to execute purchaseSql');
+      movements = [...movements, ...db.prepare(purchaseSql).all(...purchaseParams)];
+    } catch(e) {
+      console.log('Purchase query error:', e.message);
+      throw e;
+    }
+  }
+
+  movements.sort((a, b) => new Date(b.movement_date) - new Date(a.movement_date));
+
+  res.render('stock/movements', { page: 'stock', movements, search, type });
+});
+
+module.exports = router;

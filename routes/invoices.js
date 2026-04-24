@@ -16,47 +16,70 @@ router.get('/', (req, res) => {
 });
 
 router.get('/add', (req, res) => {
-  const customers = db.prepare('SELECT id, name, commission FROM customers WHERE status = ? ORDER BY name').all('active');
-  const products = db.prepare('SELECT id, name, packaging, rate, stock FROM products WHERE status = ? ORDER BY name').all('active');
-  res.render('invoices/form', { page: 'invoices', invoice: null, items: [], customers, products, edit: false });
+  const customers = db.prepare('SELECT id, name FROM customers WHERE status = ? ORDER BY name').all('active');
+  const products = db.prepare('SELECT id, name, qty_per_pack, selling_price as rate, stock, default_commission_rate FROM products WHERE status = ? ORDER BY name').all('active');
+  const warehouses = db.prepare('SELECT id, name FROM warehouses WHERE status = ? ORDER BY name').all('active');
+  const pendingOrders = db.prepare(`SELECT o.id, o.order_no, o.customer_id, o.total, o.order_date, c.name as customer_name FROM orders o JOIN customers c ON c.id=o.customer_id WHERE o.status IN ('pending','confirmed') ORDER BY o.order_date DESC`).all();
+  res.render('invoices/form', { page: 'invoices', invoice: null, items: [], customers, products, warehouses, pendingOrders, edit: false });
 });
 
 router.post('/add', (req, res) => {
-  const { customer_id, invoice_date, due_date, commission_pct, notes, product_id, packages, packaging, quantity, rate } = req.body;
+  const { customer_id, invoice_date, due_date, warehouse_id, bilty_no, transporter_name, notes, product_id, packages, packaging, quantity, rate, commission_pct, discount_per_pack, transport_charges, account_scope, order_ids } = req.body;
   const invoiceNo = generateNumber('INV', 'invoices');
+  const transportCharges = parseFloat(transport_charges) || 0;
 
   const productIds = Array.isArray(product_id) ? product_id : [product_id];
   const packagesArr = Array.isArray(packages) ? packages : [packages];
   const packagingArr = Array.isArray(packaging) ? packaging : [packaging];
   const quantityArr = Array.isArray(quantity) ? quantity : [quantity];
   const rateArr = Array.isArray(rate) ? rate : [rate];
+  const commissionArr = Array.isArray(commission_pct) ? commission_pct : [commission_pct];
+  const discountArr = Array.isArray(discount_per_pack) ? discount_per_pack : [discount_per_pack];
 
   let subtotal = 0;
+  let totalCommission = 0;
+  let totalDiscount = 0;
   const itemsData = [];
+
   for (let i = 0; i < productIds.length; i++) {
     if (!productIds[i]) continue;
     const qty = parseInt(quantityArr[i]) || 0;
     const r = parseFloat(rateArr[i]) || 0;
     const amt = qty * r;
+    const commPct = parseFloat(commissionArr[i]) || 0;
+    const commAmt = amt * commPct / 100;
+    const discPack = parseFloat(discountArr[i]) || 0;
+    const discAmt = qty * discPack;
+
     subtotal += amt;
-    itemsData.push({ product_id: productIds[i], packages: parseInt(packagesArr[i])||0, packaging: parseInt(packagingArr[i])||1, quantity: qty, rate: r, amount: amt });
+    totalCommission += commAmt;
+    totalDiscount += discAmt;
+    itemsData.push({ product_id: productIds[i], packages: parseInt(packagesArr[i])||0, packaging: parseInt(packagingArr[i])||1, quantity: qty, rate: r, amount: amt, commission_pct: commPct, commission_amount: commAmt, discount_per_pack: discPack });
   }
 
-  const commPct = parseFloat(commission_pct) || 0;
-  const total = subtotal;
-  const commission = total * commPct / 100;
+  const total = subtotal + transportCharges;
 
   db.transaction(() => {
     const result = db.prepare(
-      `INSERT INTO invoices (invoice_no, customer_id, invoice_date, due_date, subtotal, discount, total, commission_pct, commission_amount, status, notes) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, 'unpaid', ?)`
-    ).run(invoiceNo, customer_id, invoice_date, due_date||null, subtotal, total, commPct, commission, notes);
+      `INSERT INTO invoices (invoice_no, customer_id, invoice_date, due_date, warehouse_id, bilty_no, transporter_name, subtotal, discount, transport_charges, total, commission_pct, commission_amount, status, notes, account_scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, 'unpaid', ?, ?)`
+    ).run(invoiceNo, customer_id, invoice_date, due_date||null, warehouse_id||null, bilty_no||null, transporter_name||null, subtotal, transportCharges, total, totalCommission, notes, account_scope || 'plastic_markaz');
 
     const invId = result.lastInsertRowid;
+    // Multiple orders in one invoice: link via orders.invoice_id if provided
+    if (order_ids) {
+      const oids = (Array.isArray(order_ids) ? order_ids : [order_ids]).filter(Boolean);
+      if (oids.length) {
+        const upd = db.prepare('UPDATE orders SET status=? WHERE id=?');
+        oids.forEach(oid => upd.run('invoiced', oid));
+        // Keep first order_id in invoice for back-compat
+        db.prepare('UPDATE invoices SET order_id=? WHERE id=?').run(oids[0], invId);
+      }
+    }
     const insertItem = db.prepare(
-      `INSERT INTO invoice_items (invoice_id, product_id, packages, packaging, quantity, rate, amount) VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO invoice_items (invoice_id, product_id, packages, packaging, quantity, rate, amount, commission_pct, commission_amount, discount_per_pack) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     for (const item of itemsData) {
-      insertItem.run(invId, item.product_id, item.packages, item.packaging, item.quantity, item.rate, item.amount);
+      insertItem.run(invId, item.product_id, item.packages, item.packaging, item.quantity, item.rate, item.amount, item.commission_pct, item.commission_amount, item.discount_per_pack);
       db.prepare('UPDATE products SET stock = stock - ? WHERE id = ?').run(item.quantity, item.product_id);
     }
 
@@ -71,46 +94,58 @@ router.get('/edit/:id', (req, res) => {
   const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!invoice) return res.redirect('/invoices');
   const items = db.prepare('SELECT ii.*, p.name as product_name FROM invoice_items ii JOIN products p ON p.id = ii.product_id WHERE ii.invoice_id = ?').all(req.params.id);
-  const customers = db.prepare('SELECT id, name, commission FROM customers WHERE status = ? ORDER BY name').all('active');
-  const products = db.prepare('SELECT id, name, packaging, rate, stock FROM products WHERE status = ? ORDER BY name').all('active');
-  res.render('invoices/form', { page: 'invoices', invoice, items, customers, products, edit: true });
+  const customers = db.prepare('SELECT id, name FROM customers WHERE status = ? ORDER BY name').all('active');
+  const products = db.prepare('SELECT id, name, qty_per_pack, selling_price as rate, stock, default_commission_rate FROM products WHERE status = ? ORDER BY name').all('active');
+  const warehouses = db.prepare('SELECT id, name FROM warehouses WHERE status = ? ORDER BY name').all('active');
+  res.render('invoices/form', { page: 'invoices', invoice, items, customers, products, warehouses, pendingOrders: [], edit: true });
 });
 
 router.post('/edit/:id', (req, res) => {
-  const { customer_id, invoice_date, due_date, commission_pct, notes, status, product_id, packages, packaging, quantity, rate } = req.body;
+  const { customer_id, invoice_date, due_date, warehouse_id, bilty_no, transporter_name, notes, status, product_id, packages, packaging, quantity, rate, commission_pct, discount_per_pack, transport_charges, account_scope } = req.body;
+  const transportCharges = parseFloat(transport_charges) || 0;
 
   const productIds = Array.isArray(product_id) ? product_id : [product_id];
   const packagesArr = Array.isArray(packages) ? packages : [packages];
   const packagingArr = Array.isArray(packaging) ? packaging : [packaging];
   const quantityArr = Array.isArray(quantity) ? quantity : [quantity];
   const rateArr = Array.isArray(rate) ? rate : [rate];
+  const commissionArr = Array.isArray(commission_pct) ? commission_pct : [commission_pct];
+  const discountArr = Array.isArray(discount_per_pack) ? discount_per_pack : [discount_per_pack];
 
   let subtotal = 0;
+  let totalCommission = 0;
+  let totalDiscount = 0;
   const itemsData = [];
+
   for (let i = 0; i < productIds.length; i++) {
     if (!productIds[i]) continue;
     const qty = parseInt(quantityArr[i]) || 0;
     const r = parseFloat(rateArr[i]) || 0;
     const amt = qty * r;
+    const commPct = parseFloat(commissionArr[i]) || 0;
+    const commAmt = amt * commPct / 100;
+    const discPack = parseFloat(discountArr[i]) || 0;
+    const discAmt = qty * discPack;
+
     subtotal += amt;
-    itemsData.push({ product_id: productIds[i], packages: parseInt(packagesArr[i])||0, packaging: parseInt(packagingArr[i])||1, quantity: qty, rate: r, amount: amt });
+    totalCommission += commAmt;
+    totalDiscount += discAmt;
+    itemsData.push({ product_id: productIds[i], packages: parseInt(packagesArr[i])||0, packaging: parseInt(packagingArr[i])||1, quantity: qty, rate: r, amount: amt, commission_pct: commPct, commission_amount: commAmt, discount_per_pack: discPack });
   }
 
-  const commPct = parseFloat(commission_pct) || 0;
-  const total = subtotal;
-  const commission = total * commPct / 100;
+  const total = subtotal + transportCharges;
 
   db.transaction(() => {
     db.prepare(
-      `UPDATE invoices SET customer_id=?, invoice_date=?, due_date=?, subtotal=?, discount=0, total=?, commission_pct=?, commission_amount=?, status=?, notes=? WHERE id=?`
-    ).run(customer_id, invoice_date, due_date||null, subtotal, total, commPct, commission, status||'unpaid', notes, req.params.id);
+      `UPDATE invoices SET customer_id=?, invoice_date=?, due_date=?, warehouse_id=?, bilty_no=?, transporter_name=?, subtotal=?, discount=0, transport_charges=?, total=?, commission_pct=0, commission_amount=?, status=?, notes=?, account_scope=? WHERE id=?`
+    ).run(customer_id, invoice_date, due_date||null, warehouse_id||null, bilty_no||null, transporter_name||null, subtotal, transportCharges, total, totalCommission, status||'unpaid', notes, account_scope || 'plastic_markaz', req.params.id);
 
     db.prepare('DELETE FROM invoice_items WHERE invoice_id = ?').run(req.params.id);
     const insertItem = db.prepare(
-      `INSERT INTO invoice_items (invoice_id, product_id, packages, packaging, quantity, rate, amount) VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO invoice_items (invoice_id, product_id, packages, packaging, quantity, rate, amount, commission_pct, commission_amount, discount_per_pack) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     for (const item of itemsData) {
-      insertItem.run(req.params.id, item.product_id, item.packages, item.packaging, item.quantity, item.rate, item.amount);
+      insertItem.run(req.params.id, item.product_id, item.packages, item.packaging, item.quantity, item.rate, item.amount, item.commission_pct, item.commission_amount, item.discount_per_pack);
     }
   })();
 

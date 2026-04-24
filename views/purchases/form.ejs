@@ -9,6 +9,16 @@
       <div class="card">
         <div class="card-header">Purchase Details</div>
         <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label fw-bold">Account *</label>
+            <select name="account_scope" class="form-select" required>
+              <% var _purScope = (purchase && purchase.account_scope) || 'plastic_markaz'; %>
+              <option value="plastic_markaz"  <%= _purScope === 'plastic_markaz'  ? 'selected' : '' %>>Plastic Markaz</option>
+              <option value="wings_furniture" <%= _purScope === 'wings_furniture' ? 'selected' : '' %>>Wings Furniture</option>
+              <option value="cooler"          <%= _purScope === 'cooler'          ? 'selected' : '' %>>Cooler</option>
+            </select>
+            <div class="form-text">Purchase will be booked under this business account.</div>
+          </div>
           <div class="mb-3"><label class="form-label">Vendor *</label>
             <select name="vendor_id" class="form-select" required>
               <option value="">Select Vendor</option>
@@ -16,6 +26,13 @@
             </select>
           </div>
           <div class="mb-3"><label class="form-label">Purchase Date *</label><input type="date" name="purchase_date" class="form-control" value="<%= purchase?.purchase_date || new Date().toISOString().split('T')[0] %>" required></div>
+          <div class="mb-3"><label class="form-label">Warehouse</label>
+            <select name="warehouse_id" class="form-select">
+              <option value="">Select Warehouse</option>
+              <% warehouses?.forEach(w => { %><option value="<%= w.id %>" <%= (purchase && w.id==purchase.warehouse_id)?'selected':'' %>><%= w.name %></option><% }) %>
+            </select>
+          </div>
+          <div class="mb-3"><label class="form-label">Bilty #</label><input type="text" name="bilty_no" class="form-control" value="<%= purchase?.bilty_no || '' %>"></div>
           <% if (edit) { %>
           <div class="mb-3"><label class="form-label">Status</label>
             <select name="status" class="form-select">

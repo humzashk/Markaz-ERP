@@ -1,0 +1,86 @@
+<%- include('../partials/header') %>
+<div class="container-fluid py-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-people-fill"></i> User Management</h4>
+    <a href="/users/new" class="btn btn-primary"><i class="bi bi-person-plus"></i> New User</a>
+  </div>
+
+  <% if (saved) { %><div class="alert alert-success py-2">Saved successfully.</div><% } %>
+  <% if (err) { %>
+    <div class="alert alert-danger py-2">
+      <% if (err === 'dup') { %>Username already exists.
+      <% } else if (err === 'invalid') { %>Invalid input. Password must be at least 6 characters.
+      <% } else if (err === 'self') { %>You cannot modify your own account here.
+      <% } else if (err === 'forbidden') { %>Not allowed.
+      <% } else if (err === 'protected') { %>Cannot delete SuperAdmin accounts.
+      <% } else if (err === 'notfound') { %>User not found.
+      <% } else { %><%= err %><% } %>
+    </div>
+  <% } %>
+
+  <div class="card">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>Username</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Created By</th>
+              <th>Last Login</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (!users.length) { %>
+              <tr><td colspan="9" class="text-center text-muted py-4">No users.</td></tr>
+            <% } %>
+            <% users.forEach(function(u){ %>
+              <tr>
+                <td><%= u.id %></td>
+                <td><strong><%= u.username %></strong></td>
+                <td><%= u.name %></td>
+                <td><%= u.email || '-' %></td>
+                <td>
+                  <span class="badge bg-<%= u.role === 'superadmin' ? 'danger' : u.role === 'admin' ? 'primary' : 'secondary' %>">
+                    <%= u.role.toUpperCase() %>
+                  </span>
+                </td>
+                <td>
+                  <span class="badge bg-<%= u.status === 'active' ? 'success' : 'secondary' %>">
+                    <%= u.status %>
+                  </span>
+                </td>
+                <td><%= u.created_by_name || '-' %></td>
+                <td class="small text-muted"><%= u.last_login || 'never' %></td>
+                <td class="text-end">
+                  <a href="/users/edit/<%= u.id %>" class="btn btn-sm btn-outline-primary" title="Edit">
+                    <i class="bi bi-pencil"></i>
+                  </a>
+                  <% if (u.id !== currentUser.id && u.role !== 'superadmin') { %>
+                    <form method="POST" action="/users/toggle/<%= u.id %>" style="display:inline">
+                      <button class="btn btn-sm btn-outline-warning" title="Toggle active">
+                        <i class="bi bi-power"></i>
+                      </button>
+                    </form>
+                    <form method="POST" action="/users/delete/<%= u.id %>" style="display:inline"
+                          onsubmit="return confirm('Delete user <%= u.username %>?');">
+                      <button class="btn btn-sm btn-outline-danger" title="Delete">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
+                  <% } %>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

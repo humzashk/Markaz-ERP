@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Breakage Challan</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 13px; margin: 0; padding: 20px; color: #000; }
+  .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
+  .header h2 { margin: 0; font-size: 22px; }
+  .header p { margin: 3px 0; font-size: 12px; }
+  .title-bar { text-align: center; font-size: 16px; font-weight: bold; border: 1px solid #000; padding: 5px; margin-bottom: 15px; letter-spacing: 2px; }
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+  .info-box { border: 1px solid #ccc; padding: 8px; }
+  .info-box label { font-weight: bold; font-size: 11px; color: #666; display: block; margin-bottom: 3px; }
+  .info-box span { font-size: 13px; }
+  .detail-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+  .detail-table th, .detail-table td { border: 1px solid #000; padding: 8px; text-align: left; }
+  .detail-table th { background: #f0f0f0; font-weight: bold; }
+  .amount-box { text-align: right; border-top: 2px solid #000; padding-top: 10px; }
+  .amount-box .total { font-size: 16px; font-weight: bold; }
+  .footer-note { border: 1px solid #ccc; padding: 10px; background: #f9f9f9; margin-bottom: 20px; font-size: 11px; }
+  .sig-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 40px; }
+  .sig-line { border-top: 1px solid #000; padding-top: 5px; text-align: center; font-size: 11px; }
+  @media print {
+    body { padding: 10px; }
+    .no-print { display: none; }
+    button { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <h2>PLASTIC MARKAZ</h2>
+  <p>Plastic Products &amp; Trading</p>
+</div>
+<div class="title-bar">BREAKAGE CHALLAN</div>
+<div class="info-grid">
+  <div class="info-box">
+    <label>Customer</label>
+    <span><strong><%= breakage.customer_name %></strong></span>
+  </div>
+  <div class="info-box">
+    <label>Date</label>
+    <span><strong><%= breakage.breakage_date %></strong></span>
+  </div>
+  <div class="info-box">
+    <label>Product</label>
+    <span><%= breakage.product_name %></span>
+  </div>
+  <div class="info-box">
+    <label>Quantity Damaged</label>
+    <span><strong><%= breakage.quantity > 0 ? breakage.quantity + ' pcs' : 'N/A' %></strong></span>
+  </div>
+</div>
+<table class="detail-table">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Product Description</th>
+      <th>Quantity</th>
+      <th>Remarks</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td><%= breakage.product_name %></td>
+      <td><%= breakage.quantity > 0 ? breakage.quantity + ' pcs' : '-' %></td>
+      <td><%= breakage.notes || 'Breakage / Damaged goods returned' %></td>
+    </tr>
+    <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+    <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+  </tbody>
+</table>
+<div class="footer-note">
+  <strong>Note:</strong> This challan confirms receipt of damaged/broken goods from the above customer.
+  A Credit Note will be issued separately for the financial adjustment.
+</div>
+<div class="sig-grid">
+  <div class="sig-line">Customer Signature</div>
+  <div class="sig-line">Received By</div>
+  <div class="sig-line">Authorized By</div>
+</div>
+<div style="margin-top:20px; text-align:center; font-size:10px; color:#666;">
+  Breakage Challan — Printed on <%= new Date().toLocaleDateString() %>
+</div>
+<br>
+<div class="no-print" style="text-align:center; margin-top:20px;">
+  <button onclick="window.print()" style="padding:10px 30px; font-size:14px; background:#333; color:#fff; border:none; cursor:pointer; border-radius:4px;">
+    🖨️ Print Challan
+  </button>
+  &nbsp;
+  <button onclick="window.close()" style="padding:10px 20px; font-size:14px; border:1px solid #ccc; background:#fff; cursor:pointer; border-radius:4px;">
+    Close
+  </button>
+</div>
+</body>
+</html>

@@ -32,7 +32,7 @@
       <select name="product_id" class="form-select" required tabindex="1">
         <option value="">— Select Product —</option>
         <% products.forEach(p => { %>
-        <option value="<%= p.id %>" data-packaging="<%= p.packaging %>" data-rate="<%= p.rate %>"><%= p.name %></option>
+        <option value="<%= p.id %>" data-packaging="<%= p.qty_per_pack %>" data-rate="<%= p.rate %>"><%= p.name %></option>
         <% }) %>
       </select>
     </div>
@@ -44,21 +44,13 @@
         <option value="special">Special</option>
       </select>
     </div>
-    <div class="col-md-1">
-      <label class="form-label small fw-semibold">Pcs/Ctn</label>
-      <input type="number" name="packaging" id="ap_packaging" class="form-control" value="1" min="1" tabindex="3">
-    </div>
     <div class="col-md-2">
       <label class="form-label small fw-semibold">Rate/Pc (Rs.) *</label>
-      <input type="number" name="rate" class="form-control fw-bold" step="0.01" min="0" required tabindex="4" placeholder="0.00">
+      <input type="number" name="rate" class="form-control fw-bold" step="0.01" min="0" required tabindex="3" placeholder="0.00">
     </div>
-    <div class="col-md-1">
-      <label class="form-label small fw-semibold">Comm%</label>
-      <input type="number" name="commission_pct" class="form-control" step="0.01" min="0" max="100" value="0" tabindex="5" placeholder="0">
-    </div>
-    <div class="col-md-2">
+    <div class="col-md-3">
       <label class="form-label small fw-semibold">Effective Date *</label>
-      <input type="date" name="effective_date" class="form-control" value="<%= new Date().toISOString().split('T')[0] %>" required tabindex="6">
+      <input type="date" name="effective_date" class="form-control" value="<%= new Date().toISOString().split('T')[0] %>" required tabindex="4">
     </div>
     <div class="col-md-1">
       <button type="submit" class="btn btn-primary w-100" tabindex="7"><i class="bi bi-check"></i> Add</button>
@@ -108,8 +100,6 @@
         <span class="rate-value">Rs. <span class="rate-val-display"><%= r.rate.toFixed(2) %></span></span>
         <button class="btn btn-xs btn-outline-secondary py-0 px-1" style="font-size:10px;" onclick="inlineEditRate(<%= r.id %>, this)" title="Edit Rate"><i class="bi bi-pencil"></i></button>
       </div>
-      <% if (r.packaging > 1) { %><div class="rate-comm"><i class="bi bi-box2"></i> <%= r.packaging %> pcs/ctn</div><% } %>
-      <% if (r.commission_pct > 0) { %><div class="rate-comm"><i class="bi bi-percent"></i> Commission: <strong><%= r.commission_pct %>%</strong></div><% } %>
       <div class="rate-meta"><i class="bi bi-calendar3"></i> <%= formatDate(r.effective_date) %></div>
       <%
         const hist = rateHistory.filter(h => h.product_id === r.product_id);
@@ -136,10 +126,6 @@
         <div class="modal-body">
           <div class="mb-2"><label class="form-label small fw-semibold">Rate/Pc (Rs.) *</label>
             <input type="number" name="rate" id="editRateVal" class="form-control fw-bold" step="0.01" min="0" required></div>
-          <div class="mb-2"><label class="form-label small fw-semibold">Pcs/Ctn</label>
-            <input type="number" name="packaging" id="editPackaging" class="form-control" min="1"></div>
-          <div class="mb-2"><label class="form-label small fw-semibold">Commission %</label>
-            <input type="number" name="commission_pct" id="editCommPct" class="form-control" step="0.01" min="0" max="100"></div>
           <div class="mb-2"><label class="form-label small fw-semibold">Effective Date</label>
             <input type="date" name="effective_date" id="editEffDate" class="form-control"></div>
         </div>
@@ -192,14 +178,8 @@ document.querySelectorAll('.type-filter').forEach(btn => {
 function inlineEditRate(id, btn) {
   const entry = btn.closest('.rate-entry');
   const rate = entry.querySelector('.rate-val-display').textContent;
-  const packing = entry.querySelector('.rate-comm')?.textContent.match(/(\d+) pcs/)?.[1] || 1;
-  const commText = entry.querySelectorAll('.rate-comm');
-  let comm = 0;
-  commText.forEach(el => { const m = el.textContent.match(/(\d+(?:\.\d+)?)%/); if(m) comm = m[1]; });
 
   document.getElementById('editRateVal').value = rate;
-  document.getElementById('editPackaging').value = packing;
-  document.getElementById('editCommPct').value = comm;
   document.getElementById('editEffDate').value = new Date().toISOString().split('T')[0];
   document.getElementById('editRateForm').action = '/ratelist/edit/' + id;
   new bootstrap.Modal(document.getElementById('editRateModal')).show();

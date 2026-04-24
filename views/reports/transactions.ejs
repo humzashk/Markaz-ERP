@@ -1,0 +1,43 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-list-ul"></i> All Transactions</h2>
+  <button onclick="window.print()" class="btn btn-outline-secondary no-print"><i class="bi bi-printer"></i> Print</button>
+</div>
+<form class="row g-2 mb-3 no-print" method="get">
+  <div class="col-md-3"><label class="form-label">From</label><input type="date" name="from" class="form-control" value="<%= from %>"></div>
+  <div class="col-md-3"><label class="form-label">To</label><input type="date" name="to" class="form-control" value="<%= to %>"></div>
+  <div class="col-md-3"><label class="form-label">Account</label>
+    <select name="scope" class="form-select">
+      <option value="">All Accounts</option>
+      <% ['plastic_markaz','wings_furniture','cooler'].forEach(s => { %>
+        <option value="<%= s %>" <%= scope===s?'selected':'' %>><%= s.replace('_',' ').replace(/\b\w/g, x=>x.toUpperCase()) %></option>
+      <% }) %>
+    </select>
+  </div>
+  <div class="col-md-3 d-flex align-items-end"><button class="btn btn-primary w-100"><i class="bi bi-filter"></i> Filter</button></div>
+</form>
+<div class="card"><div class="card-body p-0"><div class="table-responsive">
+  <table class="table table-hover mb-0">
+    <thead><tr><th>Date</th><th>Type</th><th>Reference</th><th>Party</th><th>Account</th><th class="text-end">Amount</th></tr></thead>
+    <tbody>
+    <% const linkMap = { order:'/orders/view/', invoice:'/invoices/view/', purchase:'/purchases/view/', payment:'/payments' }; %>
+    <% all.forEach(t => {
+         const href = t.type==='payment' ? '/payments' : (linkMap[t.type] + t.ref_id);
+         const badge = { order:'warning', invoice:'info', purchase:'success', payment:'primary' }[t.type] || 'secondary';
+    %>
+    <tr>
+      <td><%= formatDate(t.date) %></td>
+      <td><span class="badge bg-<%= badge %>"><%= t.type.toUpperCase() %></span></td>
+      <td><a href="<%= href %>" target="_blank"><%= t.ref || '-' %></a></td>
+      <td><%= t.party || '-' %></td>
+      <td><small class="text-muted"><%= (t.account_scope||'plastic_markaz').replace('_',' ') %></small></td>
+      <td class="text-end fw-bold"><%= formatCurrency(t.amount || 0) %></td>
+    </tr>
+    <% }) %>
+    <% if (!all.length) { %>
+      <tr><td colspan="6" class="text-center text-muted py-4">No transactions in selected range</td></tr>
+    <% } %>
+    </tbody>
+  </table>
+</div></div></div>
+<%- include('../partials/footer') %>

@@ -1,0 +1,82 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-pie-chart"></i> Stock Position</h2>
+</div>
+<div class="alert alert-info mb-3">
+  <strong>Stock Position:</strong> View current inventory levels across all products and warehouses.
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-6">
+    <label class="form-label">Filter by Warehouse</label>
+    <form class="row g-2" method="get">
+      <div class="col-md-10">
+        <select name="warehouse_id" class="form-select" onchange="this.form.submit()">
+          <option value="">-- All Warehouses --</option>
+          <% warehouses.forEach(w => { %>
+            <option value="<%= w.id %>" <%= (warehouseId == w.id)?'selected':'' %>><%= w.name %></option>
+          <% }) %>
+        </select>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th style="width:40%">Product</th>
+            <th style="width:15%">Unit</th>
+            <% if (warehouseId) { %>
+              <th style="width:15%; text-align:right;">Warehouse Qty</th>
+              <th style="width:15%; text-align:right;">Total Stock</th>
+            <% } else { %>
+              <th style="width:15%; text-align:right;">Stock</th>
+              <th style="width:15%; text-align:right;">Warehouses</th>
+            <% } %>
+            <th style="width:15%">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (!position.length) { %>
+            <tr><td colspan="5" class="text-center text-muted py-4">No products found</td></tr>
+          <% } %>
+          <% position.forEach(p => { %>
+            <tr>
+              <td><strong><%= p.name %></strong></td>
+              <td><small><%= p.unit || 'pcs' %></small></td>
+              <% if (warehouseId) { %>
+                <td style="text-align:right; font-weight:700;"><%= p.wh_qty %> pcs</td>
+                <td style="text-align:right;">
+                  <span class="badge bg-primary"><%= p.total_qty %> pcs</span>
+                </td>
+              <% } else { %>
+                <td style="text-align:right; font-weight:700;"><%= p.stock %> pcs</td>
+                <td style="text-align:right;">
+                  <% if (p.warehouse_count > 0) { %>
+                    <span class="badge bg-info"><%= p.warehouse_count %></span>
+                  <% } else { %>
+                    <span class="text-muted">—</span>
+                  <% } %>
+                </td>
+              <% } %>
+              <td>
+                <% var currentStock = (warehouseId ? p.wh_qty : p.stock) || 0; %>
+                <% if (currentStock > 0) { %>
+                  <span class="badge bg-success">In Stock</span>
+                <% } else { %>
+                  <span class="badge bg-warning">Out of Stock</span>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>

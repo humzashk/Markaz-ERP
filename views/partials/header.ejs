@@ -11,49 +11,84 @@
   <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/airbnb.css" rel="stylesheet">
 </head>
 <body>
+<%
+  // RBAC helper: can current user see this module?
+  var _role = (typeof currentUser !== 'undefined' && currentUser) ? currentUser.role : null;
+  var _mods = (typeof userModules !== 'undefined' && userModules) ? userModules : [];
+  function canSee(mod) {
+    if (!_role) return false;
+    if (_role === 'superadmin' || _role === 'admin') return true;
+    return _mods.indexOf(mod) !== -1;
+  }
+%>
   <!-- Sidebar -->
   <nav id="sidebar" class="sidebar">
     <div class="sidebar-brand">
-      <i class="bi bi-box-seam"></i>
-      <span>PLASTIC MARKAZ</span>
+      <% const _brandLogo = getLogoPath('plastic_markaz'); %>
+      <% if (_brandLogo) { %>
+        <img src="<%= _brandLogo %>" alt="logo" style="max-height:32px; max-width:32px; object-fit:contain; margin-right:6px;">
+      <% } else { %>
+        <i class="bi bi-box-seam"></i>
+      <% } %>
+      <span><%= (appSettings && appSettings.business_name) || 'PLASTIC MARKAZ' %></span>
     </div>
     <ul class="sidebar-nav">
-      <li><a href="/" class="<%= page === 'dashboard' ? 'active' : '' %>"><i class="bi bi-speedometer2"></i><span>Dashboard</span></a></li>
+      <% if (canSee('dashboard')) { %>
+        <li><a href="/" class="<%= page === 'dashboard' ? 'active' : '' %>"><i class="bi bi-speedometer2"></i><span>Dashboard</span></a></li>
+      <% } %>
 
-      <li class="sidebar-section">PARTIES</li>
-      <li><a href="/customers" class="<%= page === 'customers' ? 'active' : '' %>"><i class="bi bi-people"></i><span>Customers</span></a></li>
-      <li><a href="/vendors" class="<%= page === 'vendors' ? 'active' : '' %>"><i class="bi bi-truck"></i><span>Vendors</span></a></li>
+      <% if (canSee('customers') || canSee('vendors')) { %>
+        <li class="sidebar-section">PARTIES</li>
+        <% if (canSee('customers')) { %><li><a href="/customers" class="<%= page === 'customers' ? 'active' : '' %>"><i class="bi bi-people"></i><span>Customers</span></a></li><% } %>
+        <% if (canSee('vendors')) { %><li><a href="/vendors" class="<%= page === 'vendors' ? 'active' : '' %>"><i class="bi bi-truck"></i><span>Vendors</span></a></li><% } %>
+      <% } %>
 
-      <li class="sidebar-section">INVENTORY</li>
-      <li><a href="/products" class="<%= page === 'products' ? 'active' : '' %>"><i class="bi bi-box"></i><span>Products</span></a></li>
-      <li><a href="/ratelist" class="<%= page === 'ratelist' ? 'active' : '' %>"><i class="bi bi-tags"></i><span>Rate List</span></a></li>
-      <li><a href="/warehouses" class="<%= page === 'warehouses' ? 'active' : '' %>"><i class="bi bi-building"></i><span>Warehouses</span></a></li>
-      <li><a href="/stock" class="<%= page === 'stock' ? 'active' : '' %>"><i class="bi bi-boxes"></i><span>Stock Adjust</span></a></li>
+      <% if (canSee('products') || canSee('ratelist') || canSee('warehouses') || canSee('stock')) { %>
+        <li class="sidebar-section">INVENTORY</li>
+        <% if (canSee('products')) { %><li><a href="/products" class="<%= page === 'products' ? 'active' : '' %>"><i class="bi bi-box"></i><span>Products</span></a></li><% } %>
+        <% if (canSee('ratelist')) { %><li><a href="/ratelist" class="<%= page === 'ratelist' ? 'active' : '' %>"><i class="bi bi-tags"></i><span>Rate List</span></a></li><% } %>
+        <% if (canSee('warehouses')) { %><li><a href="/warehouses" class="<%= page === 'warehouses' ? 'active' : '' %>"><i class="bi bi-building"></i><span>Warehouses</span></a></li><% } %>
+        <% if (canSee('stock')) { %>
+          <li><a href="/stock" class="<%= page === 'stock' ? 'active' : '' %>"><i class="bi bi-boxes"></i><span>Stock Adjust</span></a></li>
+          <li><a href="/stock/position" class="<%= page === 'stock-position' ? 'active' : '' %>"><i class="bi bi-pie-chart"></i><span>Stock Position</span></a></li>
+        <% } %>
+      <% } %>
 
-      <li class="sidebar-section">TRANSACTIONS</li>
-      <li><a href="/orders" class="<%= page === 'orders' ? 'active' : '' %>"><i class="bi bi-cart"></i><span>Orders</span></a></li>
-      <li><a href="/invoices" class="<%= page === 'invoices' ? 'active' : '' %>"><i class="bi bi-receipt"></i><span>Invoices</span></a></li>
-      <li><a href="/purchases" class="<%= page === 'purchases' ? 'active' : '' %>"><i class="bi bi-bag"></i><span>Purchases</span></a></li>
-      <li><a href="/creditnotes" class="<%= page === 'creditnotes' ? 'active' : '' %>"><i class="bi bi-file-earmark-minus"></i><span>Returns / Notes</span></a></li>
-      <li><a href="/bilty" class="<%= page === 'bilty' ? 'active' : '' %>"><i class="bi bi-send"></i><span>Bilty</span></a></li>
-      <li><a href="/breakage" class="<%= page === 'breakage' ? 'active' : '' %>"><i class="bi bi-exclamation-triangle"></i><span>Breakage</span></a></li>
-      <li><a href="/expenses" class="<%= page === 'expenses' ? 'active' : '' %>"><i class="bi bi-wallet2"></i><span>Expenses</span></a></li>
+      <% if (canSee('orders') || canSee('invoices') || canSee('purchases') || canSee('creditnotes') || canSee('bilty') || canSee('breakage') || canSee('expenses')) { %>
+        <li class="sidebar-section">TRANSACTIONS</li>
+        <% if (canSee('orders')) { %><li><a href="/orders" class="<%= page === 'orders' ? 'active' : '' %>"><i class="bi bi-cart"></i><span>Orders</span></a></li><% } %>
+        <% if (canSee('invoices')) { %><li><a href="/invoices" class="<%= page === 'invoices' ? 'active' : '' %>"><i class="bi bi-receipt"></i><span>Invoices</span></a></li><% } %>
+        <% if (canSee('purchases')) { %><li><a href="/purchases" class="<%= page === 'purchases' ? 'active' : '' %>"><i class="bi bi-bag"></i><span>Purchases</span></a></li><% } %>
+        <% if (canSee('creditnotes')) { %><li><a href="/creditnotes" class="<%= page === 'creditnotes' ? 'active' : '' %>"><i class="bi bi-file-earmark-minus"></i><span>Returns / Notes</span></a></li><% } %>
+        <% if (canSee('bilty')) { %><li><a href="/bilty" class="<%= page === 'bilty' ? 'active' : '' %>"><i class="bi bi-send"></i><span>Bilty</span></a></li><% } %>
+        <% if (canSee('breakage')) { %><li><a href="/breakage" class="<%= page === 'breakage' ? 'active' : '' %>"><i class="bi bi-exclamation-triangle"></i><span>Breakage</span></a></li><% } %>
+        <% if (canSee('expenses')) { %><li><a href="/expenses" class="<%= page === 'expenses' ? 'active' : '' %>"><i class="bi bi-wallet2"></i><span>Expenses</span></a></li><% } %>
+      <% } %>
 
-      <li class="sidebar-section">PAYMENTS</li>
-      <li><a href="/payments/receive" class="<%= page === 'payments-receive' ? 'active' : '' %>"><i class="bi bi-cash-coin"></i><span>Receive Payment</span></a></li>
-      <li><a href="/payments/pay" class="<%= page === 'payments-pay' ? 'active' : '' %>"><i class="bi bi-cash-stack"></i><span>Pay Vendor</span></a></li>
-      <li><a href="/bank" class="<%= page === 'bank' ? 'active' : '' %>"><i class="bi bi-bank"></i><span>Bank Accounts</span></a></li>
+      <% if (canSee('payments-receive') || canSee('payments-pay') || canSee('bank')) { %>
+        <li class="sidebar-section">PAYMENTS</li>
+        <% if (canSee('payments-receive')) { %><li><a href="/payments/receive" class="<%= page === 'payments-receive' ? 'active' : '' %>"><i class="bi bi-cash-coin"></i><span>Receive Payment</span></a></li><% } %>
+        <% if (canSee('payments-pay')) { %><li><a href="/payments/pay" class="<%= page === 'payments-pay' ? 'active' : '' %>"><i class="bi bi-cash-stack"></i><span>Pay Vendor</span></a></li><% } %>
+        <% if (canSee('bank')) { %><li><a href="/bank" class="<%= page === 'bank' ? 'active' : '' %>"><i class="bi bi-bank"></i><span>Bank Accounts</span></a></li><% } %>
+      <% } %>
 
-      <li class="sidebar-section">ACCOUNTS</li>
-      <li><a href="/daybook" class="<%= page === 'daybook' ? 'active' : '' %>"><i class="bi bi-calendar-day"></i><span>Day Book</span></a></li>
-      <li><a href="/journal" class="<%= page === 'journal' ? 'active' : '' %>"><i class="bi bi-journal-bookmark"></i><span>Journal Entry</span></a></li>
-      <li><a href="/ledger" class="<%= page === 'ledger' ? 'active' : '' %>"><i class="bi bi-journal-text"></i><span>Ledger</span></a></li>
-      <li><a href="/reports" class="<%= page === 'reports' ? 'active' : '' %>"><i class="bi bi-bar-chart"></i><span>Reports</span></a></li>
+      <% if (canSee('daybook') || canSee('journal') || canSee('ledger') || canSee('reports')) { %>
+        <li class="sidebar-section">ACCOUNTS</li>
+        <% if (canSee('daybook')) { %><li><a href="/daybook" class="<%= page === 'daybook' ? 'active' : '' %>"><i class="bi bi-calendar-day"></i><span>Day Book</span></a></li><% } %>
+        <% if (canSee('journal')) { %><li><a href="/journal" class="<%= page === 'journal' ? 'active' : '' %>"><i class="bi bi-journal-bookmark"></i><span>Journal Entry</span></a></li><% } %>
+        <% if (canSee('ledger')) { %><li><a href="/ledger" class="<%= page === 'ledger' ? 'active' : '' %>"><i class="bi bi-journal-text"></i><span>Ledger</span></a></li><% } %>
+        <% if (canSee('reports')) { %><li><a href="/reports" class="<%= page === 'reports' ? 'active' : '' %>"><i class="bi bi-bar-chart"></i><span>Reports</span></a></li><% } %>
+      <% } %>
 
-      <li class="sidebar-section">SETUP</li>
-      <li><a href="/categories" class="<%= page === 'categories' ? 'active' : '' %>"><i class="bi bi-tags"></i><span>Categories</span></a></li>
-      <li><a href="/importexport" class="<%= page === 'importexport' ? 'active' : '' %>"><i class="bi bi-arrow-left-right"></i><span>Import / Export</span></a></li>
-      <li><a href="/settings" class="<%= page === 'settings' ? 'active' : '' %>"><i class="bi bi-gear"></i><span>Settings</span></a></li>
+      <% if (canSee('categories') || canSee('importexport') || canSee('settings') || canSee('users')) { %>
+        <li class="sidebar-section">SETUP</li>
+        <% if (canSee('categories')) { %><li><a href="/categories" class="<%= page === 'categories' ? 'active' : '' %>"><i class="bi bi-tags"></i><span>Categories</span></a></li><% } %>
+        <% if (canSee('importexport')) { %><li><a href="/importexport" class="<%= page === 'importexport' ? 'active' : '' %>"><i class="bi bi-arrow-left-right"></i><span>Import / Export</span></a></li><% } %>
+        <% if (_role === 'superadmin' || _role === 'admin') { %>
+          <li><a href="/users" class="<%= page === 'users' ? 'active' : '' %>"><i class="bi bi-people-fill"></i><span>Users & Roles</span></a></li>
+        <% } %>
+        <% if (canSee('settings')) { %><li><a href="/settings" class="<%= page === 'settings' ? 'active' : '' %>"><i class="bi bi-gear"></i><span>Settings</span></a></li><% } %>
+      <% } %>
     </ul>
   </nav>
 
@@ -63,8 +98,28 @@
       <button class="btn btn-link sidebar-toggle" onclick="document.body.classList.toggle('sidebar-collapsed')">
         <i class="bi bi-list fs-4"></i>
       </button>
-      <div class="topbar-right">
+      <div class="topbar-right d-flex align-items-center gap-3">
         <span class="text-muted"><i class="bi bi-calendar3"></i> <%= new Date().toLocaleDateString('en-PK', {weekday:'long', day:'2-digit', month:'short', year:'numeric'}) %></span>
+        <% if (typeof currentUser !== 'undefined' && currentUser) { %>
+          <div class="dropdown">
+            <a href="#" class="text-decoration-none dropdown-toggle" data-bs-toggle="dropdown" role="button">
+              <i class="bi bi-person-circle"></i>
+              <strong><%= currentUser.name || currentUser.username %></strong>
+              <span class="badge bg-<%= currentUser.role === 'superadmin' ? 'danger' : currentUser.role === 'admin' ? 'primary' : 'secondary' %>">
+                <%= currentUser.role %>
+              </span>
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="/profile"><i class="bi bi-person-gear"></i> My Profile</a></li>
+              <% if (_role === 'superadmin' || _role === 'admin') { %>
+                <li><a class="dropdown-item" href="/users"><i class="bi bi-people"></i> Users & Roles</a></li>
+              <% } %>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item text-danger" href="/logout"><i class="bi bi-box-arrow-right"></i> Sign Out</a></li>
+            </ul>
+          </div>
+        <% } %>
       </div>
     </div>
     <div class="content-wrapper">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

@@ -86,7 +86,7 @@ async function seed() {
   console.log(`🏭 ${vendIds.length} vendors inserted`);
 
   // Products (plastic goods)
-  // [name, category, packaging, rate, min_stock, initial_stock, vendor_id_idx]
+  // [name, category, qty_per_pack, rate, min_stock, initial_stock, vendor_id_idx]
   const productData = [
     ['Water Bucket 15L',       'Buckets',            12, 320,  50, 600, 0],
     ['Storage Box Large',      'Storage Boxes',       6, 850,  30, 300, 2],
@@ -105,8 +105,8 @@ async function seed() {
     ['Jerry Can 5L',           'Jerry Cans',          6, 480,  20, 180, 4],
   ];
   const prodIds = [];
-  for (const [name, category, packaging, rate, min_stock, stock, vendIdx] of productData) {
-    const r = db.prepare(`INSERT INTO products (name,category,packaging,rate,min_stock,stock,unit,status,vendor_id) VALUES (?,?,?,?,?,?,'PCS','active',?)`).run(name,category,packaging,rate,min_stock,stock,vendIds[vendIdx]);
+  for (const [name, category, qty_per_pack, rate, min_stock, stock, vendIdx] of productData) {
+    const r = db.prepare(`INSERT INTO products (name,category,qty_per_pack,rate,purchase_price,selling_price,min_stock,stock,unit,status,vendor_id) VALUES (?,?,?,?,?,?,?,?,'PCS','active',?)`).run(name,category,qty_per_pack,rate,Math.round(rate*0.75),rate,min_stock,stock,vendIds[vendIdx]);
     prodIds.push(r.lastInsertRowid);
   }
   console.log(`📦 ${prodIds.length} products inserted`);
@@ -190,13 +190,14 @@ async function seed() {
       let subtotal = 0;
       const pItems = [];
       for (const pid of shuffled) {
-        const prod = db.prepare('SELECT rate,packaging FROM products WHERE id=?').get(pid);
-        const packs = ri(10, 50);
-        const qty = packs * prod.packaging;
+        const prod = db.prepare('SELECT rate, qty_per_pack FROM products WHERE id=?').get(pid);
+        if (!prod) continue;
+        const packs = ri(2, 10);
+        const qty = packs * (prod.qty_per_pack || 1);
         const rate = Math.round(prod.rate * 0.75); // buy at 75% of sell rate
         const amt = qty * rate;
         subtotal += amt;
-        pItems.push({ pid, packs, pkg: prod.packaging, qty, rate, amt });
+        pItems.push({ pid, packs, pkg: prod.qty_per_pack || 1, qty, rate, amt });
       }
       const purchNo = `PUR-${pad(purchaseCounter)}`;
       const pr = db.prepare(`INSERT INTO purchases (purchase_no,vendor_id,purchase_date,status,subtotal,discount,total,notes) VALUES (?,?,?,'received',?,0,?,?)`).run(purchNo, vendId, purchDate, subtotal, subtotal, `Monthly restock ${monthLabel}`);
@@ -240,10 +241,10 @@ async function seed() {
       let subtotal = 0;
       const oItems = [];
       for (const pid of shuffled) {
-        const prod = db.prepare('SELECT rate,packaging,stock FROM products WHERE id=?').get(pid);
+        const prod = db.prepare('SELECT rate, qty_per_pack, stock FROM products WHERE id=?').get(pid);
         if (!prod || prod.stock < 1) continue;
         const packs = ri(2, 20);
-        const qty = packs * prod.packaging;
+        const qty = packs * (prod.qty_per_pack || 1);
         const rate = prod.rate;
         const amt = qty * rate;
         subtotal += amt;
@@ -394,17 +395,17 @@ async function seed() {
     const commPct = cust ? (cust.commission || 0) : 0;
     const pid1 = prodIds[ri(0, prodIds.length-1)];
     const pid2 = prodIds[ri(0, prodIds.length-1)];
-    const prod1 = db.prepare('SELECT rate,packaging FROM products WHERE id=?').get(pid1);
-    const prod2 = db.prepare('SELECT rate,packaging FROM products WHERE id=?').get(pid2);
-    const qty1 = ri(2,10) * prod1.packaging;
-    const qty2 = ri(2,10) * prod2.packaging;
+    const prod1 = db.prepare('SELECT rate, qty_per_pack FROM products WHERE id=?').get(pid1);
+    const prod2 = db.prepare('SELECT rate, qty_per_pack FROM products WHERE id=?').get(pid2);
+    const qty1 = ri(2,10) * (prod1.qty_per_pack || 1);
+    const qty2 = ri(2,10) * (prod2.qty_per_pack || 1);
     const subtotal = qty1*prod1.rate + qty2*prod2.rate;
     const commission = Math.round(subtotal * commPct / 100);
     const orderNo = `ORD-${pad(orderCounter)}`;
     const or = db.prepare(`INSERT INTO orders (order_no,customer_id,order_date,delivery_date,status,subtotal,discount,total,commission_pct,commission_amount,notes) VALUES (?,?,?,?,'pending',?,0,?,?,?,?)`).run(orderNo, custId, oDate, null, subtotal, subtotal, commPct, commission, notes);
     const orderId = or.lastInsertRowid;
-    db.prepare(`INSERT INTO order_items (order_id,product_id,packages,packaging,quantity,rate,amount) VALUES (?,?,?,?,?,?,?)`).run(orderId, pid1, Math.floor(qty1/prod1.packaging), prod1.packaging, qty1, prod1.rate, qty1*prod1.rate);
-    db.prepare(`INSERT INTO order_items (order_id,product_id,packages,packaging,quantity,rate,amount) VALUES (?,?,?,?,?,?,?)`).run(orderId, pid2, Math.floor(qty2/prod2.packaging), prod2.packaging, qty2, prod2.rate, qty2*prod2.rate);
+    db.prepare(`INSERT INTO order_items (order_id,product_id,packages,packaging,quantity,rate,amount) VALUES (?,?,?,?,?,?,?)`).run(orderId, pid1, Math.floor(qty1/(prod1.qty_per_pack||1)), (prod1.qty_per_pack||1), qty1, prod1.rate, qty1*prod1.rate);
+    db.prepare(`INSERT INTO order_items (order_id,product_id,packages,packaging,quantity,rate,amount) VALUES (?,?,?,?,?,?,?)`).run(orderId, pid2, Math.floor(qty2/(prod2.qty_per_pack||1)), (prod2.qty_per_pack||1), qty2, prod2.rate, qty2*prod2.rate);
   }
 
   // ── UPDATE BANK BALANCES (recalculate from transactions) ─────────────────

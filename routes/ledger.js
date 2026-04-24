@@ -9,7 +9,14 @@ router.get('/', (req, res) => {
   res.render('ledger/index', { page: 'ledger', customers, vendors });
 });
 
+// Fallback when no id supplied
+router.get('/customer', (req, res) => res.redirect('/ledger'));
+router.get('/customer/', (req, res) => res.redirect('/ledger'));
+router.get('/vendor', (req, res) => res.redirect('/ledger'));
+router.get('/vendor/', (req, res) => res.redirect('/ledger'));
+
 router.get('/customer/:id', (req, res) => {
+  if (!req.params.id || req.params.id === 'undefined') return res.redirect('/ledger');
   const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id);
   if (!customer) return res.redirect('/ledger');
   const from = req.query.from || '';
@@ -24,6 +31,7 @@ router.get('/customer/:id', (req, res) => {
 });
 
 router.get('/vendor/:id', (req, res) => {
+  if (!req.params.id || req.params.id === 'undefined') return res.redirect('/ledger');
   const vendor = db.prepare('SELECT * FROM vendors WHERE id = ?').get(req.params.id);
   if (!vendor) return res.redirect('/ledger');
   const from = req.query.from || '';

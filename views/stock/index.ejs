@@ -1,7 +1,10 @@
 <%- include('../partials/header') %>
 <div class="page-header">
   <h2><i class="bi bi-boxes"></i> Stock Adjustments</h2>
-  <a href="/stock/add" class="btn btn-primary"><i class="bi bi-plus"></i> New Adjustment</a>
+  <div class="d-flex gap-2">
+    <a href="/stock/add" class="btn btn-primary"><i class="bi bi-plus"></i> New Adjustment</a>
+    <a href="/stock/movements" class="btn btn-outline-secondary"><i class="bi bi-arrow-left-right"></i> Stock Movements</a>
+  </div>
 </div>
 
 <div class="card mb-3">
@@ -32,7 +35,7 @@
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table table-hover mb-0">
-        <thead><tr><th>Date</th><th>Product</th><th>Warehouse</th><th>Type</th><th>Qty</th><th>Reason</th><th>Reference</th></tr></thead>
+        <thead><tr><th>Date</th><th>Product</th><th>Warehouse</th><th>Type</th><th>Qty</th><th>Reason</th><th>Reference</th><th class="text-end">Actions</th></tr></thead>
         <tbody>
           <% adjustments.forEach(a => { %>
           <tr>
@@ -41,14 +44,21 @@
             <td><%= a.warehouse_name || '—' %></td>
             <td>
               <% const typeColors = {add:'success',reduce:'warning',damage:'danger',return:'info',transfer_in:'primary',transfer_out:'secondary'}; %>
-              <span class="badge bg-<%= typeColors[a.adjustment_type] || 'secondary' %>"><%= a.adjustment_type.replace('_',' ') %></span>
+              <span class="badge bg-<%= typeColors[a.adjustment_type] || 'secondary' %>"><%= (a.adjustment_type||'').replace('_',' ') %></span>
             </td>
-            <td class="fw-bold"><%= a.quantity.toLocaleString() %></td>
+            <td class="fw-bold"><%= (a.quantity||0).toLocaleString() %></td>
             <td><%= a.reason || '-' %></td>
             <td><%= a.reference || '-' %></td>
+            <td class="text-end">
+              <a href="/stock/edit/<%= a.id %>" class="btn btn-sm btn-outline-primary" title="Edit"><i class="bi bi-pencil"></i></a>
+              <a href="/stock/print/<%= a.id %>" target="_blank" class="btn btn-sm btn-outline-secondary" title="Print"><i class="bi bi-printer"></i></a>
+              <form method="post" action="/stock/delete/<%= a.id %>" class="d-inline" onsubmit="return confirm('Delete this adjustment? Stock will be reversed.')">
+                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+              </form>
+            </td>
           </tr>
           <% }) %>
-          <% if (!adjustments.length) { %><tr><td colspan="7" class="text-center text-muted py-4">No adjustments found</td></tr><% } %>
+          <% if (!adjustments.length) { %><tr><td colspan="8" class="text-center text-muted py-4">No adjustments found</td></tr><% } %>
         </tbody>
       </table>
     </div>

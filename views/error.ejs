@@ -1,0 +1,10 @@
+<%- include('partials/header') %>
+<div class="container-fluid py-5">
+  <div class="text-center">
+    <i class="bi bi-shield-exclamation" style="font-size:64px;color:#c0392b;"></i>
+    <h3 class="mt-3">Access Denied</h3>
+    <p class="text-muted"><%= message || 'You do not have permission to access this resource.' %></p>
+    <a href="<%= back || '/' %>" class="btn btn-primary"><i class="bi bi-house"></i> Go Home</a>
+  </div>
+</div>
+<%- include('partials/footer') %>

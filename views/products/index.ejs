@@ -60,7 +60,7 @@
             <td><strong><%= p.name %></strong></td>
             <td><%= p.category || '-' %></td>
             <td><small><%= p.vendor_name ? p.vendor_name : '-' %></small></td>
-            <td><%= p.packaging %></td>
+            <td><%= p.qty_per_pack %></td>
             <td><strong><%= formatCurrency(p.rate) %></strong></td>
             <td><strong class="<%= p.stock <= p.min_stock ? 'text-danger' : 'text-success' %>"><%= p.stock.toLocaleString() %></strong></td>
             <td><%= p.min_stock %></td>

@@ -103,6 +103,9 @@ async function initDatabase() {
       email TEXT,
       address TEXT,
       city TEXT,
+      sax_no TEXT,
+      ntn TEXT,
+      credit_days INTEGER DEFAULT 30,
       opening_balance REAL DEFAULT 0,
       balance REAL DEFAULT 0,
       status TEXT DEFAULT 'active',
@@ -116,6 +119,9 @@ async function initDatabase() {
       email TEXT,
       address TEXT,
       city TEXT,
+      sax_no TEXT,
+      ntn TEXT,
+      credit_days INTEGER DEFAULT 60,
       opening_balance REAL DEFAULT 0,
       balance REAL DEFAULT 0,
       status TEXT DEFAULT 'active',
@@ -124,13 +130,17 @@ async function initDatabase() {
 
     CREATE TABLE IF NOT EXISTS products (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id TEXT UNIQUE,
       name TEXT NOT NULL,
       category TEXT,
-      packaging INTEGER DEFAULT 1,
-      stock INTEGER DEFAULT 0,
+      unit TEXT DEFAULT 'PCS',
+      qty_per_pack INTEGER DEFAULT 1,
+      purchase_price REAL DEFAULT 0,
+      selling_price REAL DEFAULT 0,
       rate REAL DEFAULT 0,
+      default_commission_rate REAL DEFAULT 0,
+      stock INTEGER DEFAULT 0,
       min_stock INTEGER DEFAULT 10,
-      unit TEXT DEFAULT 'piece',
       status TEXT DEFAULT 'active',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -169,6 +179,8 @@ async function initDatabase() {
       quantity INTEGER NOT NULL,
       rate REAL NOT NULL,
       amount REAL NOT NULL,
+      commission_pct REAL DEFAULT 0,
+      commission_amount REAL DEFAULT 0,
       FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
       FOREIGN KEY (product_id) REFERENCES products(id)
     );
@@ -200,6 +212,8 @@ async function initDatabase() {
       quantity INTEGER NOT NULL,
       rate REAL NOT NULL,
       amount REAL NOT NULL,
+      commission_pct REAL DEFAULT 0,
+      commission_amount REAL DEFAULT 0,
       FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
       FOREIGN KEY (product_id) REFERENCES products(id)
     );
@@ -242,11 +256,21 @@ async function initDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS delivery_challans (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dc_no TEXT UNIQUE NOT NULL,
+      order_id INTEGER NOT NULL,
+      dc_date TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS bilty (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       bilty_no TEXT,
       order_id INTEGER,
       invoice_id INTEGER,
+      dc_id INTEGER,
       transport_name TEXT NOT NULL,
       from_city TEXT NOT NULL,
       to_city TEXT NOT NULL,
@@ -258,29 +282,25 @@ async function initDatabase() {
       notes TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (order_id) REFERENCES orders(id),
-      FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+      FOREIGN KEY (invoice_id) REFERENCES invoices(id),
+      FOREIGN KEY (dc_id) REFERENCES delivery_challans(id)
     );
 
     CREATE TABLE IF NOT EXISTS breakage (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      order_id INTEGER,
-      invoice_id INTEGER,
       customer_id INTEGER,
       vendor_id INTEGER,
+      order_id INTEGER,
+      invoice_id INTEGER,
       product_id INTEGER NOT NULL,
-      quantity INTEGER NOT NULL,
-      reason TEXT,
-      claim_status TEXT DEFAULT 'pending',
-      claim_type TEXT DEFAULT 'customer',
+      quantity INTEGER DEFAULT 0,
       adjustment_amount REAL DEFAULT 0,
+      credit_note_id INTEGER,
+      claim_status TEXT DEFAULT 'pending',
       breakage_date TEXT NOT NULL,
-      resolved_date TEXT,
       notes TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (order_id) REFERENCES orders(id),
-      FOREIGN KEY (invoice_id) REFERENCES invoices(id),
       FOREIGN KEY (customer_id) REFERENCES customers(id),
-      FOREIGN KEY (vendor_id) REFERENCES vendors(id),
       FOREIGN KEY (product_id) REFERENCES products(id)
     );
 
@@ -464,6 +484,27 @@ async function initDatabase() {
       name TEXT UNIQUE NOT NULL,
       sort_order INTEGER DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      email TEXT,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'employee',
+      status TEXT DEFAULT 'active',
+      created_by INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_login DATETIME
+    );
+
+    CREATE TABLE IF NOT EXISTS user_permissions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      module TEXT NOT NULL,
+      UNIQUE(user_id, module),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
 
   // Create indexes (one at a time for sql.js)
@@ -495,20 +536,85 @@ async function initDatabase() {
     "ALTER TABLE customers ADD COLUMN region TEXT DEFAULT ''",
     "ALTER TABLE customers ADD COLUMN party_type TEXT DEFAULT ''",
     "ALTER TABLE customers ADD COLUMN commission REAL DEFAULT 0",
+    "ALTER TABLE customers ADD COLUMN sax_no TEXT",
+    "ALTER TABLE customers ADD COLUMN ntn TEXT",
+    "ALTER TABLE customers ADD COLUMN credit_days INTEGER DEFAULT 30",
     "ALTER TABLE vendors ADD COLUMN category TEXT DEFAULT 'general'",
     "ALTER TABLE vendors ADD COLUMN region TEXT DEFAULT ''",
     "ALTER TABLE vendors ADD COLUMN party_type TEXT DEFAULT ''",
     "ALTER TABLE vendors ADD COLUMN notes TEXT",
     "ALTER TABLE vendors ADD COLUMN commission REAL DEFAULT 0",
+    "ALTER TABLE vendors ADD COLUMN sax_no TEXT",
+    "ALTER TABLE vendors ADD COLUMN ntn TEXT",
+    "ALTER TABLE vendors ADD COLUMN credit_days INTEGER DEFAULT 60",
     "ALTER TABLE products ADD COLUMN vendor_id INTEGER",
+    "ALTER TABLE products ADD COLUMN item_id TEXT UNIQUE",
+    "ALTER TABLE products ADD COLUMN purchase_price REAL DEFAULT 0",
+    "ALTER TABLE products ADD COLUMN selling_price REAL DEFAULT 0",
+    "ALTER TABLE products ADD COLUMN qty_per_pack INTEGER DEFAULT 1",
+    "ALTER TABLE products ADD COLUMN default_commission_rate REAL DEFAULT 0",
     "ALTER TABLE orders ADD COLUMN commission_amount REAL DEFAULT 0",
     "ALTER TABLE invoices ADD COLUMN commission_amount REAL DEFAULT 0",
     "ALTER TABLE expenses ADD COLUMN paid_to TEXT",
     "ALTER TABLE orders ADD COLUMN commission_pct REAL DEFAULT 0",
     "ALTER TABLE invoices ADD COLUMN commission_pct REAL DEFAULT 0",
+    // Ensure per-item commission columns exist on older DBs
+    "ALTER TABLE invoice_items ADD COLUMN commission_pct REAL DEFAULT 0",
+    "ALTER TABLE invoice_items ADD COLUMN commission_amount REAL DEFAULT 0",
+    "ALTER TABLE order_items ADD COLUMN commission_pct REAL DEFAULT 0",
+    "ALTER TABLE order_items ADD COLUMN commission_amount REAL DEFAULT 0",
+    "ALTER TABLE purchase_items ADD COLUMN commission_pct REAL DEFAULT 0",
+    "ALTER TABLE purchase_items ADD COLUMN commission_amount REAL DEFAULT 0",
     "ALTER TABLE warehouses ADD COLUMN notes TEXT",
     "ALTER TABLE rate_list ADD COLUMN packaging INTEGER DEFAULT 1",
     "ALTER TABLE rate_list ADD COLUMN commission_pct REAL DEFAULT 0",
+    "ALTER TABLE orders ADD COLUMN warehouse_id INTEGER",
+    "ALTER TABLE orders ADD COLUMN bilty_no TEXT",
+    "ALTER TABLE orders ADD COLUMN transporter_name TEXT",
+    "ALTER TABLE invoices ADD COLUMN warehouse_id INTEGER",
+    "ALTER TABLE invoices ADD COLUMN bilty_no TEXT",
+    "ALTER TABLE invoices ADD COLUMN transporter_name TEXT",
+    "ALTER TABLE purchases ADD COLUMN warehouse_id INTEGER",
+    "ALTER TABLE purchases ADD COLUMN bilty_no TEXT",
+    "ALTER TABLE purchase_items ADD COLUMN discount_per_pack REAL DEFAULT 0",
+    "ALTER TABLE order_items ADD COLUMN discount_per_pack REAL DEFAULT 0",
+    "ALTER TABLE invoice_items ADD COLUMN discount_per_pack REAL DEFAULT 0",
+    "ALTER TABLE order_items ADD COLUMN packaging INTEGER DEFAULT 1",
+    "ALTER TABLE invoice_items ADD COLUMN packaging INTEGER DEFAULT 1",
+    "ALTER TABLE purchase_items ADD COLUMN packaging INTEGER DEFAULT 1",
+    // Phantom column fixes: ensure products has packaging + base_unit used by /api/products
+    "ALTER TABLE products ADD COLUMN packaging INTEGER DEFAULT 1",
+    "ALTER TABLE products ADD COLUMN base_unit TEXT DEFAULT 'PCS'",
+    // Account scope (multi-company: Plastic Markaz / Wings Furniture / Cooler)
+    "ALTER TABLE customers ADD COLUMN account_scope TEXT DEFAULT 'plastic_markaz'",
+    "ALTER TABLE vendors ADD COLUMN account_scope TEXT DEFAULT 'plastic_markaz'",
+    "ALTER TABLE orders ADD COLUMN account_scope TEXT DEFAULT 'plastic_markaz'",
+    "ALTER TABLE invoices ADD COLUMN account_scope TEXT DEFAULT 'plastic_markaz'",
+    "ALTER TABLE purchases ADD COLUMN account_scope TEXT DEFAULT 'plastic_markaz'",
+    "ALTER TABLE payments ADD COLUMN account_scope TEXT DEFAULT 'plastic_markaz'",
+    "ALTER TABLE expenses ADD COLUMN account_scope TEXT DEFAULT 'plastic_markaz'",
+    "ALTER TABLE ledger ADD COLUMN account_scope TEXT DEFAULT 'plastic_markaz'",
+    // Invoice: support delivery/transport charges (+/-) in total
+    "ALTER TABLE invoices ADD COLUMN transport_charges REAL DEFAULT 0",
+    // Warehouse location schema (NIAZI CHOWK - UI coming soon)
+    "ALTER TABLE warehouses ADD COLUMN floor TEXT",
+    "ALTER TABLE warehouses ADD COLUMN room TEXT",
+    "ALTER TABLE warehouses ADD COLUMN rack TEXT",
+    "ALTER TABLE warehouses ADD COLUMN lot TEXT",
+    "ALTER TABLE warehouse_stock ADD COLUMN floor TEXT",
+    "ALTER TABLE warehouse_stock ADD COLUMN room TEXT",
+    "ALTER TABLE warehouse_stock ADD COLUMN rack TEXT",
+    "ALTER TABLE warehouse_stock ADD COLUMN lot TEXT",
+    // Payments simplification: cash/cheque/bank_transfer (no invoice linking required)
+    // entity_type/entity_id already used — no schema change needed
+    // Breakage: missing columns referenced in FK declarations
+    "ALTER TABLE breakage ADD COLUMN order_id INTEGER",
+    "ALTER TABLE breakage ADD COLUMN invoice_id INTEGER",
+    "ALTER TABLE breakage ADD COLUMN vendor_id INTEGER",
+    "ALTER TABLE breakage ADD COLUMN claim_status TEXT DEFAULT 'pending'",
+    "ALTER TABLE breakage ADD COLUMN credit_note_id INTEGER",
+    // Bilty per-account scope
+    "ALTER TABLE bilty ADD COLUMN account_scope TEXT DEFAULT 'plastic_markaz'",
   ];
   for (const m of migrations) {
     try { db.exec(m); } catch(e) { /* column already exists */ }
@@ -606,6 +712,18 @@ async function initDatabase() {
     const existing = db.prepare('SELECT key FROM settings WHERE key = ?').get(key);
     if (!existing) db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(key, val);
   }
+
+  // Seed default superadmin (username: admin / password: admin123)
+  try {
+    const userCount = db.prepare('SELECT COUNT(*) as cnt FROM users').get();
+    if (!userCount || userCount.cnt === 0) {
+      const bcrypt = require('bcryptjs');
+      const hash = bcrypt.hashSync('admin123', 10);
+      db.prepare(
+        'INSERT INTO users (username, name, email, password_hash, role, status) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run('admin', 'Super Administrator', 'admin@markaz.local', hash, 'superadmin', 'active');
+    }
+  } catch(e) { console.warn('Seed user skipped:', e.message); }
 
   _saveDb(sqlDb);
   return db;

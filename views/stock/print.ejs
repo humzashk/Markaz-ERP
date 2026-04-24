@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Stock Adjustment <%= adj.id %></title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #1a252f; background: #fff; line-height: 1.5; }
+    .page { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 18mm 16mm 14mm; display: flex; flex-direction: column; }
+
+    .header { display: flex; align-items: center; justify-content: center; gap: 16px; border-bottom: 2px solid #000; padding-bottom: 12px; margin-bottom: 14px; }
+    .logo-box { width: 70px; height: 70px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid #000; padding: 4px; background: #fff; }
+    .logo-box img { max-width: 100%; max-height: 100%; object-fit: contain; filter: grayscale(100%); }
+    .header .company-block { flex: 1; text-align: center; }
+    .company-name { font-size: 20px; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; }
+    .company-info { font-size: 10px; margin-top: 3px; color: #555; }
+    .header .spacer { width: 70px; flex-shrink: 0; }
+
+    .doc-title { text-align: center; border: 1px solid #000; padding: 10px; margin-bottom: 12px; font-size: 14px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; background: #f8f9fa; }
+
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; margin-bottom: 14px; }
+    .info-cell { border: 1px solid #000; padding: 8px 10px; }
+    .info-label { font-size: 10px; font-weight: 700; letter-spacing: 1px; color: #666; text-transform: uppercase; }
+    .info-value { font-size: 13px; font-weight: 700; color: #1a252f; margin-top: 3px; }
+
+    .detail-table { width: 100%; border-collapse: collapse; border: 1px solid #000; margin-bottom: 16px; }
+    .detail-table th { background: #000; color: #fff; padding: 8px 10px; text-align: left; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .detail-table td { border-top: 1px solid #000; padding: 8px 10px; }
+    .detail-table tr:last-child td { border-bottom: 1px solid #000; }
+    .label-col { font-weight: 700; width: 30%; }
+    .value-col { color: #1a252f; }
+
+    .qty-highlight { background: #f0f7ff; border-left: 3px solid #1a252f; }
+    .qty-box { font-size: 16px; font-weight: 900; }
+
+    .spacer-flex { flex: 1; min-height: 20mm; }
+
+    .footer { border-top: 1px solid #000; padding-top: 12px; margin-top: 8px; display: flex; justify-content: space-between; align-items: flex-end; }
+    .sig-block { text-align: center; }
+    .sig-line { border-top: 1px solid #000; min-width: 150px; padding-top: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-top: 30px; }
+
+    .no-print { display: none; }
+    @media print {
+      body { background: #fff; }
+      .no-print { display: none; }
+      .page { margin: 0; padding: 12mm 14mm 10mm; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+<%
+  var scope = (adj && adj.account_scope) ? adj.account_scope : 'plastic_markaz';
+  var bizName = (typeof accountName === 'function') ? accountName(scope) : 'PLASTIC MARKAZ';
+  var logoPath = (typeof getLogoPath === 'function') ? getLogoPath(scope) : '/Logo.png';
+%>
+
+<div class="page">
+  <!-- Header with logo -->
+  <div class="header">
+    <% if (logoPath) { %>
+      <div class="logo-box">
+        <img src="<%= logoPath %>" alt="logo">
+      </div>
+    <% } %>
+    <% if (!logoPath || logoPath === '/Logo.png') { %>
+      <div class="company-block">
+        <div class="company-name"><%= bizName %></div>
+        <div class="company-info">Stock & Inventory Management</div>
+      </div>
+    <% } %>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- Document Title -->
+  <div class="doc-title">Stock Adjustment</div>
+
+  <!-- Key Info Grid -->
+  <div class="info-grid">
+    <div class="info-cell">
+      <div class="info-label">Adj. No.</div>
+      <div class="info-value">ADJ-<%= String(adj.id).padStart(5,'0') %></div>
+    </div>
+    <div class="info-cell">
+      <div class="info-label">Date</div>
+      <div class="info-value"><%= formatDate(adj.adj_date) %></div>
+    </div>
+    <div class="info-cell">
+      <div class="info-label">Type</div>
+      <div class="info-value" style="text-transform: uppercase;"><%= (adj.adjustment_type||'').toUpperCase() %></div>
+    </div>
+  </div>
+
+  <!-- Details Table -->
+  <table class="detail-table">
+    <tr>
+      <td class="label-col">Product</td>
+      <td class="value-col"><strong><%= adj.product_name %></strong></td>
+    </tr>
+    <tr>
+      <td class="label-col">Warehouse</td>
+      <td class="value-col"><%= adj.warehouse_name || '—' %></td>
+    </tr>
+    <tr class="qty-highlight">
+      <td class="label-col">Quantity</td>
+      <td class="value-col qty-box"><%= adj.quantity %> pcs</td>
+    </tr>
+    <tr>
+      <td class="label-col">Reason</td>
+      <td class="value-col"><%= adj.reason || '—' %></td>
+    </tr>
+    <% if (adj.reference) { %>
+    <tr>
+      <td class="label-col">Reference</td>
+      <td class="value-col"><%= adj.reference %></td>
+    </tr>
+    <% } %>
+    <% if (adj.notes) { %>
+    <tr>
+      <td class="label-col">Notes</td>
+      <td class="value-col"><%= adj.notes %></td>
+    </tr>
+    <% } %>
+  </table>
+
+  <!-- Spacer -->
+  <div class="spacer-flex"></div>
+
+  <!-- Footer with signatures -->
+  <div class="footer">
+    <div class="sig-block">
+      <div class="sig-line">Prepared By</div>
+    </div>
+    <div class="sig-block">
+      <div class="sig-line">Authorized By</div>
+    </div>
+  </div>
+</div>
+
+<script>window.onload = function(){ if(!window.location.search.includes('noprint')) window.print(); };</script>
+</body>
+</html>

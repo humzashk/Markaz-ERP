@@ -1,58 +1,73 @@
 <%- include('../partials/header') %>
 <div class="page-header">
-  <h2><i class="bi bi-exclamation-triangle"></i> <%= edit ? 'Edit' : 'Record' %> Breakage</h2>
+  <h2><i class="bi bi-exclamation-triangle"></i> Record Breakage</h2>
   <a href="/breakage" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
 </div>
-<div class="card" style="max-width:700px">
-  <div class="card-body">
-    <form method="post" action="/breakage/<%= edit ? 'edit/'+breakage.id : 'add' %>">
-      <div class="row g-3">
-        <div class="col-md-6"><label class="form-label">Product *</label>
-          <select name="product_id" class="form-select" required>
-            <option value="">Select Product</option>
-            <% products.forEach(p => { %><option value="<%= p.id %>" <%= (breakage && breakage.product_id==p.id)?'selected':'' %>><%= p.name %> (Rs.<%= p.rate %>)</option><% }) %>
-          </select>
-        </div>
-        <div class="col-md-3"><label class="form-label">Qty Damaged *</label><input type="number" name="quantity" class="form-control" min="1" required value="<%= breakage?.quantity || '' %>"></div>
-        <div class="col-md-3"><label class="form-label">Date *</label><input type="date" name="breakage_date" class="form-control" required value="<%= breakage?.breakage_date || new Date().toISOString().split('T')[0] %>"></div>
-        <div class="col-md-6"><label class="form-label">Claim Type</label>
-          <select name="claim_type" class="form-select">
-            <option value="customer" <%= (breakage?.claim_type||'customer')==='customer'?'selected':'' %>>Customer Claim</option>
-            <option value="vendor" <%= breakage?.claim_type==='vendor'?'selected':'' %>>Vendor Claim</option>
-          </select>
-        </div>
-        <div class="col-md-6"><label class="form-label">Customer</label>
-          <select name="customer_id" class="form-select"><option value="">-- None --</option>
-            <% customers.forEach(c => { %><option value="<%= c.id %>" <%= (breakage && breakage.customer_id==c.id)?'selected':'' %>><%= c.name %></option><% }) %>
-          </select>
-        </div>
-        <div class="col-md-6"><label class="form-label">Vendor</label>
-          <select name="vendor_id" class="form-select"><option value="">-- None --</option>
-            <% vendors.forEach(v => { %><option value="<%= v.id %>" <%= (breakage && breakage.vendor_id==v.id)?'selected':'' %>><%= v.name %></option><% }) %>
-          </select>
-        </div>
-        <div class="col-md-6"><label class="form-label">Link to Order</label>
-          <select name="order_id" class="form-select"><option value="">-- None --</option>
-            <% orders.forEach(o => { %><option value="<%= o.id %>" <%= (breakage && breakage.order_id==o.id)?'selected':'' %>><%= o.order_no %> - <%= o.customer_name %></option><% }) %>
-          </select>
-        </div>
-        <div class="col-md-6"><label class="form-label">Link to Invoice</label>
-          <select name="invoice_id" class="form-select"><option value="">-- None --</option>
-            <% invoices.forEach(inv => { %><option value="<%= inv.id %>" <%= (breakage && breakage.invoice_id==inv.id)?'selected':'' %>><%= inv.invoice_no %> - <%= inv.customer_name %></option><% }) %>
-          </select>
-        </div>
-        <% if (edit) { %>
-        <div class="col-md-6"><label class="form-label">Claim Status</label>
-          <select name="claim_status" class="form-select">
-            <% ['pending','resolved','rejected'].forEach(s => { %><option value="<%= s %>" <%= breakage.claim_status===s?'selected':'' %>><%= s.charAt(0).toUpperCase()+s.slice(1) %></option><% }) %>
-          </select>
-        </div>
-        <% } %>
-        <div class="col-12"><label class="form-label">Reason</label><textarea name="reason" class="form-control" rows="2"><%= breakage?.reason || '' %></textarea></div>
-        <div class="col-12"><label class="form-label">Notes</label><textarea name="notes" class="form-control" rows="2"><%= breakage?.notes || '' %></textarea></div>
-        <div class="col-12"><button type="submit" class="btn btn-primary btn-lg px-4"><i class="bi bi-save"></i> <%= edit ? 'Update' : 'Save' %></button></div>
+<div class="row g-3">
+  <div class="col-md-7">
+    <div class="card">
+      <div class="card-header">Breakage Details</div>
+      <div class="card-body">
+        <form method="post" action="/breakage/add">
+          <div class="mb-3">
+            <label class="form-label">Customer *</label>
+            <select name="customer_id" class="form-select" required>
+              <option value="">Select Customer</option>
+              <% customers.forEach(c => { %>
+              <option value="<%= c.id %>"><%= c.name %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Product *</label>
+            <select name="product_id" class="form-select" required>
+              <option value="">Select Product</option>
+              <% products.forEach(p => { %>
+              <option value="<%= p.id %>"><%= p.name %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Quantity (pcs) <small class="text-muted">Optional</small></label>
+              <input type="number" name="quantity" class="form-control" min="0" value="0">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Adjustment Amount (Rs.) *</label>
+              <input type="number" name="amount" class="form-control" min="0" step="0.01" required placeholder="0.00">
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Breakage Date *</label>
+            <input type="date" name="breakage_date" class="form-control" value="<%= new Date().toISOString().split('T')[0] %>" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Notes / Reason</label>
+            <textarea name="notes" class="form-control" rows="2" placeholder="Describe the breakage..."></textarea>
+          </div>
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary btn-lg px-5"><i class="bi bi-save"></i> Record Breakage</button>
+            <a href="/breakage" class="btn btn-outline-secondary btn-lg">Cancel</a>
+          </div>
+        </form>
       </div>
-    </form>
+    </div>
+  </div>
+  <div class="col-md-5">
+    <div class="card border-info">
+      <div class="card-header bg-info text-white"><i class="bi bi-info-circle"></i> What Happens</div>
+      <div class="card-body">
+        <p class="mb-2"><strong>1. Ledger Credit:</strong> The adjustment amount is credited to the customer's ledger, reducing their outstanding balance.</p>
+        <p class="mb-2"><strong>2. Credit Note:</strong> A Credit Note (CN) is auto-generated and linked to this breakage record.</p>
+        <p class="mb-0"><strong>3. Print:</strong> You can print a Breakage Challan and Credit Note for records.</p>
+      </div>
+    </div>
+    <div class="card mt-3 border-warning">
+      <div class="card-header bg-warning"><i class="bi bi-exclamation-triangle"></i> Note</div>
+      <div class="card-body">
+        <small>Breakage does <strong>not</strong> adjust stock levels. It only adjusts the financial balance of the customer. For stock adjustments, use <a href="/stock/add">Stock Management</a>.</small>
+      </div>
+    </div>
   </div>
 </div>
 <%- include('../partials/footer') %>

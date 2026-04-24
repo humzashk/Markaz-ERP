@@ -7,6 +7,15 @@
   <div class="card-body">
     <form method="post" action="/bilty/<%= edit ? 'edit/'+bilty.id : 'add' %>">
       <div class="row g-3">
+        <div class="col-md-12">
+          <label class="form-label fw-bold">Account *</label>
+          <select name="account_scope" class="form-select" required>
+            <% var _bScope = (bilty && bilty.account_scope) || 'plastic_markaz'; %>
+            <option value="plastic_markaz"  <%= _bScope === 'plastic_markaz'  ? 'selected' : '' %>>Plastic Markaz</option>
+            <option value="wings_furniture" <%= _bScope === 'wings_furniture' ? 'selected' : '' %>>Wings Furniture</option>
+            <option value="cooler"          <%= _bScope === 'cooler'          ? 'selected' : '' %>>Cooler</option>
+          </select>
+        </div>
         <div class="col-md-6"><label class="form-label">Transport Name *</label><input type="text" name="transport_name" class="form-control" required value="<%= bilty?.transport_name || '' %>"></div>
         <div class="col-md-6"><label class="form-label">Bilty Number</label><input type="text" name="bilty_no" class="form-control" value="<%= bilty?.bilty_no || '' %>"></div>
         <div class="col-md-6"><label class="form-label">From City *</label><input type="text" name="from_city" class="form-control" required value="<%= bilty?.from_city || '' %>"></div>
