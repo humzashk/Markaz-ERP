@@ -1,299 +1,715 @@
 <%- include('partials/header') %>
+<% if (typeof dashboardErrors !== 'undefined' && dashboardErrors && dashboardErrors.length) { %>
+  <div class="alert alert-warning d-flex align-items-start gap-2 mb-3" role="alert">
+    <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+    <div>
+      <strong>Some dashboard metrics could not be loaded (<%= dashboardErrors.length %> issue<%= dashboardErrors.length===1?'':'s' %>).</strong>
+      Affected widgets show fallback values. Errors have been logged for review.
+      <% if (typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'superadmin') { %>
+        <details class="mt-1"><summary class="small">Details</summary>
+          <ul class="small mb-0">
+            <% dashboardErrors.slice(0,10).forEach(function(e){ %>
+              <li><code><%= e.scope %></code>: <%= e.message %></li>
+            <% }); %>
+          </ul>
+        </details>
+      <% } %>
+    </div>
+  </div>
+<% } %>
+<style>
+  .ai-card { border-left: 4px solid #6366f1; background: linear-gradient(135deg,#f5f3ff,#fff); }
+  .risk-high { background: #fee2e2 !important; }
+  .risk-medium { background: #fef3c7 !important; }
+  .risk-low { background: #d1fae5 !important; }
+  .neg-stock { background: #fecaca !important; font-weight: 700; }
+  .metric-mini { padding: 10px 12px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; }
+  .metric-mini .lbl { font-size: 10px; text-transform: uppercase; color: #6b7280; letter-spacing: .5px; font-weight: 600; }
+  .metric-mini .val { font-size: 16px; font-weight: 700; margin-top: 2px; }
+  .acct-card { background: linear-gradient(135deg,#fff,#f8fafc); border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; transition: all .15s; }
+  .acct-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+  .acct-card.acct-active { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,.2); }
+  .suggestion-pill { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin-bottom: 6px; border-radius: 6px; font-size: 13px; text-decoration: none; transition: all .15s; }
+  .suggestion-pill:hover { transform: translateX(3px); }
+  .ageing-block { padding: 12px; border-radius: 8px; text-align: center; cursor: pointer; transition: all .15s; text-decoration: none; display: block; }
+  .ageing-block:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,.1); }
+  .ageing-30 { background: #fef3c7; color: #92400e; }
+  .ageing-60 { background: #fed7aa; color: #9a3412; }
+  .ageing-90 { background: #fecaca; color: #991b1b; }
+  .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: #6b7280; font-weight: 700; margin: 18px 0 8px; padding-left: 4px; border-left: 3px solid #3b82f6; }
+  .stat-card-link { text-decoration: none; color: inherit; display: block; transition: transform .15s; }
+  .stat-card-link:hover { transform: translateY(-2px); color: inherit; }
+  .audit-row td { vertical-align: middle; }
+  .audit-row.clickable { cursor: pointer; transition: background .15s; }
+  .audit-row.clickable:hover { background: #eff6ff !important; }
+  .audit-action-create { background: #d1fae5; color: #065f46; }
+  .audit-action-update { background: #fef3c7; color: #92400e; }
+  .audit-action-delete { background: #fecaca; color: #991b1b; }
+</style>
+
 <div class="page-header">
-  <h2><i class="bi bi-speedometer2"></i> Dashboard</h2>
+  <h2><i class="bi bi-speedometer2"></i> Dashboard
+    <% if (isSuperadmin) { %><span class="badge bg-danger ms-2" style="font-size:11px;">SUPERADMIN</span><% } %>
+  </h2>
   <div class="d-flex gap-2">
-    <a href="/orders/add" class="btn btn-primary btn-lg"><i class="bi bi-cart-plus"></i> New Order</a>
-    <a href="/purchases/add" class="btn btn-warning btn-lg"><i class="bi bi-bag-plus"></i> New Purchase</a>
+    <a href="/orders/add" class="btn btn-primary"><i class="bi bi-cart-plus"></i> New Order</a>
+    <a href="/invoices/add" class="btn btn-success"><i class="bi bi-receipt"></i> New Invoice</a>
+    <a href="/purchases/add" class="btn btn-warning"><i class="bi bi-bag-plus"></i> New Purchase</a>
   </div>
 </div>
-<!-- Quick Action Strip -->
-<div class="d-flex gap-2 mb-3 flex-wrap">
-  <a href="/invoices/add" class="btn btn-outline-primary"><i class="bi bi-receipt"></i> New Invoice</a>
-  <a href="/payments/receive" class="btn btn-outline-success"><i class="bi bi-cash-coin"></i> Receive Payment</a>
-  <a href="/payments/pay" class="btn btn-outline-warning"><i class="bi bi-cash-stack"></i> Pay Vendor</a>
-  <a href="/customers/add" class="btn btn-outline-secondary"><i class="bi bi-person-plus"></i> Add Customer</a>
-  <a href="/products/add" class="btn btn-outline-secondary"><i class="bi bi-box-seam"></i> Add Product</a>
-</div>
 
-<!-- Period Selector -->
-<div class="period-bar mb-4">
+<!-- Period + Account Filter -->
+<div class="period-bar mb-3">
   <div class="d-flex align-items-center gap-2 flex-wrap">
     <span class="text-muted small fw-semibold me-1">PERIOD:</span>
-    <% ['today','week','month','year'].forEach(p => { %>
-    <a href="?period=<%= p %>" class="period-btn <%= period === p ? 'active' : '' %>">
-      <%= p === 'today' ? 'Today' : p === 'week' ? 'Last 7 Days' : p === 'month' ? 'This Month' : 'This Year' %>
+    <% ['today','week','month','year','lastyear','all'].forEach(p => { %>
+    <a href="?period=<%= p %><%= accountFilter ? '&account='+accountFilter : '' %>" class="period-btn <%= period === p ? 'active' : '' %>">
+      <%= p === 'today' ? 'Today' : p === 'week' ? '7 Days' : p === 'month' ? 'This Month' : p === 'year' ? 'This Year' : p === 'lastyear' ? 'Last Year' : 'All Time' %>
     </a>
     <% }) %>
-    <a href="#" class="period-btn <%= period === 'custom' ? 'active' : '' %>" onclick="document.getElementById('customRange').classList.toggle('d-none');return false">
-      <i class="bi bi-calendar3"></i> Custom
-    </a>
     <span class="ms-2 badge bg-light text-dark border fw-normal" style="font-size:13px"><i class="bi bi-calendar2-check text-primary me-1"></i><%= rangeLabel %></span>
-  </div>
-  <form id="customRange" method="GET" class="d-none mt-2 d-flex align-items-center gap-2 flex-wrap">
-    <input type="hidden" name="period" value="custom">
-    <div class="d-flex align-items-center gap-2">
-      <label class="small text-muted">From</label>
-      <input type="text" name="from" id="dash_from" class="form-control form-control-sm datepicker" value="<%= rangeStart %>" style="width:140px">
-      <label class="small text-muted">To</label>
-      <input type="text" name="to" id="dash_to" class="form-control form-control-sm datepicker" value="<%= rangeEnd %>" style="width:140px">
-      <button type="submit" class="btn btn-primary btn-sm">Apply</button>
-    </div>
-  </form>
-</div>
 
-<!-- Row 1: Key Financials for selected period -->
-<div class="row g-3 mb-3">
-  <div class="col-6 col-md-4 col-lg-2">
-    <div class="stat-card stat-blue">
-      <div class="stat-icon"><i class="bi bi-receipt"></i></div>
-      <div class="stat-info"><h3><%= formatCurrency(rangeRev) %></h3><p>Sales</p><small style="opacity:.8"><%= rangeLabel %></small></div>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-lg-2">
-    <div class="stat-card stat-green">
-      <div class="stat-icon"><i class="bi bi-graph-up"></i></div>
-      <div class="stat-info"><h3><%= formatCurrency(rangeProfit) %></h3><p>Profit</p><small style="opacity:.8"><%= rangeLabel %></small></div>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-lg-2">
-    <div class="stat-card stat-orange">
-      <div class="stat-icon"><i class="bi bi-bag"></i></div>
-      <div class="stat-info"><h3><%= formatCurrency(rangePurchases) %></h3><p>Purchases</p><small style="opacity:.8"><%= rangeLabel %></small></div>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-lg-2">
-    <div class="stat-card stat-teal">
-      <div class="stat-icon"><i class="bi bi-arrow-down-circle"></i></div>
-      <div class="stat-info"><h3><%= formatCurrency(totalReceivables) %></h3><p>Receivables</p></div>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-lg-2">
-    <div class="stat-card stat-red">
-      <div class="stat-icon"><i class="bi bi-arrow-up-circle"></i></div>
-      <div class="stat-info"><h3><%= formatCurrency(totalPayables) %></h3><p>Payables</p></div>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-lg-2">
-    <div class="stat-card stat-purple">
-      <div class="stat-icon"><i class="bi bi-bank"></i></div>
-      <div class="stat-info"><h3><%= formatCurrency(bankBalance) %></h3><p>Bank Balance</p></div>
-    </div>
+    <span class="text-muted small fw-semibold ms-3 me-1">ACCOUNT:</span>
+    <a href="?period=<%= period %>" class="period-btn <%= !accountFilter ? 'active' : '' %>">All</a>
+    <a href="?period=<%= period %>&account=plastic_markaz" class="period-btn <%= accountFilter==='plastic_markaz' ? 'active' : '' %>">Plastic Markaz</a>
+    <a href="?period=<%= period %>&account=wings_furniture" class="period-btn <%= accountFilter==='wings_furniture' ? 'active' : '' %>">Wings Furniture</a>
+    <a href="?period=<%= period %>&account=cooler" class="period-btn <%= accountFilter==='cooler' ? 'active' : '' %>">Cooler</a>
   </div>
 </div>
 
-<!-- Row 2: Status & Alerts -->
+<!-- AI Smart Suggestions -->
+<% if (can('dash.ai') && suggestions.length) { %>
+<div class="card ai-card mb-3">
+  <div class="card-body p-3">
+    <div class="d-flex align-items-center mb-2">
+      <i class="bi bi-stars text-primary fs-5 me-2"></i>
+      <strong>AI Smart Suggestions</strong>
+      <span class="badge bg-primary ms-2"><%= suggestions.length %></span>
+      <small class="text-muted ms-2">(click to take action)</small>
+    </div>
+    <div class="row g-2">
+      <% suggestions.forEach(s => { %>
+      <div class="col-md-6">
+        <a href="<%= s.link %>" class="suggestion-pill bg-<%= s.color %> bg-opacity-10 text-<%= s.color %>">
+          <i class="bi bi-<%= s.icon %>"></i> <span><%= s.text %></span>
+          <i class="bi bi-arrow-right ms-auto"></i>
+        </a>
+      </div>
+      <% }) %>
+    </div>
+  </div>
+</div>
+<% } %>
+
+<!-- Row 1: Core Financials -->
+<% if (can('dash.financials')) { %>
 <div class="row g-3 mb-3">
-  <div class="col-6 col-md-3">
-    <a href="/invoices?status=unpaid" class="text-decoration-none">
-      <div class="stat-card stat-red" style="cursor:pointer">
-        <div class="stat-icon"><i class="bi bi-receipt-cutoff"></i></div>
-        <div class="stat-info"><h3><%= unpaidInvoices %></h3><p>Unpaid Invoices</p><small class="opacity-75"><%= formatCurrency(unpaidAmount) %></small></div>
+  <div class="col-6 col-md-3 col-lg-2">
+    <a href="/invoices" class="stat-card-link">
+      <div class="stat-card stat-blue">
+        <div class="stat-icon"><i class="bi bi-receipt"></i></div>
+        <div class="stat-info"><h3><%= formatCurrency(rangeRev) %></h3><p>Sales</p><small style="opacity:.85"><%= rangeLabel %></small></div>
       </div>
     </a>
   </div>
-  <div class="col-6 col-md-3">
-    <div class="stat-card" style="background:linear-gradient(135deg,#8e44ad,#9b59b6);color:#fff;">
-      <div class="stat-icon"><i class="bi bi-alarm"></i></div>
-      <div class="stat-info"><h3><%= overdueInvoices %></h3><p>Overdue</p><small class="opacity-75"><%= formatCurrency(overdueAmount) %></small></div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <a href="/orders?status=pending" class="text-decoration-none">
-      <div class="stat-card stat-orange" style="cursor:pointer">
-        <div class="stat-icon"><i class="bi bi-cart-check"></i></div>
-        <div class="stat-info"><h3><%= pendingOrders %></h3><p>Pending Orders</p></div>
+  <div class="col-6 col-md-3 col-lg-2">
+    <a href="/reports" class="stat-card-link">
+      <div class="stat-card <%= rangeProfit >= 0 ? 'stat-green' : 'stat-red' %>">
+        <div class="stat-icon"><i class="bi bi-graph-up"></i></div>
+        <div class="stat-info"><h3><%= formatCurrency(rangeProfit) %></h3><p>Net Profit</p><small style="opacity:.85"><%= rangeMargin %>% margin</small></div>
       </div>
     </a>
   </div>
-  <div class="col-6 col-md-3">
-    <div class="stat-card stat-teal">
-      <div class="stat-icon"><i class="bi bi-people"></i></div>
-      <div class="stat-info"><h3><%= totalCustomers %></h3><p>Active Customers</p></div>
-    </div>
+  <div class="col-6 col-md-3 col-lg-2">
+    <a href="/purchases" class="stat-card-link">
+      <div class="stat-card stat-orange">
+        <div class="stat-icon"><i class="bi bi-bag"></i></div>
+        <div class="stat-info"><h3><%= formatCurrency(rangePurchases) %></h3><p>Purchases</p></div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-md-3 col-lg-2">
+    <a href="/customers" class="stat-card-link">
+      <div class="stat-card stat-teal">
+        <div class="stat-icon"><i class="bi bi-arrow-down-circle"></i></div>
+        <div class="stat-info"><h3><%= formatCurrency(totalReceivables) %></h3><p>Receivables</p></div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-md-3 col-lg-2">
+    <a href="/vendors" class="stat-card-link">
+      <div class="stat-card stat-red">
+        <div class="stat-icon"><i class="bi bi-arrow-up-circle"></i></div>
+        <div class="stat-info"><h3><%= formatCurrency(totalPayables) %></h3><p>Payables</p></div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-md-3 col-lg-2">
+    <a href="/bank" class="stat-card-link">
+      <div class="stat-card stat-purple">
+        <div class="stat-icon"><i class="bi bi-bank"></i></div>
+        <div class="stat-info"><h3><%= formatCurrency(bankBalance) %></h3><p>Bank</p></div>
+      </div>
+    </a>
   </div>
 </div>
+<% } %>
 
+<!-- Profit Breakdown + Cash Position -->
+<% if (can('dash.profit') || can('dash.cash')) { %>
 <div class="row g-3 mb-3">
-  <!-- Revenue vs Expense Chart -->
-  <div class="col-lg-8">
+  <% if (can('dash.profit')) { %>
+  <div class="col-md-8">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between"><span><i class="bi bi-pie-chart"></i> Profit Breakdown (<%= rangeLabel %>)</span><a href="/reports" class="small">View Full Report →</a></div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-md-2 col-6"><a href="/invoices" class="text-decoration-none"><div class="metric-mini"><div class="lbl">Revenue</div><div class="val text-success"><%= formatCurrency(rangeRev) %></div></div></a></div>
+          <div class="col-md-2 col-6"><a href="/reports" class="text-decoration-none"><div class="metric-mini"><div class="lbl">- COGS</div><div class="val text-danger"><%= formatCurrency(rangeCOGS) %></div></div></a></div>
+          <div class="col-md-2 col-6"><a href="/invoices" class="text-decoration-none"><div class="metric-mini"><div class="lbl">- Commission</div><div class="val text-danger"><%= formatCurrency(rangeCommission) %></div></div></a></div>
+          <div class="col-md-2 col-6"><a href="/bilty" class="text-decoration-none"><div class="metric-mini"><div class="lbl">- Delivery</div><div class="val text-danger"><%= formatCurrency(rangeDelivery) %></div></div></a></div>
+          <div class="col-md-2 col-6"><a href="/expenses" class="text-decoration-none"><div class="metric-mini"><div class="lbl">- Expenses</div><div class="val text-danger"><%= formatCurrency(rangeExp) %></div></div></a></div>
+          <div class="col-md-2 col-6"><div class="metric-mini" style="background:<%= rangeProfit>=0?'#d1fae5':'#fee2e2' %>"><div class="lbl">= Net Profit</div><div class="val <%= rangeProfit>=0?'text-success':'text-danger' %>"><%= formatCurrency(rangeProfit) %></div></div></div>
+        </div>
+        <div class="mt-3 small text-muted">
+          <strong>Today:</strong> Sales <%= formatCurrency(todayRev) %> | Profit <%= formatCurrency(todayProfit) %> &nbsp;|&nbsp;
+          <strong>Month:</strong> <%= formatCurrency(monthRev) %> / <%= formatCurrency(monthProfit) %> &nbsp;|&nbsp;
+          <strong>Year:</strong> <%= formatCurrency(yearRev) %> / <%= formatCurrency(yearProfit) %>
+        </div>
+      </div>
+    </div>
+  </div>
+  <% } %>
+  <% if (can('dash.cash')) { %>
+  <div class="col-md-<%= can('dash.profit') ? '4' : '12' %>">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-cash-stack"></i> Cash Position</div>
+      <div class="card-body">
+        <a href="/bank" class="d-flex justify-content-between py-1 text-decoration-none text-dark"><span class="text-muted">Bank Balance</span><strong class="text-success"><%= formatCurrency(bankBalance) %></strong></a>
+        <a href="/customers" class="d-flex justify-content-between py-1 text-decoration-none text-dark"><span class="text-muted">+ Receivables</span><strong class="text-info"><%= formatCurrency(totalReceivables) %></strong></a>
+        <a href="/vendors" class="d-flex justify-content-between py-1 text-decoration-none text-dark"><span class="text-muted">- Payables</span><strong class="text-danger">(<%= formatCurrency(totalPayables) %>)</strong></a>
+        <hr class="my-2">
+        <div class="d-flex justify-content-between py-1"><strong>Net Position</strong><strong class="<%= cashPosition>=0?'text-success':'text-danger' %>"><%= formatCurrency(cashPosition) %></strong></div>
+      </div>
+    </div>
+  </div>
+  <% } %>
+</div>
+<% } %>
+
+<!-- Aging + Activity -->
+<% if (can('dash.aging') || can('dash.activity')) { %>
+<div class="row g-3 mb-3">
+  <% if (can('dash.aging')) { %>
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between"><span><i class="bi bi-alarm"></i> Overdue Aging Analysis</span><a href="/invoices?status=overdue" class="small">View All →</a></div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-4"><a href="/invoices?status=overdue&aging=30" class="ageing-block ageing-30">
+            <div class="small">1-30 Days</div><h5 class="my-1"><%= formatCurrency(aging30.v) %></h5><div class="small"><%= aging30.c %> invoices</div>
+          </a></div>
+          <div class="col-4"><a href="/invoices?status=overdue&aging=60" class="ageing-block ageing-60">
+            <div class="small">31-60 Days</div><h5 class="my-1"><%= formatCurrency(aging60.v) %></h5><div class="small"><%= aging60.c %> invoices</div>
+          </a></div>
+          <div class="col-4"><a href="/invoices?status=overdue&aging=90" class="ageing-block ageing-90">
+            <div class="small">90+ Days</div><h5 class="my-1"><%= formatCurrency(aging90.v) %></h5><div class="small"><%= aging90.c %> invoices</div>
+          </a></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <% } %>
+  <% if (can('dash.activity')) { %>
+  <div class="col-md-<%= can('dash.aging') ? '6' : '12' %>">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-activity"></i> Sales Activity (<%= rangeLabel %>)</div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-3"><a href="/orders" class="text-decoration-none"><div class="metric-mini text-center"><div class="lbl">Orders</div><div class="val text-primary"><%= totalOrders %></div></div></a></div>
+          <div class="col-3"><a href="/invoices" class="text-decoration-none"><div class="metric-mini text-center"><div class="lbl">Invoices</div><div class="val text-success"><%= totalInvoices %></div></div></a></div>
+          <div class="col-3"><a href="/reports" class="text-decoration-none"><div class="metric-mini text-center"><div class="lbl">Conversion</div><div class="val text-info"><%= conversionRate %>%</div></div></a></div>
+          <div class="col-3"><a href="/customers" class="text-decoration-none"><div class="metric-mini text-center"><div class="lbl">Customers</div><div class="val"><%= totalCustomers %></div></div></a></div>
+        </div>
+        <div class="row g-2 mt-2">
+          <div class="col-4"><a href="/invoices?status=unpaid" class="text-decoration-none"><div class="metric-mini text-center"><div class="lbl">Unpaid</div><div class="val text-danger"><%= unpaidInvoices %></div></div></a></div>
+          <div class="col-4"><a href="/orders?status=pending" class="text-decoration-none"><div class="metric-mini text-center"><div class="lbl">Pending Orders</div><div class="val text-warning"><%= pendingOrders %></div></div></a></div>
+          <div class="col-4"><a href="/invoices?status=overdue" class="text-decoration-none"><div class="metric-mini text-center"><div class="lbl">Overdue</div><div class="val text-danger"><%= overdueInvoices %></div></div></a></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <% } %>
+</div>
+<% } %>
+
+<!-- Account Performance -->
+<% if (can('dash.accounts')) { %>
+<div class="section-title">ACCOUNT PERFORMANCE</div>
+<div class="row g-3 mb-3">
+  <% accountList.forEach(a => { %>
+  <div class="col-md-4">
+    <a href="?period=<%= period %>&account=<%= a.scope %>" class="text-decoration-none text-dark">
+      <div class="acct-card <%= accountFilter===a.scope ? 'acct-active' : '' %>">
+        <div class="d-flex justify-content-between align-items-center">
+          <strong><%= a.name %></strong>
+          <span class="btn btn-sm btn-outline-primary">View</span>
+        </div>
+        <div class="row g-2 mt-2">
+          <div class="col-6"><div class="lbl text-muted small">Revenue</div><div class="h5 mb-0 text-success"><%= formatCurrency(a.revenue) %></div></div>
+          <div class="col-6"><div class="lbl text-muted small">Invoices</div><div class="h5 mb-0"><%= a.invoices %></div></div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <% }) %>
+</div>
+<% } %>
+
+<!-- Charts + AI Forecast -->
+<% if (can('dash.charts') || can('dash.ai')) { %>
+<div class="row g-3 mb-3">
+  <% if (can('dash.charts')) { %>
+  <div class="col-lg-<%= can('dash.ai') ? '8' : '12' %>">
     <div class="card h-100">
       <div class="card-header d-flex justify-content-between align-items-center">
         <span><i class="bi bi-bar-chart"></i> Revenue vs Expenses (Last 6 Months)</span>
         <a href="/reports" class="btn btn-sm btn-outline-secondary">All Reports</a>
       </div>
+      <div class="card-body"><canvas id="revenueChart" height="90"></canvas></div>
+    </div>
+  </div>
+  <% } %>
+  <% if (can('dash.ai')) { %>
+  <div class="col-lg-<%= can('dash.charts') ? '4' : '12' %>">
+    <div class="card h-100 ai-card">
+      <div class="card-header"><i class="bi bi-stars text-primary"></i> AI Sales Forecast</div>
       <div class="card-body">
-        <canvas id="revenueChart" height="90"></canvas>
+        <div class="mb-3"><div class="lbl text-muted small">Daily Avg (last 30d)</div><div class="h4 mb-0"><%= formatCurrency(Math.round(dailyAvg)) %></div></div>
+        <div class="row g-2">
+          <div class="col-6"><a href="/reports" class="text-decoration-none"><div class="metric-mini text-center"><div class="lbl">Next 7 Days</div><div class="val text-primary"><%= formatCurrency(forecast7d) %></div></div></a></div>
+          <div class="col-6"><a href="/reports" class="text-decoration-none"><div class="metric-mini text-center"><div class="lbl">Next 30 Days</div><div class="val text-success"><%= formatCurrency(forecast30d) %></div></div></a></div>
+        </div>
+        <div class="small text-muted mt-2"><i class="bi bi-info-circle"></i> Based on 30-day trailing avg</div>
       </div>
     </div>
   </div>
+  <% } %>
+</div>
+<% } %>
 
-  <!-- Year Overview -->
-  <div class="col-lg-4">
-    <div class="card h-100">
-      <div class="card-header"><i class="bi bi-calendar3"></i> Year Overview</div>
-      <div class="card-body p-0">
-        <div class="list-group list-group-flush">
-          <div class="list-group-item d-flex justify-content-between py-2">
-            <span class="text-muted">Year Sales</span><strong class="text-success"><%= formatCurrency(yearRev) %></strong>
-          </div>
-          <div class="list-group-item d-flex justify-content-between py-2">
-            <span class="text-muted">Year Expenses</span><strong class="text-danger"><%= formatCurrency(yearExp) %></strong>
-          </div>
-          <div class="list-group-item d-flex justify-content-between py-2">
-            <span class="text-muted">Year Profit</span><strong class="<%= yearProfit >= 0 ? 'text-success' : 'text-danger' %>"><%= formatCurrency(yearProfit) %></strong>
-          </div>
-          <div class="list-group-item d-flex justify-content-between py-2">
-            <span class="text-muted">Today Sales</span><strong><%= formatCurrency(todayRev) %></strong>
-          </div>
-          <div class="list-group-item d-flex justify-content-between py-2">
-            <span class="text-muted">Today Expenses</span><strong><%= formatCurrency(todayExp) %></strong>
-          </div>
-          <div class="list-group-item d-flex justify-content-between py-2">
-            <span class="text-muted">Month Expenses</span><strong class="text-danger"><%= formatCurrency(monthExp) %></strong>
-          </div>
-        </div>
+<!-- Stock Intelligence -->
+<% if (can('dash.stock')) { %>
+<div class="section-title">INVENTORY INTELLIGENCE</div>
+<div class="row g-3 mb-3">
+  <div class="col-md-3">
+    <a href="/reports/inventory-value" class="stat-card-link">
+      <div class="stat-card stat-teal">
+        <div class="stat-icon"><i class="bi bi-boxes"></i></div>
+        <div class="stat-info"><h3><%= formatCurrency(stockValue) %></h3><p>Stock Value</p></div>
       </div>
-    </div>
+    </a>
+  </div>
+  <div class="col-md-3">
+    <a href="/reports/low-stock" class="stat-card-link">
+      <div class="stat-card stat-orange">
+        <div class="stat-icon"><i class="bi bi-exclamation-circle"></i></div>
+        <div class="stat-info"><h3><%= lowStock.length %></h3><p>Low Stock Items</p></div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-3">
+    <a href="/products?stock=out" class="stat-card-link">
+      <div class="stat-card stat-red">
+        <div class="stat-icon"><i class="bi bi-x-circle"></i></div>
+        <div class="stat-info"><h3><%= outOfStockCount %></h3><p>Out of Stock</p></div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-3">
+    <a href="/products?stock=negative" class="stat-card-link">
+      <div class="stat-card" style="background:linear-gradient(135deg,#7f1d1d,#dc2626);color:#fff;">
+        <div class="stat-icon"><i class="bi bi-dash-circle"></i></div>
+        <div class="stat-info"><h3><%= negativeStock.length %></h3><p>Negative Stock ⚠</p></div>
+      </div>
+    </a>
   </div>
 </div>
 
 <div class="row g-3 mb-3">
-  <!-- Top Customers -->
-  <div class="col-md-4">
-    <div class="card h-100">
-      <div class="card-header"><i class="bi bi-trophy text-warning"></i> Top Customers (<%= rangeLabel %>)</div>
+  <% if (negativeStock.length) { %>
+  <div class="col-md-6">
+    <div class="card h-100 border-danger">
+      <div class="card-header bg-danger text-white"><i class="bi bi-dash-circle"></i> Negative Stock Alert</div>
       <div class="card-body p-0">
-        <ul class="list-group list-group-flush">
-          <% topCustomers.forEach((c, i) => { %>
-          <li class="list-group-item d-flex justify-content-between align-items-center py-2">
-            <span><span class="badge bg-secondary me-1"><%= i+1 %></span> <%= c.name %></span>
-            <strong class="text-success"><%= formatCurrency(c.total_sales) %></strong>
-          </li>
-          <% }) %>
-          <% if (!topCustomers.length) { %><li class="list-group-item text-muted small">No sales this month</li><% } %>
-        </ul>
+        <table class="table table-sm mb-0">
+          <thead class="table-light"><tr><th>Product</th><th class="text-end">Stock</th><th>Action</th></tr></thead>
+          <tbody>
+            <% negativeStock.forEach(p => { %>
+            <tr class="neg-stock">
+              <td><a href="/products/edit/<%= p.id %>"><%= p.name %></a></td>
+              <td class="text-end fw-bold"><%= p.stock %></td>
+              <td><a href="/stock/add?product_id=<%= p.id %>" class="btn btn-sm btn-danger">Fix</a></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
+  <% } %>
 
-  <!-- Top Products -->
-  <div class="col-md-4">
+  <div class="col-md-6">
     <div class="card h-100">
-      <div class="card-header"><i class="bi bi-box text-primary"></i> Top Products (<%= rangeLabel %>)</div>
-      <div class="card-body p-0">
-        <ul class="list-group list-group-flush">
-          <% topProducts.forEach((p, i) => { %>
-          <li class="list-group-item d-flex justify-content-between align-items-center py-2">
-            <span><span class="badge bg-secondary me-1"><%= i+1 %></span> <%= p.name %></span>
-            <strong><%= p.total_qty.toLocaleString() %> pcs</strong>
-          </li>
-          <% }) %>
-          <% if (!topProducts.length) { %><li class="list-group-item text-muted small">No data</li><% } %>
-        </ul>
-      </div>
-    </div>
-  </div>
-
-  <!-- Low Stock -->
-  <div class="col-md-4">
-    <div class="card h-100">
-      <div class="card-header text-danger"><i class="bi bi-exclamation-circle"></i> Low Stock Alert</div>
+      <div class="card-header text-warning d-flex justify-content-between"><span><i class="bi bi-exclamation-triangle"></i> Low Stock</span><a href="/reports/low-stock" class="small">View All →</a></div>
       <div class="card-body p-0">
         <ul class="list-group list-group-flush">
           <% lowStock.forEach(p => { %>
           <li class="list-group-item d-flex justify-content-between align-items-center py-2">
-            <span><%= p.name %></span>
-            <span class="badge bg-danger"><%= p.stock %> / min <%= p.min_stock %></span>
+            <a href="/products/edit/<%= p.id %>" class="text-decoration-none text-dark"><%= p.name %></a>
+            <a href="/stock/add?product_id=<%= p.id %>" class="badge bg-warning text-dark text-decoration-none"><%= p.stock %> / min <%= p.min_stock %></a>
           </li>
           <% }) %>
-          <% if (!lowStock.length) { %>
-          <li class="list-group-item text-success small"><i class="bi bi-check-circle"></i> All stock levels OK</li>
-          <% } %>
+          <% if (!lowStock.length) { %><li class="list-group-item text-success small"><i class="bi bi-check-circle"></i> All stock OK</li><% } %>
         </ul>
-        <% if (lowStock.length) { %>
-        <div class="p-2 text-center border-top"><a href="/reports/low-stock" class="btn btn-sm btn-outline-danger">View Full Report</a></div>
-        <% } %>
       </div>
     </div>
   </div>
-</div>
 
-<!-- Rate Fluctuations + Stock Velocity -->
-<div class="row g-3 mb-3">
-  <div class="col-lg-6">
-    <div class="card h-100">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-graph-up-arrow"></i> Rate Changes</span>
-        <small class="text-muted">Recent product rate updates</small>
-      </div>
+  <% if (!negativeStock.length && can('dash.ai')) { %>
+  <div class="col-md-6">
+    <div class="card h-100 ai-card">
+      <div class="card-header"><i class="bi bi-stars text-primary"></i> AI: Stock-Out Risk (Next 14 Days)</div>
       <div class="card-body p-0">
-        <% if (rateChanges.length) { %>
+        <% if (stockOutRisk.length) { %>
         <table class="table table-sm mb-0">
-          <thead class="table-light"><tr><th>Product</th><th>Old Rate</th><th>New Rate</th><th>Change</th><th>Date</th></tr></thead>
+          <thead class="table-light"><tr><th>Product</th><th>Stock</th><th>Sold/30d</th><th>Days</th></tr></thead>
           <tbody>
-            <% rateChanges.forEach(r => { %>
-            <tr>
-              <td><strong><%= r.name %></strong></td>
-              <td class="text-muted"><%= formatCurrency(r.old_rate) %></td>
-              <td class="fw-bold"><%= formatCurrency(r.new_rate) %></td>
-              <td>
-                <% if (r.pct_change > 0) { %>
-                <span class="badge bg-danger"><i class="bi bi-arrow-up"></i> <%= r.pct_change %>%</span>
-                <% } else { %>
-                <span class="badge bg-success"><i class="bi bi-arrow-down"></i> <%= Math.abs(r.pct_change) %>%</span>
-                <% } %>
-              </td>
-              <td class="text-muted small"><%= formatDate(r.changed_at) %></td>
+            <% stockOutRisk.forEach(s => { %>
+            <tr class="<%= s.days_left <= 7 ? 'risk-high' : 'risk-medium' %>">
+              <td><a href="/products/edit/<%= s.id %>"><strong><%= s.name %></strong></a></td>
+              <td><%= s.stock %></td>
+              <td><%= s.sold_30d %></td>
+              <td><a href="/stock/add?product_id=<%= s.id %>" class="badge bg-<%= s.days_left<=7?'danger':'warning text-dark' %> text-decoration-none"><%= s.days_left %>d</a></td>
             </tr>
             <% }) %>
           </tbody>
         </table>
         <% } else { %>
-        <div class="p-4 text-center text-muted small">No rate changes recorded yet.<br>Rate changes are logged automatically when you edit a product's rate.</div>
+        <div class="p-3 text-center text-muted small">No imminent stock-outs.</div>
         <% } %>
       </div>
     </div>
   </div>
+  <% } %>
+</div>
 
-  <div class="col-lg-6">
-    <div class="card h-100">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-speedometer"></i> Stock Forecast</span>
-        <small class="text-muted">Days of stock left (based on 30d sales)</small>
-      </div>
+<!-- Stock Forecast: Running Items Only -->
+<div class="row g-3 mb-3">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between"><span><i class="bi bi-speedometer"></i> Stock Forecast - Running Items (sold within last 90 days)</span><a href="/reports/stock-position" class="small">Full Report →</a></div>
       <div class="card-body p-0">
         <% if (stockVelocity.length) { %>
-        <table class="table table-sm mb-0">
-          <thead class="table-light"><tr><th>Product</th><th>Stock</th><th>Sold/30d</th><th>Days Left</th></tr></thead>
-          <tbody>
-            <% stockVelocity.forEach(s => { %>
-            <tr class="<%= s.days_left <= 7 ? 'table-danger' : s.days_left <= 14 ? 'table-warning' : '' %>">
-              <td><strong><%= s.name %></strong></td>
-              <td><%= s.stock.toLocaleString() %></td>
-              <td><%= s.sold_30d.toLocaleString() %></td>
-              <td>
-                <% if (s.days_left <= 7) { %>
-                <span class="badge bg-danger fw-bold"><%= s.days_left %>d ⚠</span>
-                <% } else if (s.days_left <= 14) { %>
-                <span class="badge bg-warning text-dark"><%= s.days_left %>d</span>
-                <% } else { %>
-                <span class="badge bg-success"><%= s.days_left %>d</span>
-                <% } %>
-              </td>
-            </tr>
-            <% }) %>
-          </tbody>
-        </table>
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead class="table-light"><tr><th>Product</th><th>Stock</th><th>Sold/30d</th><th>Sold/90d</th><th>Days Left</th><th>Action</th></tr></thead>
+            <tbody>
+              <% stockVelocity.forEach(s => { %>
+              <tr class="<%= s.days_left <= 7 ? 'risk-high' : s.days_left <= 14 ? 'risk-medium' : '' %>">
+                <td><a href="/products/edit/<%= s.id %>"><strong><%= s.name %></strong></a></td>
+                <td><%= s.stock %></td>
+                <td><%= s.sold_30d %></td>
+                <td><%= s.sold_90d %></td>
+                <td>
+                  <% if (s.days_left <= 7) { %><span class="badge bg-danger"><%= s.days_left %>d ⚠</span>
+                  <% } else if (s.days_left <= 14) { %><span class="badge bg-warning text-dark"><%= s.days_left %>d</span>
+                  <% } else { %><span class="badge bg-success"><%= s.days_left %>d</span><% } %>
+                </td>
+                <td>
+                  <% if (s.days_left <= 14) { %>
+                    <a href="/purchases/add?product_id=<%= s.id %>" class="btn btn-sm btn-outline-danger">Reorder</a>
+                  <% } else { %>
+                    <a href="/stock/ledger?product_id=<%= s.id %>" class="btn btn-sm btn-outline-secondary">Ledger</a>
+                  <% } %>
+                </td>
+              </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
         <% } else { %>
-        <div class="p-4 text-center text-muted small">No sales data yet.<br>Stock forecast will appear after invoices are recorded.</div>
+        <div class="p-4 text-center text-muted small">No running items found (no sales in last 90 days).</div>
         <% } %>
       </div>
     </div>
   </div>
 </div>
+<% } %>
 
+<!-- Top Customers -->
+<% if (can('dash.customers')) { %>
+<div class="section-title">TOP CUSTOMERS</div>
 <div class="row g-3 mb-3">
-  <!-- Recent Orders -->
+  <% [['This Month',topCustomersMonth],['Last Quarter',topCustomersQuarter],['This Year',topCustomersYear],['All Time',topCustomersAllTime]].forEach(arr => { %>
+  <div class="col-md-3">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-trophy text-warning"></i> <%= arr[0] %></div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+          <% arr[1].forEach((c,i) => { %>
+          <li class="list-group-item py-2 small d-flex justify-content-between">
+            <a href="/customers/ledger/<%= c.id %>" class="text-decoration-none text-dark"><span class="badge bg-secondary me-1"><%= i+1 %></span><%= c.name %></a>
+            <strong class="text-success"><%= formatCurrency(c.sales) %></strong>
+          </li>
+          <% }) %>
+          <% if (!arr[1].length) { %><li class="list-group-item text-muted small">No data</li><% } %>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <% }) %>
+</div>
+<% } %>
+
+<!-- Top Products + Profit Leakage -->
+<% if (can('dash.products')) { %>
+<div class="row g-3 mb-3">
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header text-success d-flex justify-content-between"><span><i class="bi bi-graph-up-arrow"></i> Top Products by Profit (<%= rangeLabel %>)</span><a href="/reports" class="small">Report →</a></div>
+      <div class="card-body p-0">
+        <% if (topProductsByProfit.length) { %>
+        <table class="table table-sm mb-0">
+          <thead class="table-light"><tr><th>Product</th><th class="text-end">Qty</th><th class="text-end">Revenue</th><th class="text-end">Profit</th></tr></thead>
+          <tbody>
+            <% topProductsByProfit.forEach(p => { %>
+            <tr>
+              <td><a href="/products/edit/<%= p.id %>"><strong><%= p.name %></strong></a></td>
+              <td class="text-end"><%= p.qty %></td>
+              <td class="text-end text-muted"><%= formatCurrency(p.revenue) %></td>
+              <td class="text-end fw-bold text-success"><%= formatCurrency(p.profit) %></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        <% } else { %><div class="p-3 text-center text-muted small">No data</div><% } %>
+      </div>
+    </div>
+  </div>
+  <% if (can('dash.ai')) { %>
+  <div class="col-md-6">
+    <div class="card h-100 ai-card">
+      <div class="card-header text-danger"><i class="bi bi-graph-down"></i> AI: Profit Leakage (Margin &lt; 5%)</div>
+      <div class="card-body p-0">
+        <% if (profitLeakage.length) { %>
+        <table class="table table-sm mb-0">
+          <thead class="table-light"><tr><th>Product</th><th class="text-end">Revenue</th><th class="text-end">Profit</th><th class="text-end">Margin</th></tr></thead>
+          <tbody>
+            <% profitLeakage.forEach(p => { var m = p.revenue>0?((p.profit/p.revenue)*100).toFixed(1):0; %>
+            <tr class="risk-medium">
+              <td><a href="/products/edit/<%= p.id %>"><strong><%= p.name %></strong></a></td>
+              <td class="text-end"><%= formatCurrency(p.revenue) %></td>
+              <td class="text-end text-danger"><%= formatCurrency(p.profit) %></td>
+              <td class="text-end"><span class="badge bg-warning text-dark"><%= m %>%</span></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        <% } else { %><div class="p-3 text-center text-success small"><i class="bi bi-check-circle"></i> No profit leakage</div><% } %>
+      </div>
+    </div>
+  </div>
+  <% } %>
+</div>
+<% } %>
+
+<!-- AI Insights -->
+<% if (can('dash.ai')) { %>
+<div class="section-title">AI INSIGHTS & RISK</div>
+<div class="row g-3 mb-3">
+  <div class="col-md-6">
+    <div class="card h-100 ai-card">
+      <div class="card-header"><i class="bi bi-arrow-repeat text-primary"></i> Customer Reorder Prediction</div>
+      <div class="card-body p-0">
+        <% if (reorderPredictions.length) { %>
+        <table class="table table-sm mb-0">
+          <thead class="table-light"><tr><th>Customer</th><th>Phone</th><th class="text-end">Last Order</th><th class="text-end">Days</th><th>Action</th></tr></thead>
+          <tbody>
+            <% reorderPredictions.forEach(c => { %>
+            <tr>
+              <td><a href="/customers/ledger/<%= c.id %>"><strong><%= c.name %></strong></a></td>
+              <td class="small"><%= c.phone || '—' %></td>
+              <td class="text-end small"><%= formatDate(c.last_order) %></td>
+              <td class="text-end"><span class="badge bg-info"><%= Math.round(c.days_since) %>d</span></td>
+              <td><a href="/orders/add?customer_id=<%= c.id %>" class="btn btn-sm btn-outline-primary">Order</a></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        <% } else { %><div class="p-3 text-center text-muted small">No reorder predictions</div><% } %>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card h-100 ai-card">
+      <div class="card-header"><i class="bi bi-shield-exclamation text-danger"></i> AI: Credit Risk Scoring</div>
+      <div class="card-body p-0">
+        <% if (creditRiskScored.length) { %>
+        <table class="table table-sm mb-0">
+          <thead class="table-light"><tr><th>Customer</th><th class="text-end">Balance</th><th class="text-end">Overdue</th><th>Risk</th></tr></thead>
+          <tbody>
+            <% creditRiskScored.forEach(c => { %>
+            <tr class="risk-<%= c.risk %>">
+              <td><a href="/customers/ledger/<%= c.id %>"><strong><%= c.name %></strong></a></td>
+              <td class="text-end"><%= formatCurrency(c.balance) %></td>
+              <td class="text-end text-danger"><a href="/invoices?customer_id=<%= c.id %>&status=overdue" class="text-decoration-none text-danger"><%= formatCurrency(c.overdue_amt) %> <span class="text-muted small">(<%= c.overdue_cnt %>)</span></a></td>
+              <td><span class="badge bg-<%= c.risk==='high'?'danger':c.risk==='medium'?'warning text-dark':'success' %>"><%= c.risk.toUpperCase() %></span></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        <% } else { %><div class="p-3 text-center text-success small"><i class="bi bi-check-circle"></i> No credit risk</div><% } %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Anomalies + Bottlenecks -->
+<div class="row g-3 mb-3">
+  <div class="col-md-6">
+    <div class="card h-100 ai-card">
+      <div class="card-header"><i class="bi bi-exclamation-diamond text-warning"></i> Anomalies (Comm+Disc &gt; 20%)</div>
+      <div class="card-body p-0">
+        <% if (lowMarginInvoices.length) { %>
+        <table class="table table-sm mb-0">
+          <thead class="table-light"><tr><th>Invoice</th><th>Customer</th><th class="text-end">Total</th><th class="text-end">Comm+Disc</th></tr></thead>
+          <tbody>
+            <% lowMarginInvoices.forEach(i => { %>
+            <tr>
+              <td><a href="/invoices/view/<%= i.id %>"><%= i.invoice_no %></a></td>
+              <td class="small"><a href="/customers/ledger/<%= i.customer_id %>" class="text-decoration-none text-dark"><%= i.customer_name %></a></td>
+              <td class="text-end"><%= formatCurrency(i.total) %></td>
+              <td class="text-end text-danger"><%= formatCurrency((i.commission_amount||0) + (i.disc_amt||0)) %></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        <% } else { %><div class="p-3 text-center text-success small"><i class="bi bi-check-circle"></i> No anomalies</div><% } %>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card h-100 ai-card">
+      <div class="card-header"><i class="bi bi-hourglass-split text-warning"></i> Bottlenecks (Pending &gt; 7d)</div>
+      <div class="card-body p-0">
+        <% if (oldPendingOrders.length) { %>
+        <table class="table table-sm mb-0">
+          <thead class="table-light"><tr><th>Order</th><th>Customer</th><th class="text-end">Amount</th><th class="text-end">Days</th></tr></thead>
+          <tbody>
+            <% oldPendingOrders.forEach(o => { %>
+            <tr class="risk-medium">
+              <td><a href="/orders/view/<%= o.id %>"><%= o.order_no %></a></td>
+              <td class="small"><a href="/customers/ledger/<%= o.customer_id %>" class="text-decoration-none text-dark"><%= o.customer_name %></a></td>
+              <td class="text-end fw-bold"><%= formatCurrency(o.total) %></td>
+              <td class="text-end"><span class="badge bg-warning text-dark"><%= Math.round(o.days_pending) %>d</span></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        <% } else { %><div class="p-3 text-center text-success small"><i class="bi bi-check-circle"></i> No bottlenecks</div><% } %>
+      </div>
+    </div>
+  </div>
+</div>
+<% } %>
+
+<!-- User Monitoring (Audit Log) -->
+<% if (can('dash.audit')) { %>
+<div class="row g-3 mb-3">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between">
+        <span><i class="bi bi-person-check"></i> User Activity Monitoring (Last 7 Days)</span>
+        <a href="/reports/audit-log" class="small">Full Audit Log →</a>
+      </div>
+      <div class="card-body p-0">
+        <% if (userEdits.length) { %>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>User</th>
+                <th>Action</th>
+                <th>Type</th>
+                <th>Reference</th>
+                <th>Party</th>
+                <th class="text-end">Amount</th>
+                <th class="text-end">When</th>
+                <th class="text-center">View</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% userEdits.forEach(u => { %>
+              <tr class="audit-row <%= u.link ? 'clickable' : '' %>" <%= u.link ? `onclick="window.location.href='${u.link}'"` : '' %>>
+                <td onclick="event.stopPropagation()">
+                  <% if (u.user_link) { %>
+                    <a href="<%= u.user_link %>" class="text-decoration-none">
+                      <i class="bi bi-person-circle"></i>
+                      <strong><%= u.user_name || u.username || 'system' %></strong>
+                      <% if (u.role) { %><span class="badge bg-<%= u.role==='superadmin'?'danger':u.role==='admin'?'primary':'secondary' %> ms-1" style="font-size:10px"><%= u.role %></span><% } %>
+                    </a>
+                  <% } else { %>
+                    <i class="bi bi-gear"></i> <em class="text-muted">system</em>
+                  <% } %>
+                </td>
+                <td><span class="badge audit-action-<%= u.action %>"><%= u.action.toUpperCase() %></span></td>
+                <td><small class="text-muted"><%= u.entity_type || '—' %></small></td>
+                <td>
+                  <% if (u.link && u.ref_no) { %>
+                    <span class="fw-bold text-primary"><%= u.ref_no %></span>
+                  <% } else if (u.ref_no) { %>
+                    <span class="fw-bold"><%= u.ref_no %></span>
+                  <% } else { %>
+                    <span class="text-muted small"><%= u.entity_id ? '#'+u.entity_id : '—' %></span>
+                  <% } %>
+                </td>
+                <td><small><%= u.party_name || '—' %></small></td>
+                <td class="text-end">
+                  <% if (u.amount) { %>
+                    <strong><%= formatCurrency(u.amount) %></strong>
+                  <% } else { %>
+                    <span class="text-muted">—</span>
+                  <% } %>
+                </td>
+                <td class="text-end small text-muted"><%= formatDate(u.created_at) %></td>
+                <td class="text-center" onclick="event.stopPropagation()">
+                  <% if (u.link && u.action !== 'delete') { %>
+                    <a href="<%= u.link %>" class="btn btn-sm btn-outline-primary" title="View transaction"><i class="bi bi-eye"></i></a>
+                  <% } else if (u.action === 'delete') { %>
+                    <span class="badge bg-danger" title="Record was deleted"><i class="bi bi-trash"></i> Deleted</span>
+                  <% } else { %>
+                    <span class="text-muted">—</span>
+                  <% } %>
+                </td>
+              </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+        <small class="d-block text-muted text-center py-2"><i class="bi bi-info-circle"></i> Click any row to view the transaction</small>
+        <% } else { %>
+        <div class="p-3 text-center text-muted small">No user activity in the last 7 days</div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+<% } %>
+
+<!-- Recent Orders + Payments -->
+<% if (can('dash.recent')) { %>
+<div class="row g-3 mb-3">
   <div class="col-lg-7">
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
@@ -301,59 +717,53 @@
         <a href="/orders" class="btn btn-sm btn-outline-primary">View All</a>
       </div>
       <div class="card-body p-0">
-        <div class="table-responsive">
-          <table class="table table-hover mb-0 table-sm">
-            <thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Total</th><th>Status</th></tr></thead>
-            <tbody>
-              <% recentOrders.forEach(o => { %>
-              <tr>
-                <td><a href="/orders/view/<%= o.id %>" class="fw-bold"><%= o.order_no %></a></td>
-                <td><%= o.customer_name %></td>
-                <td><%= formatDate(o.order_date) %></td>
-                <td class="text-success fw-bold"><%= formatCurrency(o.total) %></td>
-                <td><span class="badge bg-<%= statusBadge(o.status) %>"><%= o.status %></span></td>
-              </tr>
-              <% }) %>
-              <% if (!recentOrders.length) { %><tr><td colspan="5" class="text-center text-muted py-3">No orders yet</td></tr><% } %>
-            </tbody>
-          </table>
-        </div>
+        <table class="table table-sm mb-0">
+          <thead class="table-light"><tr><th>Order</th><th>Customer</th><th>Date</th><th class="text-end">Total</th><th>Status</th></tr></thead>
+          <tbody>
+            <% recentOrders.forEach(o => { %>
+            <tr>
+              <td><a href="/orders/view/<%= o.id %>"><%= o.order_no %></a></td>
+              <td><a href="/customers/ledger/<%= o.customer_id %>" class="text-decoration-none text-dark"><%= o.customer_name %></a></td>
+              <td class="small"><%= formatDate(o.order_date) %></td>
+              <td class="text-end fw-bold"><%= formatCurrency(o.total) %></td>
+              <td><span class="badge bg-<%= statusBadge(o.status) %>"><%= o.status %></span></td>
+            </tr>
+            <% }) %>
+            <% if (!recentOrders.length) { %><tr><td colspan="5" class="text-center text-muted py-3">No orders yet</td></tr><% } %>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
-
-  <!-- Recent Payments -->
   <div class="col-lg-5">
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
         <span><i class="bi bi-cash-coin"></i> Recent Payments</span>
-        <a href="/payments" class="btn btn-sm btn-outline-success">View All</a>
+        <div>
+          <a href="/payments/receive" class="btn btn-sm btn-success">+ Receive</a>
+          <a href="/payments/pay" class="btn btn-sm btn-primary">+ Pay</a>
+        </div>
       </div>
       <div class="card-body p-0">
         <ul class="list-group list-group-flush">
           <% recentPayments.forEach(p => { %>
           <li class="list-group-item py-2 px-3">
             <div class="d-flex justify-content-between align-items-center">
-              <div>
-                <span class="badge bg-<%= p.entity_type==='customer'?'success':'primary' %> me-1"><%= p.entity_type==='customer'?'In':'Out' %></span>
-                <strong><%= p.entity_name || '-' %></strong>
-              </div>
+              <div><span class="badge bg-<%= p.entity_type==='customer'?'success':'primary' %> me-1"><%= p.entity_type==='customer'?'In':'Out' %></span><strong><%= p.entity_name || '-' %></strong></div>
               <strong class="<%= p.entity_type==='customer'?'text-success':'text-primary' %>"><%= formatCurrency(p.amount) %></strong>
             </div>
-            <div class="text-muted small mt-1"><%= formatDate(p.payment_date) %> &nbsp;·&nbsp; <%= p.payment_method %></div>
+            <div class="text-muted small mt-1"><%= formatDate(p.payment_date) %> · <%= p.payment_method %></div>
           </li>
           <% }) %>
           <% if (!recentPayments.length) { %><li class="list-group-item text-muted small">No payments yet</li><% } %>
         </ul>
-        <div class="p-2 text-center border-top d-flex gap-2 justify-content-center">
-          <a href="/payments/receive" class="btn btn-sm btn-success">+ Receive</a>
-          <a href="/payments/pay" class="btn btn-sm btn-primary">+ Pay</a>
-        </div>
       </div>
     </div>
   </div>
 </div>
+<% } %>
 
+<% if (can('dash.charts')) { %>
 <script>
 const chartData = <%- JSON.stringify(chartData) %>;
 const ctx = document.getElementById('revenueChart').getContext('2d');
@@ -368,16 +778,10 @@ new Chart(ctx, {
   },
   options: {
     responsive: true,
-    plugins: {
-      legend: { position: 'top' },
-      tooltip: {
-        callbacks: {
-          label: ctx => ' Rs. ' + ctx.parsed.y.toLocaleString('en-PK', {minimumFractionDigits:0})
-        }
-      }
-    },
+    plugins: { legend: { position: 'top' }, tooltip: { callbacks: { label: ctx => ' Rs. ' + ctx.parsed.y.toLocaleString('en-PK', {minimumFractionDigits:0}) } } },
     scales: { y: { beginAtZero: true, ticks: { callback: v => 'Rs.' + (v>=1000 ? (v/1000).toFixed(0)+'k' : v) } } }
   }
 });
 </script>
+<% } %>
 <%- include('partials/footer') %>

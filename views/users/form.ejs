@@ -83,7 +83,7 @@
           </div>
         </div>
 
-        <div class="card" id="permsCard">
+        <div class="card mb-3" id="permsCard">
           <div class="card-header d-flex justify-content-between align-items-center">
             <span class="fw-bold">Module Permissions</span>
             <div>
@@ -107,6 +107,46 @@
             </div>
           </div>
         </div>
+
+        <div class="card border-primary" id="dashCard">
+          <div class="card-header d-flex justify-content-between align-items-center bg-primary bg-opacity-10">
+            <span class="fw-bold"><i class="bi bi-speedometer2"></i> Dashboard Widgets</span>
+            <div>
+              <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleDash(true)">All</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleDash(false)">None</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <p class="small text-muted mb-2">By default, only <strong>SuperAdmin</strong> sees the dashboard. Grant specific widgets to this user below. <em>Requires "dashboard" module to be enabled too.</em></p>
+            <% var DASH_WIDGETS = [
+              {key:'dash.financials', label:'Core Financial Cards (Sales/Profit/etc.)'},
+              {key:'dash.profit',     label:'Profit Breakdown'},
+              {key:'dash.cash',       label:'Cash Position'},
+              {key:'dash.aging',      label:'Overdue Aging Buckets'},
+              {key:'dash.activity',   label:'Sales Activity Stats'},
+              {key:'dash.accounts',   label:'Multi-Account Performance'},
+              {key:'dash.charts',     label:'Revenue/Expense Charts'},
+              {key:'dash.stock',      label:'Stock Intelligence'},
+              {key:'dash.customers',  label:'Top Customers'},
+              {key:'dash.products',   label:'Top Products by Profit'},
+              {key:'dash.ai',         label:'AI Insights & Predictions'},
+              {key:'dash.audit',      label:'User Audit Log'},
+              {key:'dash.recent',     label:'Recent Orders & Payments'}
+            ]; %>
+            <div class="row">
+              <% DASH_WIDGETS.forEach(function(w){ %>
+                <div class="col-md-6">
+                  <div class="form-check">
+                    <input class="form-check-input dash-check" type="checkbox"
+                           id="d_<%= w.key %>" name="modules" value="<%= w.key %>"
+                           <%= perms.includes(w.key) ? 'checked' : '' %>>
+                    <label class="form-check-label small" for="d_<%= w.key %>"><%= w.label %></label>
+                  </div>
+                </div>
+              <% }); %>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -123,14 +163,20 @@
   function togglePerms(on) {
     document.querySelectorAll('.perm-check').forEach(c => c.checked = on);
   }
+  function toggleDash(on) {
+    document.querySelectorAll('.dash-check').forEach(c => c.checked = on);
+  }
   (function(){
     var sel = document.getElementById('roleSel');
     var card = document.getElementById('permsCard');
+    var dashCard = document.getElementById('dashCard');
     function refresh(){
       if (!sel) return;
       var isEmployee = sel.value === 'employee';
       card.style.opacity = isEmployee ? '1' : '0.55';
+      if (dashCard) dashCard.style.opacity = isEmployee ? '1' : '0.55';
       document.querySelectorAll('.perm-check').forEach(c => c.disabled = !isEmployee);
+      document.querySelectorAll('.dash-check').forEach(c => c.disabled = !isEmployee);
     }
     if (sel) { sel.addEventListener('change', refresh); refresh(); }
   })();

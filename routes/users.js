@@ -69,11 +69,12 @@ function sanitizeRole(currentUserRole, requestedRole) {
   return 'employee';
 }
 
+const DASH_WIDGET_KEYS = ['dash.financials','dash.profit','dash.cash','dash.aging','dash.activity','dash.accounts','dash.charts','dash.stock','dash.customers','dash.products','dash.ai','dash.audit','dash.recent'];
 function modulesFromBody(body) {
   let mods = body.modules;
   if (!mods) return [];
   if (!Array.isArray(mods)) mods = [mods];
-  return mods.filter(m => ALL_MODULES.includes(m));
+  return mods.filter(m => ALL_MODULES.includes(m) || DASH_WIDGET_KEYS.includes(m));
 }
 
 // CREATE

@@ -104,13 +104,15 @@ const products = <%- JSON.stringify(products) %>;
 function calcRow(el) {
   const row = el.closest('tr');
   const sel = row.querySelector('select[name="product_id[]"]');
+  const rateInput = row.querySelector('input[name="rate[]"]');
   const qty = parseFloat(row.querySelector('input[name="quantity[]"]').value) || 0;
-  let rate = parseFloat(row.querySelector('input[name="rate[]"]').value) || 0;
-  if (sel.value && !rate) {
+  // Auto-populate sell rate when product changes (or rate empty). User can override.
+  if (el === sel || !rateInput.value) {
     const opt = sel.options[sel.selectedIndex];
-    rate = parseFloat(opt.dataset.rate) || 0;
-    row.querySelector('input[name="rate[]"]').value = rate;
+    const autoRate = opt ? (parseFloat(opt.dataset.rate) || 0) : 0;
+    if (autoRate > 0) rateInput.value = autoRate;
   }
+  const rate = parseFloat(rateInput.value) || 0;
   row.querySelector('input[name="amount[]"]').value = (qty * rate).toFixed(2);
   calcTotal();
 }

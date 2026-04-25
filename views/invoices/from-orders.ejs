@@ -1,0 +1,79 @@
+<%- include('../partials/header') %>
+<div class="page-header d-flex justify-content-between align-items-center">
+  <h2><i class="bi bi-file-earmark-plus"></i> Generate Invoice from Orders</h2>
+  <a href="/invoices" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <form method="get" action="/invoices/from-orders" class="row g-2 align-items-end">
+      <div class="col-md-6">
+        <label class="form-label fw-bold">1. Select Customer</label>
+        <select name="customer_id" class="form-select" onchange="this.form.submit()" required>
+          <option value="">— Pick a customer with pending orders —</option>
+          <% customers.forEach(c => { %>
+            <option value="<%= c.id %>" <%= (customerId == c.id) ? 'selected' : '' %>><%= c.name %></option>
+          <% }); %>
+        </select>
+        <% if (!customers.length) { %>
+          <div class="form-text text-warning">No customers have pending or confirmed orders.</div>
+        <% } %>
+      </div>
+    </form>
+  </div>
+</div>
+
+<% if (customerId) { %>
+  <form method="get" action="/invoices/add" id="genForm">
+    <input type="hidden" name="from_orders" id="fromOrdersField">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-bold">2. Select Pending Orders to Combine</span>
+        <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleAll(true)">Select All</button>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-hover mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th style="width:40px"><input type="checkbox" onchange="toggleAll(this.checked)"></th>
+              <th>Order #</th>
+              <th>Date</th>
+              <th class="text-end">Items</th>
+              <th class="text-end">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (!orders.length) { %>
+              <tr><td colspan="5" class="text-center text-muted py-4">No pending orders for this customer.</td></tr>
+            <% } %>
+            <% orders.forEach(o => { %>
+              <tr>
+                <td><input type="checkbox" class="ord-chk" value="<%= o.id %>"></td>
+                <td><strong><%= o.order_no %></strong></td>
+                <td><%= o.order_date %></td>
+                <td class="text-end"><%= o.item_count %></td>
+                <td class="text-end fw-bold">Rs. <%= Number(o.total||0).toLocaleString('en-PK',{minimumFractionDigits:2}) %></td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer text-end">
+        <button type="button" class="btn btn-success btn-lg" onclick="generate()">
+          <i class="bi bi-receipt"></i> Generate Invoice from Selected
+        </button>
+      </div>
+    </div>
+  </form>
+<% } %>
+
+<script>
+function toggleAll(on){ document.querySelectorAll('.ord-chk').forEach(c => c.checked = on); }
+function generate(){
+  const ids = Array.from(document.querySelectorAll('.ord-chk:checked')).map(c => c.value);
+  if (!ids.length) { alert('Select at least one order.'); return; }
+  document.getElementById('fromOrdersField').value = ids.join(',');
+  document.getElementById('genForm').submit();
+}
+</script>
+<%- include('../partials/footer') %>

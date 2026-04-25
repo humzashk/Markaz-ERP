@@ -24,7 +24,18 @@ router.get('/add', (req, res) => {
   const noteType = req.query.type || 'credit'; // credit = sales return, debit = purchase return
   const customers = db.prepare('SELECT id, name FROM customers WHERE status = ? ORDER BY name').all('active');
   const vendors = db.prepare('SELECT id, name FROM vendors WHERE status = ? ORDER BY name').all('active');
-  const products = db.prepare('SELECT id, name, rate FROM products WHERE status = ? ORDER BY name').all('active');
+  // Credit/Debit note rate: prefer SELL price, fallback to legacy rate column. Manual override allowed in UI.
+  const products = (() => {
+    try {
+      return db.prepare(`
+        SELECT id, name,
+               COALESCE(NULLIF(selling_price,0), NULLIF(rate,0), 0) as rate
+        FROM products WHERE status = ? ORDER BY name
+      `).all('active');
+    } catch(e) {
+      return db.prepare('SELECT id, name, rate FROM products WHERE status = ? ORDER BY name').all('active');
+    }
+  })();
   const invoices = db.prepare(`SELECT i.id, i.invoice_no, c.name as customer_name FROM invoices i JOIN customers c ON c.id = i.customer_id ORDER BY i.id DESC LIMIT 50`).all();
   const purchases = db.prepare(`SELECT p.id, p.purchase_no, v.name as vendor_name FROM purchases p JOIN vendors v ON v.id = p.vendor_id ORDER BY p.id DESC LIMIT 50`).all();
   res.render('creditnotes/form', { page: 'creditnotes', note: null, noteType, customers, vendors, products, invoices, purchases, edit: false });

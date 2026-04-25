@@ -71,6 +71,13 @@ async function startServer() {
 
   // Auth + RBAC (must be before protected routes)
   app.use(loadUser);
+
+  // Audit user-context: store current user in AsyncLocalStorage so addAuditLog can pick it up
+  const { auditContext } = require('./database');
+  app.use((req, res, next) => {
+    auditContext.run({ userId: req.user ? req.user.id : null }, () => next());
+  });
+
   app.use('/', require('./routes/auth'));     // /login, /logout, /profile (public bits handled inside)
   app.use(autoGuard);                         // anything below requires auth + module permission
   app.use('/users', require('./routes/users'));

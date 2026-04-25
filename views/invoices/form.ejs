@@ -43,14 +43,12 @@
               <% }) %>
             </select>
           </div>
-          <% if (!edit && typeof pendingOrders !== 'undefined' && pendingOrders && pendingOrders.length) { %>
-          <div class="mb-3"><label class="form-label">Link Orders (optional, multi-select)</label>
-            <select name="order_ids" class="form-select" multiple size="4">
-              <% pendingOrders.forEach(o => { %>
-                <option value="<%= o.id %>"><%= o.order_no %> — <%= o.customer_name %> — Rs.<%= o.total %></option>
-              <% }) %>
-            </select>
-          </div>
+          <!-- Link Orders dropdown removed — use 'Generate Invoice from Orders' button on listing page -->
+          <% if (!edit && typeof linkedOrderIds !== 'undefined' && linkedOrderIds && linkedOrderIds.length) { %>
+            <% linkedOrderIds.forEach(oid => { %>
+              <input type="hidden" name="order_ids" value="<%= oid %>">
+            <% }) %>
+            <div class="alert alert-info py-2 mb-3"><i class="bi bi-link-45deg"></i> This invoice is being generated from <strong><%= linkedOrderIds.length %> order(s)</strong>. Items pre-loaded — edit as needed.</div>
           <% } %>
           <% if (edit) { %>
           <div class="mb-3"><label class="form-label">Status</label>

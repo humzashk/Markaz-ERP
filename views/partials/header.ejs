@@ -58,7 +58,10 @@
         <li class="sidebar-section">TRANSACTIONS</li>
         <% if (canSee('orders')) { %><li><a href="/orders" class="<%= page === 'orders' ? 'active' : '' %>"><i class="bi bi-cart"></i><span>Orders</span></a></li><% } %>
         <% if (canSee('invoices')) { %><li><a href="/invoices" class="<%= page === 'invoices' ? 'active' : '' %>"><i class="bi bi-receipt"></i><span>Invoices</span></a></li><% } %>
-        <% if (canSee('purchases')) { %><li><a href="/purchases" class="<%= page === 'purchases' ? 'active' : '' %>"><i class="bi bi-bag"></i><span>Purchases</span></a></li><% } %>
+        <% if (canSee('purchases')) { %>
+          <li><a href="/purchases" class="<%= page === 'purchases' ? 'active' : '' %>"><i class="bi bi-bag"></i><span>Purchases</span></a></li>
+          <li><a href="/purchases/invoice" class="<%= page === 'purchase-invoice' ? 'active' : '' %>"><i class="bi bi-file-earmark-text"></i><span>Purchase Invoice</span></a></li>
+        <% } %>
         <% if (canSee('creditnotes')) { %><li><a href="/creditnotes" class="<%= page === 'creditnotes' ? 'active' : '' %>"><i class="bi bi-file-earmark-minus"></i><span>Returns / Notes</span></a></li><% } %>
         <% if (canSee('bilty')) { %><li><a href="/bilty" class="<%= page === 'bilty' ? 'active' : '' %>"><i class="bi bi-send"></i><span>Bilty</span></a></li><% } %>
         <% if (canSee('breakage')) { %><li><a href="/breakage" class="<%= page === 'breakage' ? 'active' : '' %>"><i class="bi bi-exclamation-triangle"></i><span>Breakage</span></a></li><% } %>

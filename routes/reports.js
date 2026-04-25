@@ -3,12 +3,31 @@ const router = express.Router();
 const { db } = require('../database');
 const PDFDocument = require('pdfkit');
 
-// Reports index
-router.get('/', (req, res) => {
-  res.render('reports/index', { page: 'reports' });
+// Restrict financial / profit reports to SuperAdmin only
+function superAdminOnly(req, res, next) {
+  if (!req.user) return res.redirect('/login');
+  if (req.user.role !== 'superadmin') {
+    return res.status(403).render('error', {
+      page: 'error',
+      message: 'Financial / profit reports are restricted to SuperAdmin only.',
+      back: '/'
+    });
+  }
+  next();
+}
+const FINANCIAL_PATHS = ['/profit-loss', '/balance-sheet', '/trial-balance', '/order-profit', '/profit', '/financial'];
+router.use((req, res, next) => {
+  const p = req.path.toLowerCase();
+  if (FINANCIAL_PATHS.some(fp => p.startsWith(fp))) return superAdminOnly(req, res, next);
+  next();
 });
 
-// ============ FINANCIAL REPORTS ============
+// Reports index
+router.get('/', (req, res) => {
+  res.render('reports/index', { page: 'reports', isSuperAdmin: req.user && req.user.role === 'superadmin' });
+});
+
+// ============ FINANCIAL REPORTS (SuperAdmin only) ============
 
 router.get('/profit-loss', (req, res) => {
   const from = req.query.from || new Date().toISOString().substring(0, 7) + '-01';

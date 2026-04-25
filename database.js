@@ -615,6 +615,37 @@ async function initDatabase() {
     "ALTER TABLE breakage ADD COLUMN credit_note_id INTEGER",
     // Bilty per-account scope
     "ALTER TABLE bilty ADD COLUMN account_scope TEXT DEFAULT 'plastic_markaz'",
+    // Audit log: user tracking
+    "ALTER TABLE audit_log ADD COLUMN user_id INTEGER",
+    // Profit correctness: freeze cost at sale time
+    "ALTER TABLE invoice_items ADD COLUMN cost_at_sale REAL DEFAULT 0",
+    "ALTER TABLE order_items ADD COLUMN cost_at_sale REAL DEFAULT 0",
+    // Stock movement ledger: insert-only authoritative stock movements
+    `CREATE TABLE IF NOT EXISTS stock_ledger (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       product_id INTEGER NOT NULL,
+       warehouse_id INTEGER,
+       ts TEXT DEFAULT CURRENT_TIMESTAMP,
+       qty_delta INTEGER NOT NULL,
+       reason TEXT,
+       ref_type TEXT,
+       ref_id INTEGER,
+       user_id INTEGER,
+       note TEXT
+     )`,
+    "CREATE INDEX IF NOT EXISTS idx_stock_ledger_product ON stock_ledger(product_id)",
+    "CREATE INDEX IF NOT EXISTS idx_stock_ledger_ref ON stock_ledger(ref_type, ref_id)",
+    // System errors: replaces silent try/catch
+    `CREATE TABLE IF NOT EXISTS system_errors (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       ts TEXT DEFAULT CURRENT_TIMESTAMP,
+       scope TEXT,
+       message TEXT,
+       stack TEXT,
+       context TEXT,
+       user_id INTEGER
+     )`,
+    "CREATE INDEX IF NOT EXISTS idx_system_errors_ts ON system_errors(ts)",
   ];
   for (const m of migrations) {
     try { db.exec(m); } catch(e) { /* column already exists */ }
@@ -713,15 +744,26 @@ async function initDatabase() {
     if (!existing) db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(key, val);
   }
 
-  // Seed default superadmin (username: admin / password: admin123)
+  // Seed/heal default superadmin (username: admin / password: admin123)
+  // Ensures user can ALWAYS login. Set RESET_ADMIN=1 env to force password reset.
   try {
-    const userCount = db.prepare('SELECT COUNT(*) as cnt FROM users').get();
-    if (!userCount || userCount.cnt === 0) {
-      const bcrypt = require('bcryptjs');
-      const hash = bcrypt.hashSync('admin123', 10);
+    const bcrypt = require('bcryptjs');
+    const adminPass = process.env.ADMIN_PASSWORD || 'admin123';
+    const existing = db.prepare("SELECT id, status FROM users WHERE LOWER(username)='admin'").get();
+    if (!existing) {
+      const hash = bcrypt.hashSync(adminPass, 10);
       db.prepare(
         'INSERT INTO users (username, name, email, password_hash, role, status) VALUES (?, ?, ?, ?, ?, ?)'
       ).run('admin', 'Super Administrator', 'admin@markaz.local', hash, 'superadmin', 'active');
+      console.log('[seed] created default admin / ' + adminPass);
+    } else {
+      // Self-heal: ensure active and superadmin role
+      db.prepare("UPDATE users SET status='active', role='superadmin' WHERE id=?").run(existing.id);
+      if (process.env.RESET_ADMIN === '1') {
+        const hash = bcrypt.hashSync(adminPass, 10);
+        db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(hash, existing.id);
+        console.log('[seed] reset admin password to ' + adminPass);
+      }
     }
   } catch(e) { console.warn('Seed user skipped:', e.message); }
 
@@ -745,30 +787,175 @@ function generateNumber(prefix, table) {
 }
 
 function addLedgerEntry(entityType, entityId, date, description, debit, credit, refType, refId) {
+  const dr = Number.isFinite(Number(debit)) ? Number(debit) : 0;
+  const cr = Number.isFinite(Number(credit)) ? Number(credit) : 0;
+
   const lastEntry = db.prepare(
     `SELECT balance FROM ledger WHERE entity_type = ? AND entity_id = ? ORDER BY id DESC LIMIT 1`
   ).get(entityType, entityId);
-
   const prevBalance = lastEntry ? lastEntry.balance : 0;
-  const newBalance = prevBalance + debit - credit;
+  const newBalance = prevBalance + dr - cr;
 
   db.prepare(
     `INSERT INTO ledger (entity_type, entity_id, txn_date, description, debit, credit, balance, reference_type, reference_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(entityType, entityId, date, description, debit, credit, newBalance, refType, refId);
+  ).run(entityType, entityId, date, description, dr, cr, newBalance, refType, refId);
 
-  if (entityType === 'customer') {
-    db.prepare(`UPDATE customers SET balance = ? WHERE id = ?`).run(newBalance, entityId);
-  } else if (entityType === 'vendor') {
-    db.prepare(`UPDATE vendors SET balance = ? WHERE id = ?`).run(newBalance, entityId);
+  // Centralized balance update — recompute from full ledger to prevent drift
+  if (entityType === 'customer' || entityType === 'vendor') {
+    recomputeBalance(entityType, entityId);
   }
-
   return newBalance;
 }
 
-function addAuditLog(action, module, recordId, details) {
+// AsyncLocalStorage for per-request user context (used by addAuditLog)
+const { AsyncLocalStorage } = require('async_hooks');
+const auditContext = new AsyncLocalStorage();
+
+// =================================================================
+// ERROR LOGGING — replaces silent try/catch and dashboard `safe()` fallback
+// =================================================================
+function logError(scope, err, context) {
+  const msg = (err && err.message) ? err.message : String(err);
+  const stack = (err && err.stack) ? err.stack : null;
+  const ctxStr = context ? (typeof context === 'string' ? context : JSON.stringify(context)) : null;
+  let userId = null;
+  try { const ctx = auditContext.getStore(); if (ctx && ctx.userId) userId = ctx.userId; } catch(_){}
+  // Always log to console first (loud failure)
+  console.error('[ERROR]', scope, '→', msg);
+  if (stack) console.error(stack);
+  // Persist to system_errors table (best-effort)
+  try {
+    db.prepare(
+      `INSERT INTO system_errors (scope, message, stack, context, user_id) VALUES (?, ?, ?, ?, ?)`
+    ).run(scope || 'unknown', msg, stack, ctxStr, userId);
+  } catch (_) { /* DB itself broken; console already has it */ }
+}
+
+// safeQuery: replaces dashboard `safe()` — runs fn, on error logs + returns sentinel.
+// Caller can detect failure via the second return value (errored flag).
+function safeQuery(scope, fn, fallback) {
+  try { return { value: fn(), errored: false }; }
+  catch (e) { logError(scope, e); return { value: fallback, errored: true }; }
+}
+
+// =================================================================
+// VALIDATION HELPERS — strict numeric parsing, reject NaN
+// =================================================================
+function toNum(v, def) {
+  if (v === null || v === undefined || v === '') return (def !== undefined ? def : 0);
+  const n = Number(v);
+  if (!Number.isFinite(n)) return (def !== undefined ? def : 0);
+  return n;
+}
+function toInt(v, def) {
+  if (v === null || v === undefined || v === '') return (def !== undefined ? def : 0);
+  const n = parseInt(v, 10);
+  if (!Number.isFinite(n)) return (def !== undefined ? def : 0);
+  return n;
+}
+function assertPositive(scope, name, v) {
+  if (!Number.isFinite(v) || v < 0) throw new Error(`${scope}: ${name} must be a non-negative finite number, got ${v}`);
+}
+
+// =================================================================
+// STOCK LEDGER — insert-only authoritative stock movements
+// All stock changes MUST go through applyStockMovement.
+// products.stock and warehouse_stock.quantity are kept in sync as a cache.
+// =================================================================
+function applyStockMovement(productId, warehouseId, qtyDelta, refType, refId, reason, note) {
+  const pid = toInt(productId);
+  const wid = warehouseId ? toInt(warehouseId) : null;
+  const delta = toInt(qtyDelta);
+  if (!pid) throw new Error('applyStockMovement: product_id required');
+  if (delta === 0) return;
+  let userId = null;
+  try { const ctx = auditContext.getStore(); if (ctx && ctx.userId) userId = ctx.userId; } catch(_){}
+
   db.prepare(
-    `INSERT INTO audit_log (action, module, record_id, details) VALUES (?, ?, ?, ?)`
-  ).run(action, module, recordId, details);
+    `INSERT INTO stock_ledger (product_id, warehouse_id, qty_delta, reason, ref_type, ref_id, user_id, note)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(pid, wid, delta, reason || null, refType || null, refId || null, userId, note || null);
+
+  // Update cached aggregate stock
+  db.prepare('UPDATE products SET stock = COALESCE(stock,0) + ? WHERE id = ?').run(delta, pid);
+
+  if (wid) {
+    const ex = db.prepare('SELECT id FROM warehouse_stock WHERE warehouse_id = ? AND product_id = ?').get(wid, pid);
+    if (ex) {
+      db.prepare('UPDATE warehouse_stock SET quantity = COALESCE(quantity,0) + ? WHERE id = ?').run(delta, ex.id);
+    } else {
+      try {
+        db.prepare('INSERT INTO warehouse_stock (warehouse_id, product_id, quantity) VALUES (?, ?, ?)').run(wid, pid, delta);
+      } catch (e) { logError('applyStockMovement.warehouse_stock_insert', e, { wid, pid, delta }); }
+    }
+  }
+}
+
+// Reverse all stock movements previously recorded for a (refType, refId) pair.
+// Used when editing or deleting a transaction so we can re-apply cleanly.
+function reverseStockForRef(refType, refId) {
+  if (!refType || !refId) return;
+  const rows = db.prepare(
+    `SELECT product_id, warehouse_id, qty_delta FROM stock_ledger WHERE ref_type = ? AND ref_id = ?`
+  ).all(refType, refId);
+  for (const r of rows) {
+    applyStockMovement(r.product_id, r.warehouse_id, -r.qty_delta, refType, refId, 'reverse', 'auto-reversal on edit/delete');
+  }
+}
+
+// =================================================================
+// BALANCE RECOMPUTATION — single source of truth
+// Recomputes customers.balance / vendors.balance from ledger.
+// Routes should NOT directly UPDATE balance columns.
+// =================================================================
+function recomputeBalance(entityType, entityId) {
+  if (!['customer','vendor'].includes(entityType)) return;
+  const row = db.prepare(
+    `SELECT COALESCE(SUM(debit) - SUM(credit), 0) as bal FROM ledger WHERE entity_type = ? AND entity_id = ?`
+  ).get(entityType, entityId);
+  const bal = row ? row.bal : 0;
+  if (entityType === 'customer') {
+    db.prepare('UPDATE customers SET balance = ? WHERE id = ?').run(bal, entityId);
+  } else {
+    db.prepare('UPDATE vendors SET balance = ? WHERE id = ?').run(bal, entityId);
+  }
+  return bal;
+}
+
+// Remove ledger entries for a (refType, refId) — used on edit/delete of source doc
+function removeLedgerForRef(entityType, entityId, refType, refId) {
+  if (!refType || !refId) return;
+  db.prepare(`DELETE FROM ledger WHERE entity_type = ? AND entity_id = ? AND reference_type = ? AND reference_id = ?`)
+    .run(entityType, entityId, refType, refId);
+}
+
+// Lookup current product cost (used to freeze cost_at_sale on invoices)
+function getProductCost(productId) {
+  const row = db.prepare(
+    `SELECT COALESCE(NULLIF(cost_price,0), NULLIF(purchase_price,0), NULLIF(purchase_rate,0), 0) as c
+     FROM products WHERE id = ?`
+  ).get(productId);
+  return row ? Number(row.c) || 0 : 0;
+}
+
+function addAuditLog(action, module, recordId, details, userId) {
+  // If userId not explicitly passed, pull from request context
+  if (userId == null) {
+    const ctx = auditContext.getStore();
+    if (ctx && ctx.userId) userId = ctx.userId;
+  }
+  try {
+    db.prepare(
+      `INSERT INTO audit_log (action, module, record_id, details, user_id) VALUES (?, ?, ?, ?, ?)`
+    ).run(action, module, recordId, details, userId || null);
+  } catch (e) {
+    // Fallback for old schema without user_id column
+    try {
+      db.prepare(
+        `INSERT INTO audit_log (action, module, record_id, details) VALUES (?, ?, ?, ?)`
+      ).run(action, module, recordId, details);
+    } catch (_) {}
+  }
 }
 
 // Export a getter so routes always get the initialized db
@@ -778,5 +965,17 @@ module.exports = {
   generateNumber,
   addLedgerEntry,
   addAuditLog,
-  getSettings
+  auditContext,
+  getSettings,
+  // Integrity helpers (added for stabilization)
+  logError,
+  safeQuery,
+  toNum,
+  toInt,
+  assertPositive,
+  applyStockMovement,
+  reverseStockForRef,
+  recomputeBalance,
+  removeLedgerForRef,
+  getProductCost
 };

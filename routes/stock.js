@@ -1,6 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { db, addAuditLog } = require('../database');
+const { db, addAuditLog, applyStockMovement, reverseStockForRef, toInt, logError } = require('../database');
+
+// Adjustment types whose effect on stock is positive (+) vs negative (-)
+const _addTypes = new Set(['add','return','transfer_in']);
+function _signedDelta(type, qty) {
+  return _addTypes.has(type) ? Math.abs(qty) : -Math.abs(qty);
+}
 
 router.get('/', (req, res) => {
   const search = req.query.search || '';
@@ -28,44 +34,29 @@ router.get('/add', (req, res) => {
 });
 
 router.post('/add', (req, res) => {
-  const { product_id, warehouse_id, adjustment_type, quantity, reason, reference, adj_date, notes } = req.body;
-  const qty = parseInt(quantity) || 0;
-  const pid = parseInt(product_id);
-  const wid = warehouse_id ? parseInt(warehouse_id) : null;
-  if (!pid || !qty || !adjustment_type || !adj_date) {
-    return res.redirect('/stock/add?error=missing_fields');
+  try {
+    const { product_id, warehouse_id, adjustment_type, quantity, reason, reference, adj_date, notes } = req.body;
+    const qty = toInt(quantity);
+    const pid = toInt(product_id);
+    const wid = warehouse_id ? toInt(warehouse_id) : null;
+    if (!pid || !qty || !adjustment_type || !adj_date) {
+      return res.redirect('/stock/add?error=missing_fields');
+    }
+    let adjId = null;
+    db.transaction(() => {
+      const result = db.prepare(
+        `INSERT INTO stock_adjustments (product_id, warehouse_id, adjustment_type, quantity, reason, reference, adj_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(pid, wid, adjustment_type, Math.abs(qty), reason || '', reference || '', adj_date, notes || '');
+      adjId = result.lastInsertRowid;
+      const delta = _signedDelta(adjustment_type, qty);
+      applyStockMovement(pid, wid, delta, 'stock_adjustment', adjId, adjustment_type, reason || notes || null);
+      addAuditLog('create', 'stock_adjustments', adjId, `Stock ${adjustment_type}: ${qty} pcs for product ${pid}`);
+    })();
+    res.redirect('/stock');
+  } catch (e) {
+    logError('stock.adjustment.create', e, { body: req.body });
+    res.redirect('/stock?err=server');
   }
-
-  db.transaction(() => {
-    // Update main product stock
-    if (adjustment_type === 'add' || adjustment_type === 'return' || adjustment_type === 'transfer_in') {
-      db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?').run(qty, pid);
-    } else if (adjustment_type === 'reduce' || adjustment_type === 'damage' || adjustment_type === 'transfer_out') {
-      db.prepare('UPDATE products SET stock = stock - ? WHERE id = ?').run(qty, pid);
-    }
-
-    // Update warehouse stock if warehouse selected
-    if (warehouse_id) {
-      const existing = db.prepare('SELECT id FROM warehouse_stock WHERE warehouse_id = ? AND product_id = ?').get(wid, pid);
-      if (existing) {
-        if (adjustment_type === 'add' || adjustment_type === 'return' || adjustment_type === 'transfer_in') {
-          db.prepare('UPDATE warehouse_stock SET quantity = quantity + ? WHERE warehouse_id = ? AND product_id = ?').run(qty, wid, pid);
-        } else {
-          db.prepare('UPDATE warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_id = ?').run(qty, wid, pid);
-        }
-      } else {
-        const whQty = (adjustment_type === 'add' || adjustment_type === 'return') ? qty : -qty;
-        db.prepare('INSERT INTO warehouse_stock (warehouse_id, product_id, quantity) VALUES (?, ?, ?)').run(wid, pid, Math.max(0, whQty));
-      }
-    }
-
-    db.prepare(
-      `INSERT INTO stock_adjustments (product_id, warehouse_id, adjustment_type, quantity, reason, reference, adj_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(pid, wid, adjustment_type, qty, reason || '', reference || '', adj_date, notes || '');
-  })();
-
-  addAuditLog('create', 'stock_adjustments', null, `Stock ${adjustment_type}: ${qty} pcs for product ${pid}`);
-  res.redirect('/stock');
 });
 
 // Edit stock adjustment
@@ -78,50 +69,51 @@ router.get('/edit/:id', (req, res) => {
 });
 
 router.post('/edit/:id', (req, res) => {
-  const { product_id, warehouse_id, adjustment_type, quantity, reason, reference, adj_date, notes } = req.body;
-  const qty = parseInt(quantity) || 0;
-  const pid = parseInt(product_id);
-  const wid = warehouse_id ? parseInt(warehouse_id) : null;
-  const old = db.prepare('SELECT * FROM stock_adjustments WHERE id = ?').get(req.params.id);
-  if (!old) return res.redirect('/stock');
-
-  db.transaction(() => {
-    // Reverse old effect
-    const addTypes = ['add','return','transfer_in'];
-    if (addTypes.includes(old.adjustment_type)) {
-      db.prepare('UPDATE products SET stock = stock - ? WHERE id = ?').run(old.quantity, old.product_id);
-    } else {
-      db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?').run(old.quantity, old.product_id);
+  try {
+    const adjId = toInt(req.params.id);
+    const old = db.prepare('SELECT * FROM stock_adjustments WHERE id = ?').get(adjId);
+    if (!old) return res.redirect('/stock?err=notfound');
+    const { product_id, warehouse_id, adjustment_type, quantity, reason, reference, adj_date, notes } = req.body;
+    const qty = toInt(quantity);
+    const pid = toInt(product_id);
+    const wid = warehouse_id ? toInt(warehouse_id) : null;
+    if (!pid || !qty || !adjustment_type || !adj_date) {
+      return res.redirect('/stock/edit/' + adjId + '?error=missing_fields');
     }
-    // Apply new effect
-    if (addTypes.includes(adjustment_type)) {
-      db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?').run(qty, pid);
-    } else {
-      db.prepare('UPDATE products SET stock = stock - ? WHERE id = ?').run(qty, pid);
-    }
-    db.prepare(
-      `UPDATE stock_adjustments SET product_id=?, warehouse_id=?, adjustment_type=?, quantity=?, reason=?, reference=?, adj_date=?, notes=? WHERE id=?`
-    ).run(pid, wid, adjustment_type, qty, reason || '', reference || '', adj_date, notes || '', req.params.id);
-  })();
-  addAuditLog('update', 'stock_adjustments', req.params.id, 'Updated stock adjustment');
-  res.redirect('/stock');
+    db.transaction(() => {
+      // Reverse the previous movement(s) for this adjustment
+      reverseStockForRef('stock_adjustment', adjId);
+      // Update the adjustment row
+      db.prepare(
+        `UPDATE stock_adjustments SET product_id=?, warehouse_id=?, adjustment_type=?, quantity=?, reason=?, reference=?, adj_date=?, notes=? WHERE id=?`
+      ).run(pid, wid, adjustment_type, Math.abs(qty), reason || '', reference || '', adj_date, notes || '', adjId);
+      // Re-apply the (new) movement
+      const delta = _signedDelta(adjustment_type, qty);
+      applyStockMovement(pid, wid, delta, 'stock_adjustment', adjId, adjustment_type + '-edit', reason || notes || null);
+      addAuditLog('update', 'stock_adjustments', adjId, 'Updated stock adjustment');
+    })();
+    res.redirect('/stock');
+  } catch (e) {
+    logError('stock.adjustment.edit', e, { id: req.params.id, body: req.body });
+    res.redirect('/stock?err=server');
+  }
 });
 
 router.post('/delete/:id', (req, res) => {
-  const old = db.prepare('SELECT * FROM stock_adjustments WHERE id = ?').get(req.params.id);
-  if (old) {
+  try {
+    const adjId = toInt(req.params.id);
+    const old = db.prepare('SELECT * FROM stock_adjustments WHERE id = ?').get(adjId);
+    if (!old) return res.redirect('/stock?err=notfound');
     db.transaction(() => {
-      const addTypes = ['add','return','transfer_in'];
-      if (addTypes.includes(old.adjustment_type)) {
-        db.prepare('UPDATE products SET stock = stock - ? WHERE id = ?').run(old.quantity, old.product_id);
-      } else {
-        db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?').run(old.quantity, old.product_id);
-      }
-      db.prepare('DELETE FROM stock_adjustments WHERE id = ?').run(req.params.id);
+      reverseStockForRef('stock_adjustment', adjId);
+      db.prepare('DELETE FROM stock_adjustments WHERE id = ?').run(adjId);
+      addAuditLog('delete', 'stock_adjustments', adjId, 'Deleted stock adjustment');
     })();
+    res.redirect('/stock');
+  } catch (e) {
+    logError('stock.adjustment.delete', e, { id: req.params.id });
+    res.redirect('/stock?err=server');
   }
-  addAuditLog('delete', 'stock_adjustments', req.params.id, 'Deleted stock adjustment');
-  res.redirect('/stock');
 });
 
 router.get('/print/:id', (req, res) => {
@@ -228,12 +220,14 @@ router.get('/position', (req, res) => {
   const warehouseId = req.query.warehouse_id || '';
   let position = [];
 
+  // pcs_per_carton = qty_per_pack || packaging || 1
   if (warehouseId) {
     position = db.prepare(`
       SELECT
         p.id,
         p.name,
-        p.unit,
+        COALESCE(p.unit,'PCS') as unit,
+        COALESCE(NULLIF(p.qty_per_pack,0), NULLIF(p.packaging,0), 1) as pcs_per_carton,
         ws.quantity as wh_qty,
         p.stock as total_qty
       FROM warehouse_stock ws
@@ -246,7 +240,8 @@ router.get('/position', (req, res) => {
       SELECT
         p.id,
         p.name,
-        p.unit,
+        COALESCE(p.unit,'PCS') as unit,
+        COALESCE(NULLIF(p.qty_per_pack,0), NULLIF(p.packaging,0), 1) as pcs_per_carton,
         p.stock,
         (SELECT COUNT(DISTINCT warehouse_id) FROM warehouse_stock WHERE product_id = p.id) as warehouse_count
       FROM products p
@@ -255,7 +250,20 @@ router.get('/position', (req, res) => {
     `).all('active');
   }
 
-  res.render('stock/position', { page: 'stock-position', warehouses, warehouseId, position });
+  // Compute cartons & loose pcs per row + grand totals
+  let totalPcs = 0, totalCartons = 0, totalLoose = 0;
+  position.forEach(r => {
+    const pcs = Number(r.wh_qty != null ? r.wh_qty : r.stock) || 0;
+    const ppc = Number(r.pcs_per_carton) || 1;
+    r.pcs = pcs;
+    r.cartons = ppc > 1 ? Math.floor(pcs / ppc) : 0;
+    r.loose = ppc > 1 ? pcs % ppc : pcs;
+    totalPcs += pcs;
+    totalCartons += r.cartons;
+    totalLoose += r.loose;
+  });
+
+  res.render('stock/position', { page: 'stock-position', warehouses, warehouseId, position, totalPcs, totalCartons, totalLoose });
 });
 
 module.exports = router;
