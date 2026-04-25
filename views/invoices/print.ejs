@@ -4,15 +4,16 @@
 <meta charset="UTF-8">
 <title>Sales Invoice <%= invoice.invoice_no %></title>
 <style>
+@page { size: A5; margin: 6mm; }
 * { margin:0; padding:0; box-sizing:border-box; }
-body { font-family: Arial, 'Helvetica', sans-serif; font-size:12px; color:#000; background:#fff; line-height:1.4; }
-.page { width:210mm; min-height:297mm; margin:0 auto; padding:12mm 14mm 10mm; display:flex; flex-direction:column; }
+body { font-family: Arial, 'Helvetica', sans-serif; font-size:10px; color:#000; background:#fff; line-height:1.35; }
+.page { width:148mm; min-height:0; margin:0 auto; padding:4mm 5mm; display:flex; flex-direction:column; }
 .no-print { text-align:center; padding:10px 0 14px; }
 .no-print button, .no-print a { padding:8px 22px; margin:0 5px; border:1px solid #000; background:#fff; color:#000; cursor:pointer; font-size:13px; text-decoration:none; display:inline-block; font-weight:600; }
 
 .header { display:flex; align-items:center; justify-content:flex-start; gap:16px; border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:10px; }
-.header .logo-box { width:140px; height:140px; flex-shrink:0; display:flex; align-items:center; justify-content:center; padding:4px; background:#fff; }
-.header .logo-box img { max-width:100%; max-height:100%; object-fit:contain; filter: grayscale(100%); display:block; }
+.header .logo-box { width: var(--logo-w, 150px); height: var(--logo-h, 120px); flex-shrink:0; display:flex; align-items:center; justify-content:center; padding:2px; background:#fff; }
+.header .logo-box img { max-width:100%; max-height:100%; object-fit:contain; display:block; visibility:visible !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 .header .company-block { flex:1; text-align:center; }
 .header .spacer-right { width:70px; flex-shrink:0; }
 .company-name { font-size:24px; font-weight:900; letter-spacing:2px; text-transform:uppercase; }
@@ -54,9 +55,10 @@ table.items tbody tr.total-row td { background:#000; color:#fff; font-weight:800
 .for-company { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px; }
 
 @media print {
-  body { background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .no-print { display:none; }
-  .page { margin:0; padding:10mm 12mm 8mm; width:100%; }
+  html, body { background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; width:148mm; }
+  .no-print { display:none !important; }
+  .page { margin:0; padding:4mm 5mm; width:148mm !important; min-height:0 !important; }
+  .header .logo-box img { display:block !important; visibility:visible !important; }
 }
 </style>
 </head>
@@ -64,7 +66,7 @@ table.items tbody tr.total-row td { background:#000; color:#fff; font-weight:800
 <%
   var scope = (invoice && invoice.account_scope) ? invoice.account_scope : 'plastic_markaz';
   var bizName = (typeof accountName === 'function') ? accountName(scope) : 'PLASTIC MARKAZ';
-  var logoPath = (typeof getLogoPath === 'function') ? getLogoPath(scope) : '/Logo.png';
+  var logoPath = '/Logo.png';
   var bizAddr = (settings && settings.business_address) || '';
   var bizCity = (settings && settings.business_city)   || '';
   var bizPhone= (settings && settings.business_phone)  || '';
@@ -76,7 +78,8 @@ table.items tbody tr.total-row td { background:#000; color:#fff; font-weight:800
   var totalComm  = items.reduce(function(s,i){ return s + (i.quantity||0)*(i.rate||0)*(i.commission_pct||0)/100; }, 0);
   var totalDisc  = items.reduce(function(s,i){ return s + (i.packages||0)*(i.discount_per_pack||0); }, 0);
   var transport  = (invoice && invoice.transport_charges) || 0;
-  var netTotal   = grossTotal - totalComm - totalDisc + transport;
+  var delivery   = (invoice && invoice.delivery_charges)  || 0;
+  var netTotal   = grossTotal - totalComm - totalDisc + transport + delivery;
   var totalPkg   = items.reduce(function(s,i){ return s + (i.packages||0); }, 0);
   var invDate    = invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'}) : '';
 
@@ -100,6 +103,9 @@ table.items tbody tr.total-row td { background:#000; color:#fff; font-weight:800
 <div class="no-print">
   <button onclick="window.print()">&#128438; Print Invoice</button>
   <a href="/invoices/view/<%= invoice.id %>">&#8592; Back</a>
+  Logo size:
+  <input type="number" id="logoSizer" min="40" max="240" step="5" value="110" oninput="document.documentElement.style.setProperty('--logo-w', this.value+'px'); document.documentElement.style.setProperty('--logo-h', Math.round(this.value*0.85)+'px');" style="width:70px;">
+  px
 </div>
 
 <div class="page">
@@ -108,7 +114,7 @@ table.items tbody tr.total-row td { background:#000; color:#fff; font-weight:800
       <!-- Logo only, no text -->
       <div style="width:100%; display:flex; justify-content:center; align-items:center;">
         <div class="logo-box">
-          <img src="<%= logoPath %>" alt="logo">
+          <img src="<%= logoPath %>" alt="logo" onerror="this.style.display='none'">
         </div>
       </div>
     <% } else { %>
@@ -197,7 +203,8 @@ table.items tbody tr.total-row td { background:#000; color:#fff; font-weight:800
       <% if (totalComm > 0) { %><tr><td class="label">Less: Commission:</td><td>(<%= fmt(totalComm) %>)</td></tr><% } %>
       <% if (totalDisc > 0) { %><tr><td class="label">Less: Discount:</td><td>(<%= fmt(totalDisc) %>)</td></tr><% } %>
       <% if (transport > 0) { %><tr><td class="label">Add: Transport:</td><td><%= fmt(transport) %></td></tr><% } %>
-      <tr class="grand"><td class="label">Net Total:</td><td><%= fmt(netTotal) %></td></tr>
+      <% if (delivery > 0)  { %><tr><td class="label">Add: Delivery:</td><td><%= fmt(delivery) %></td></tr><% } %>
+      <tr class="grand"><td class="label">Net Total (PKR):</td><td><%= fmt(netTotal) %></td></tr>
     </table>
   </div>
 

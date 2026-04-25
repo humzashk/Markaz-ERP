@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { validate, schemas } = require('../middleware/validate');
 const { db, addAuditLog, applyStockMovement, reverseStockForRef, toInt, logError } = require('../database');
 
 // Adjustment types whose effect on stock is positive (+) vs negative (-)
@@ -33,7 +34,7 @@ router.get('/add', (req, res) => {
   res.render('stock/form', { page: 'stock', products, warehouses, adjType });
 });
 
-router.post('/add', (req, res) => {
+router.post('/add', validate(schemas.stockAdjust), (req, res) => {
   try {
     const { product_id, warehouse_id, adjustment_type, quantity, reason, reference, adj_date, notes } = req.body;
     const qty = toInt(quantity);
@@ -68,7 +69,7 @@ router.get('/edit/:id', (req, res) => {
   res.render('stock/edit', { page: 'stock', adj, products, warehouses });
 });
 
-router.post('/edit/:id', (req, res) => {
+router.post('/edit/:id', validate(schemas.stockAdjust), (req, res) => {
   try {
     const adjId = toInt(req.params.id);
     const old = db.prepare('SELECT * FROM stock_adjustments WHERE id = ?').get(adjId);

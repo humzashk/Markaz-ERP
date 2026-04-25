@@ -1,0 +1,17 @@
+<%
+  // Reusable validation-error banner.
+  // Reads `err` from query string (set by middleware/validate.js redirect)
+  // and displays a dismissible alert at the top of any form.
+  var _err = (typeof query !== 'undefined' && query && query.err) ? query.err : (locals && locals.errMsg) || null;
+  if (!_err && typeof req !== 'undefined' && req && req.query && req.query.err) _err = req.query.err;
+%>
+<% if (_err) { %>
+  <div class="alert alert-danger alert-dismissible fade show d-flex align-items-start gap-2" role="alert">
+    <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+    <div class="flex-grow-1">
+      <strong>Please fix the following:</strong>
+      <div class="small mt-1"><%= _err %></div>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  </div>
+<% } %>

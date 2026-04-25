@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { validate, schemas } = require('../middleware/validate');
 const { db, addAuditLog } = require('../database');
 
 const ACCOUNTS = [
@@ -37,7 +38,7 @@ router.get('/add', (req, res) => {
   res.render('journal/form', { page: 'daybook', entry: null, lines: [], edit: false, today, accounts: ACCOUNTS });
 });
 
-router.post('/add', (req, res) => {
+router.post('/add', validate(schemas.journalCreate), (req, res) => {
   const { entry_date, description, reference, account, line_description, debit, credit } = req.body;
   const accounts = Array.isArray(account) ? account : [account];
   const descs = Array.isArray(line_description) ? line_description : [line_description];

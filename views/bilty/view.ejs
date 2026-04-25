@@ -2,7 +2,7 @@
 <%
   var _biltyScope = (bilty && bilty.account_scope) ? bilty.account_scope : 'plastic_markaz';
   var _biltyBiz   = (typeof accountName === 'function') ? accountName(_biltyScope) : ((appSettings && appSettings.business_name) || 'PLASTIC MARKAZ');
-  var _biltyLogo  = (typeof getLogoPath === 'function') ? getLogoPath(_biltyScope) : '/Logo.png';
+  var _biltyLogo = '/Logo.png';
   var _biltyAddr  = (appSettings && appSettings.business_address) || '';
   var _biltyCity  = (appSettings && appSettings.business_city) || '';
   var _biltyPh    = (appSettings && appSettings.business_phone) || '';

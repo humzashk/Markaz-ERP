@@ -265,6 +265,19 @@ async function initDatabase() {
       FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS transports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      contact TEXT,
+      phone TEXT,
+      city TEXT,
+      vehicle_no TEXT,
+      driver_name TEXT,
+      notes TEXT,
+      status TEXT DEFAULT 'active',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS bilty (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       bilty_no TEXT,
@@ -596,6 +609,24 @@ async function initDatabase() {
     "ALTER TABLE ledger ADD COLUMN account_scope TEXT DEFAULT 'plastic_markaz'",
     // Invoice: support delivery/transport charges (+/-) in total
     "ALTER TABLE invoices ADD COLUMN transport_charges REAL DEFAULT 0",
+    "ALTER TABLE invoices ADD COLUMN delivery_charges REAL DEFAULT 0",
+    "ALTER TABLE invoices ADD COLUMN delivery_date TEXT",
+    "ALTER TABLE purchases ADD COLUMN delivery_charges REAL DEFAULT 0",
+    "ALTER TABLE purchases ADD COLUMN delivery_date TEXT",
+    // Commission rollout: ensure header + line items carry commission everywhere
+    "ALTER TABLE purchases ADD COLUMN commission_pct REAL DEFAULT 0",
+    "ALTER TABLE purchases ADD COLUMN commission_amount REAL DEFAULT 0",
+    "ALTER TABLE purchase_items ADD COLUMN commission_pct REAL DEFAULT 0",
+    "ALTER TABLE purchase_items ADD COLUMN commission_amount REAL DEFAULT 0",
+    "ALTER TABLE order_items ADD COLUMN commission_pct REAL DEFAULT 0",
+    "ALTER TABLE order_items ADD COLUMN commission_amount REAL DEFAULT 0",
+    // Bilty linking + transport reference
+    "ALTER TABLE bilty ADD COLUMN order_id INTEGER",
+    "ALTER TABLE bilty ADD COLUMN invoice_id INTEGER",
+    "ALTER TABLE bilty ADD COLUMN transport_id INTEGER",
+    "ALTER TABLE invoices ADD COLUMN transport_id INTEGER",
+    "ALTER TABLE purchases ADD COLUMN transport_id INTEGER",
+    "ALTER TABLE orders ADD COLUMN transport_id INTEGER",
     // Warehouse location schema (NIAZI CHOWK - UI coming soon)
     "ALTER TABLE warehouses ADD COLUMN floor TEXT",
     "ALTER TABLE warehouses ADD COLUMN room TEXT",
@@ -780,10 +811,44 @@ function getSettings() {
 
 // ============ HELPER FUNCTIONS ============
 
-function generateNumber(prefix, table) {
-  const row = db.prepare(`SELECT COUNT(*) as cnt FROM ${table}`).get();
-  const num = ((row?.cnt || 0) + 1).toString().padStart(5, '0');
-  return `${prefix}-${num}`;
+// Safe unique number generator. Picks MAX(numeric suffix)+1 from existing
+// rows, then probes with INSERT-collision-tolerant retries against unique col.
+function generateNumber(prefix, table, column) {
+  const col = column || (
+    table === 'orders' ? 'order_no' :
+    table === 'invoices' ? 'invoice_no' :
+    table === 'purchases' ? 'purchase_no' :
+    table === 'credit_notes' ? 'note_no' :
+    table === 'payments' ? 'payment_no' :
+    table === 'bilty' ? 'bilty_no' : 'no'
+  );
+  // Get the highest numeric tail in the column
+  let next = 1;
+  try {
+    const rows = db.prepare(`SELECT ${col} AS v FROM ${table} WHERE ${col} LIKE ?`).all(prefix + '-%');
+    let max = 0;
+    for (const r of rows) {
+      if (!r.v) continue;
+      const tail = String(r.v).split('-').pop();
+      const n = parseInt(tail, 10);
+      if (Number.isFinite(n) && n > max) max = n;
+    }
+    next = max + 1;
+  } catch (_) {
+    const row = db.prepare(`SELECT COUNT(*) as cnt FROM ${table}`).get();
+    next = (row?.cnt || 0) + 1;
+  }
+  // Probe-and-bump until unique (handles concurrent inserts / rare gaps)
+  for (let attempts = 0; attempts < 50; attempts++) {
+    const candidate = `${prefix}-${String(next).padStart(5, '0')}`;
+    try {
+      const exists = db.prepare(`SELECT 1 AS x FROM ${table} WHERE ${col} = ? LIMIT 1`).get(candidate);
+      if (!exists) return candidate;
+    } catch (_) { return candidate; }
+    next++;
+  }
+  // Fallback: timestamp-based
+  return `${prefix}-${Date.now()}`;
 }
 
 function addLedgerEntry(entityType, entityId, date, description, debit, credit, refType, refId) {
@@ -977,5 +1042,15 @@ module.exports = {
   reverseStockForRef,
   recomputeBalance,
   removeLedgerForRef,
-  getProductCost
+  getProductCost,
+  // Stabilization (idempotent boot-time data integrity pass)
+  runStabilization: function (opts) {
+    try {
+      const { runStabilization } = require('./db/stabilize');
+      return runStabilization(db, opts);
+    } catch (e) {
+      try { logError('database.runStabilization', e); } catch (_) {}
+      return { error: e && e.message };
+    }
+  }
 };

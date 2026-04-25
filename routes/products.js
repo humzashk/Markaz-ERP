@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { validate, schemas } = require('../middleware/validate');
 const { db, addAuditLog } = require('../database');
 
 router.get('/', (req, res) => {
@@ -22,7 +23,7 @@ router.get('/add', (req, res) => {
   res.render('products/form', { page: 'products', product: null, edit: false, vendors, allCats });
 });
 
-router.post('/add', (req, res) => {
+router.post('/add', validate(schemas.productCreate), (req, res) => {
   const { name, category, qty_per_pack, stock, rate, min_stock, vendor_id } = req.body;
   const result = db.prepare(
     `INSERT INTO products (name, category, qty_per_pack, stock, rate, min_stock, vendor_id) VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -39,7 +40,7 @@ router.get('/edit/:id', (req, res) => {
   res.render('products/form', { page: 'products', product, edit: true, vendors, allCats });
 });
 
-router.post('/edit/:id', (req, res) => {
+router.post('/edit/:id', validate(schemas.productCreate), (req, res) => {
   const { name, category, qty_per_pack, stock, rate, min_stock, status, vendor_id } = req.body;
   const newRate = parseFloat(rate) || 0;
   // Log rate change if rate changed

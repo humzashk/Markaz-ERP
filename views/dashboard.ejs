@@ -272,9 +272,22 @@
   <% if (can('dash.charts')) { %>
   <div class="col-lg-<%= can('dash.ai') ? '8' : '12' %>">
     <div class="card h-100">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-bar-chart"></i> Revenue vs Expenses (Last 6 Months)</span>
-        <a href="/reports" class="btn btn-sm btn-outline-secondary">All Reports</a>
+      <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span><i class="bi bi-bar-chart"></i> Sales vs COGS</span>
+        <div class="d-flex align-items-center gap-2">
+          <% var _g = (typeof chartGran !== 'undefined' ? chartGran : '6months'); %>
+          <% var _qs = function(g){ var p = new URLSearchParams(); if (typeof period !== 'undefined' && period) p.set('period', period); if (typeof accountFilter !== 'undefined' && accountFilter) p.set('account', accountFilter); p.set('chart', g); return '/?' + p.toString(); }; %>
+          <select class="form-select form-select-sm" style="width:auto" onchange="window.location.href=this.value">
+            <option value="<%= _qs('day') %>"        <%= _g==='day'?'selected':'' %>>Daily (14 days)</option>
+            <option value="<%= _qs('week') %>"       <%= _g==='week'?'selected':'' %>>Weekly (12 weeks)</option>
+            <option value="<%= _qs('month') %>"      <%= _g==='month'?'selected':'' %>>This Month</option>
+            <option value="<%= _qs('quarter') %>"    <%= _g==='quarter'?'selected':'' %>>This Quarter</option>
+            <option value="<%= _qs('lastquarter') %>"<%= _g==='lastquarter'?'selected':'' %>>Last Quarter</option>
+            <option value="<%= _qs('6months') %>"    <%= _g==='6months'?'selected':'' %>>Last 6 Months</option>
+            <option value="<%= _qs('year') %>"       <%= _g==='year'?'selected':'' %>>Last 12 Months</option>
+          </select>
+          <a href="/reports" class="btn btn-sm btn-outline-secondary">All Reports</a>
+        </div>
       </div>
       <div class="card-body"><canvas id="revenueChart" height="90"></canvas></div>
     </div>
@@ -766,22 +779,29 @@
 <% if (can('dash.charts')) { %>
 <script>
 const chartData = <%- JSON.stringify(chartData) %>;
-const ctx = document.getElementById('revenueChart').getContext('2d');
-new Chart(ctx, {
+function initRevenueChart() {
+  if (typeof Chart === 'undefined') { return setTimeout(initRevenueChart, 50); }
+  const el = document.getElementById('revenueChart');
+  if (!el) return;
+  const ctx = el.getContext('2d');
+  new Chart(ctx, {
   type: 'bar',
   data: {
     labels: chartData.map(d => d.month),
     datasets: [
-      { label: 'Revenue', data: chartData.map(d => d.revenue), backgroundColor: 'rgba(52,152,219,0.75)', borderRadius: 5 },
-      { label: 'Expenses', data: chartData.map(d => d.expense), backgroundColor: 'rgba(231,76,60,0.65)', borderRadius: 5 }
+      { label: 'Sales', data: chartData.map(d => d.sales), backgroundColor: 'rgba(52,152,219,0.85)', borderRadius: 4 },
+      { label: 'COGS',  data: chartData.map(d => d.cogs),  backgroundColor: 'rgba(231,76,60,0.75)', borderRadius: 4 }
     ]
   },
   options: {
     responsive: true,
-    plugins: { legend: { position: 'top' }, tooltip: { callbacks: { label: ctx => ' Rs. ' + ctx.parsed.y.toLocaleString('en-PK', {minimumFractionDigits:0}) } } },
-    scales: { y: { beginAtZero: true, ticks: { callback: v => 'Rs.' + (v>=1000 ? (v/1000).toFixed(0)+'k' : v) } } }
+    plugins: { legend: { position: 'top' }, tooltip: { callbacks: { label: ctx => ' PKR ' + ctx.parsed.y.toLocaleString('en-PK', {minimumFractionDigits:0}) } } },
+    scales: { y: { beginAtZero: true, ticks: { callback: v => 'PKR' + (v>=1000 ? (v/1000).toFixed(0)+'k' : v) } } }
   }
 });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initRevenueChart);
+else initRevenueChart();
 </script>
 <% } %>
 <%- include('partials/footer') %>

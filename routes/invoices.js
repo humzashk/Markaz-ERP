@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { validate, schemas } = require('../middleware/validate');
 const { db, generateNumber, addLedgerEntry, addAuditLog, getSettings,
         applyStockMovement, reverseStockForRef, removeLedgerForRef,
         recomputeBalance, getProductCost, toNum, toInt, logError } = require('../database');
@@ -49,7 +50,8 @@ router.get('/add', (req, res) => {
   }
 
   const invoice = presetCustomerId ? { customer_id: presetCustomerId } : null;
-  res.render('invoices/form', { page: 'invoices', invoice, items, customers, products, warehouses, linkedOrderIds, edit: false });
+  const transports = db.prepare("SELECT id, name FROM transports WHERE status='active' ORDER BY name").all();
+  res.render('invoices/form', { page: 'invoices', invoice, items, customers, products, warehouses, transports, linkedOrderIds, edit: false });
 });
 
 // Step 1: pick customer → list pending orders
@@ -74,16 +76,45 @@ router.get('/from-orders', (req, res) => {
   res.render('invoices/from-orders', { page: 'invoices', customers, orders, customerId });
 });
 
-router.post('/add', (req, res) => {
+// Stock + sell-rate lookup (warehouse-scoped)
+router.get('/api/stock/:product_id', (req, res) => {
+  const pid = parseInt(req.params.product_id, 10);
+  const wid = req.query.warehouse_id ? parseInt(req.query.warehouse_id, 10) : null;
+  const customerType = req.query.customer_type || 'retail';
+  const prod = db.prepare('SELECT id, name, stock, qty_per_pack, selling_price, default_commission_rate FROM products WHERE id = ?').get(pid);
+  if (!prod) return res.json({ stock: 0, qty_per_pack: 1, name: '', commission: 0, rate: 0 });
+  let stockPcs = prod.stock;
+  if (wid) {
+    const ws = db.prepare('SELECT quantity FROM warehouse_stock WHERE product_id = ? AND warehouse_id = ?').get(pid, wid);
+    stockPcs = ws ? ws.quantity : 0;
+  }
+  let rate = prod.selling_price || 0;
   try {
-    const { customer_id, invoice_date, due_date, warehouse_id, bilty_no, transporter_name, notes,
+    const rl = db.prepare(`SELECT rate FROM rate_list WHERE product_id = ? AND customer_type = ? AND effective_date <= date('now') ORDER BY effective_date DESC, id DESC LIMIT 1`).get(pid, customerType);
+    if (rl && rl.rate != null) rate = rl.rate;
+  } catch (_) {}
+  const qpp = prod.qty_per_pack || 1;
+  res.json({ stock: stockPcs, stock_ctn: qpp > 0 ? Math.floor(stockPcs/qpp) : 0, stock_loose: qpp > 0 ? stockPcs % qpp : stockPcs, qty_per_pack: qpp, name: prod.name, commission: prod.default_commission_rate || 0, rate });
+});
+
+router.post('/add', validate(schemas.invoiceCreate), (req, res) => {
+  try {
+    const { customer_id, invoice_date, due_date, delivery_date, warehouse_id, transport_id, bilty_no, transporter_name, notes,
             product_id, packages, packaging, quantity, rate, commission_pct, discount_per_pack,
-            transport_charges, account_scope, order_ids } = req.body;
+            transport_charges, delivery_charges, account_scope, order_ids } = req.body;
 
     const cid = toInt(customer_id);
     if (!cid || !invoice_date) return res.redirect('/invoices?err=missing');
     const wid = warehouse_id ? toInt(warehouse_id) : null;
+    const tid = transport_id ? toInt(transport_id) : null;
+    // Resolve transporter name from selected transport, fallback to free-text
+    let resolvedTransporter = transporter_name || null;
+    if (tid) {
+      const t = db.prepare('SELECT name FROM transports WHERE id = ?').get(tid);
+      if (t) resolvedTransporter = t.name;
+    }
     const transportCharges = toNum(transport_charges, 0);
+    const deliveryCharges  = toNum(delivery_charges, 0);
     const invoiceNo = generateNumber('INV', 'invoices');
 
     const productIds  = Array.isArray(product_id)        ? product_id        : [product_id];
@@ -121,13 +152,13 @@ router.post('/add', (req, res) => {
     }
     if (!itemsData.length) return res.redirect('/invoices/add?err=no_items');
 
-    const total = subtotal + transportCharges;
+    const total = subtotal + transportCharges + deliveryCharges - totalCommission;
 
     db.transaction(() => {
       const result = db.prepare(
-        `INSERT INTO invoices (invoice_no, customer_id, invoice_date, due_date, warehouse_id, bilty_no, transporter_name, subtotal, discount, transport_charges, total, commission_pct, commission_amount, status, notes, account_scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, 'unpaid', ?, ?)`
-      ).run(invoiceNo, cid, invoice_date, due_date||null, wid, bilty_no||null, transporter_name||null,
-            subtotal, transportCharges, total, totalCommission, notes||null, account_scope || 'plastic_markaz');
+        `INSERT INTO invoices (invoice_no, customer_id, invoice_date, due_date, delivery_date, warehouse_id, transport_id, bilty_no, transporter_name, subtotal, discount, transport_charges, delivery_charges, total, commission_pct, commission_amount, status, notes, account_scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 0, ?, 'unpaid', ?, ?)`
+      ).run(invoiceNo, cid, invoice_date, due_date||null, delivery_date||null, wid, tid, bilty_no||null, resolvedTransporter,
+            subtotal, transportCharges, deliveryCharges, total, totalCommission, notes||null, account_scope || 'plastic_markaz');
 
       const invId = result.lastInsertRowid;
 
@@ -169,22 +200,30 @@ router.get('/edit/:id', (req, res) => {
   const customers = db.prepare('SELECT id, name FROM customers WHERE status = ? ORDER BY name').all('active');
   const products = db.prepare('SELECT id, name, qty_per_pack, selling_price as rate, stock, default_commission_rate FROM products WHERE status = ? ORDER BY name').all('active');
   const warehouses = db.prepare('SELECT id, name FROM warehouses WHERE status = ? ORDER BY name').all('active');
-  res.render('invoices/form', { page: 'invoices', invoice, items, customers, products, warehouses, pendingOrders: [], edit: true });
+  const transports = db.prepare("SELECT id, name FROM transports WHERE status='active' ORDER BY name").all();
+  res.render('invoices/form', { page: 'invoices', invoice, items, customers, products, warehouses, transports, pendingOrders: [], edit: true });
 });
 
-router.post('/edit/:id', (req, res) => {
+router.post('/edit/:id', validate(schemas.invoiceCreate), (req, res) => {
   try {
     const invId = toInt(req.params.id);
     const existing = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invId);
     if (!existing) return res.redirect('/invoices?err=notfound');
 
-    const { customer_id, invoice_date, due_date, warehouse_id, bilty_no, transporter_name, notes, status,
+    const { customer_id, invoice_date, due_date, delivery_date, warehouse_id, transport_id, bilty_no, transporter_name, notes, status,
             product_id, packages, packaging, quantity, rate, commission_pct, discount_per_pack,
-            transport_charges, account_scope } = req.body;
+            transport_charges, delivery_charges, account_scope } = req.body;
 
     const cid = toInt(customer_id) || existing.customer_id;
     const wid = warehouse_id ? toInt(warehouse_id) : null;
+    const tid = transport_id ? toInt(transport_id) : (existing.transport_id || null);
+    let resolvedTransporter = transporter_name || null;
+    if (tid) {
+      const t = db.prepare('SELECT name FROM transports WHERE id = ?').get(tid);
+      if (t) resolvedTransporter = t.name;
+    }
     const transportCharges = toNum(transport_charges, 0);
+    const deliveryCharges  = toNum(delivery_charges, 0);
 
     const productIds  = Array.isArray(product_id)        ? product_id        : [product_id];
     const packagesArr = Array.isArray(packages)          ? packages          : [packages];
@@ -227,7 +266,7 @@ router.post('/edit/:id', (req, res) => {
     }
     if (!itemsData.length) return res.redirect('/invoices/edit/' + invId + '?err=no_items');
 
-    const total = subtotal + transportCharges;
+    const total = subtotal + transportCharges + deliveryCharges - totalCommission;
 
     db.transaction(() => {
       // 1) Reverse previous stock movements for this invoice
@@ -239,11 +278,11 @@ router.post('/edit/:id', (req, res) => {
 
       // 3) Update invoice header
       db.prepare(
-        `UPDATE invoices SET customer_id=?, invoice_date=?, due_date=?, warehouse_id=?, bilty_no=?, transporter_name=?,
-         subtotal=?, discount=0, transport_charges=?, total=?, commission_pct=0, commission_amount=?,
+        `UPDATE invoices SET customer_id=?, invoice_date=?, due_date=?, delivery_date=?, warehouse_id=?, transport_id=?, bilty_no=?, transporter_name=?,
+         subtotal=?, discount=0, transport_charges=?, delivery_charges=?, total=?, commission_pct=0, commission_amount=?,
          status=?, notes=?, account_scope=? WHERE id=?`
-      ).run(cid, invoice_date, due_date||null, wid, bilty_no||null, transporter_name||null,
-            subtotal, transportCharges, total, totalCommission,
+      ).run(cid, invoice_date, due_date||null, delivery_date||null, wid, tid, bilty_no||null, resolvedTransporter,
+            subtotal, transportCharges, deliveryCharges, total, totalCommission,
             status || existing.status || 'unpaid', notes||null,
             account_scope || existing.account_scope || 'plastic_markaz', invId);
 
@@ -397,14 +436,14 @@ router.get('/pdf/:id', (req, res) => {
   doc.moveTo(40, y).lineTo(555, y).stroke('#333');
   y += 10;
   doc.font('Helvetica').fontSize(10);
-  doc.text('Subtotal:', 380, y); doc.text(`Rs. ${invoice.subtotal.toFixed(2)}`, 450, y, { width: 100, align: 'right' });
+  doc.text('Subtotal:', 380, y); doc.text(`PKR ${invoice.subtotal.toFixed(2)}`, 450, y, { width: 100, align: 'right' });
   y += 18;
   if (invoice.discount > 0) {
-    doc.text('Discount:', 380, y); doc.text(`Rs. ${invoice.discount.toFixed(2)}`, 450, y, { width: 100, align: 'right' });
+    doc.text('Discount:', 380, y); doc.text(`PKR ${invoice.discount.toFixed(2)}`, 450, y, { width: 100, align: 'right' });
     y += 18;
   }
   doc.font('Helvetica-Bold').fontSize(12);
-  doc.text('TOTAL:', 380, y); doc.text(`Rs. ${invoice.total.toFixed(2)}`, 450, y, { width: 100, align: 'right' });
+  doc.text('TOTAL:', 380, y); doc.text(`PKR ${invoice.total.toFixed(2)}`, 450, y, { width: 100, align: 'right' });
 
   // Bilty info
   if (bilty) {
@@ -412,7 +451,7 @@ router.get('/pdf/:id', (req, res) => {
     doc.font('Helvetica-Bold').fontSize(11).text('Transport Details', 40, y);
     y += 15;
     doc.font('Helvetica').fontSize(9);
-    doc.text(`Transport: ${bilty.transport_name}  |  Bilty No: ${bilty.bilty_no || '-'}  |  From: ${bilty.from_city}  To: ${bilty.to_city}  |  Freight: Rs. ${bilty.freight_charges.toFixed(2)}`, 40, y);
+    doc.text(`Transport: ${bilty.transport_name}  |  Bilty No: ${bilty.bilty_no || '-'}  |  From: ${bilty.from_city}  To: ${bilty.to_city}  |  Freight: PKR ${bilty.freight_charges.toFixed(2)}`, 40, y);
   }
 
   // Terms and footer

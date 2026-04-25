@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { validate, schemas } = require('../middleware/validate');
 const { db, addAuditLog } = require('../database');
 
 router.get('/', (req, res) => {
@@ -21,18 +22,29 @@ router.get('/', (req, res) => {
 router.get('/add', (req, res) => {
   const orders = db.prepare(`SELECT o.id, o.order_no, c.name as customer_name FROM orders o JOIN customers c ON c.id = o.customer_id ORDER BY o.id DESC`).all();
   const invoices = db.prepare(`SELECT i.id, i.invoice_no, c.name as customer_name FROM invoices i JOIN customers c ON c.id = i.customer_id ORDER BY i.id DESC`).all();
-  res.render('bilty/form', { page: 'bilty', bilty: null, orders, invoices, edit: false });
+  const transports = db.prepare("SELECT id, name FROM transports WHERE status='active' ORDER BY name").all();
+  res.render('bilty/form', { page: 'bilty', bilty: null, orders, invoices, transports, edit: false });
 });
 
-router.post('/add', (req, res) => {
-  const { order_id, invoice_id, transport_name, bilty_no, from_city, to_city, bilty_date, freight_charges, weight, packages_count, notes } = req.body;
-  const allowedScopes = ['plastic_markaz','wings_furniture','cooler'];
-  const account_scope = allowedScopes.includes(req.body.account_scope) ? req.body.account_scope : 'plastic_markaz';
-  const result = db.prepare(
-    `INSERT INTO bilty (order_id, invoice_id, transport_name, bilty_no, from_city, to_city, bilty_date, freight_charges, weight, packages_count, status, notes, account_scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_transit', ?, ?)`
-  ).run(order_id||null, invoice_id||null, transport_name, bilty_no, from_city, to_city, bilty_date, parseFloat(freight_charges)||0, weight, parseInt(packages_count)||0, notes, account_scope);
-  addAuditLog('create', 'bilty', result.lastInsertRowid, `Created bilty ${bilty_no}`);
-  res.redirect('/bilty');
+router.post('/add', validate(schemas.biltyCreate), (req, res) => {
+  try {
+    const { order_id, invoice_id, transport_id, transport_name, bilty_no, from_city, to_city, bilty_date, freight_charges, weight, packages_count, notes } = req.body;
+    const allowedScopes = ['plastic_markaz','wings_furniture','cooler'];
+    const account_scope = allowedScopes.includes(req.body.account_scope) ? req.body.account_scope : 'plastic_markaz';
+    let resolvedName = transport_name || null;
+    if (transport_id) {
+      const t = db.prepare('SELECT name FROM transports WHERE id = ?').get(parseInt(transport_id, 10));
+      if (t) resolvedName = t.name;
+    }
+    const result = db.prepare(
+      `INSERT INTO bilty (order_id, invoice_id, transport_id, transport_name, bilty_no, from_city, to_city, bilty_date, freight_charges, weight, packages_count, status, notes, account_scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_transit', ?, ?)`
+    ).run(order_id||null, invoice_id||null, transport_id||null, resolvedName, bilty_no, from_city, to_city, bilty_date, parseFloat(freight_charges)||0, weight||null, parseInt(packages_count)||0, notes||null, account_scope);
+    addAuditLog('create', 'bilty', result.lastInsertRowid, `Created bilty ${bilty_no}`);
+    res.redirect('/bilty');
+  } catch (e) {
+    require('../database').logError('bilty.create', e);
+    res.redirect('/bilty?err=' + encodeURIComponent(e.message || 'server'));
+  }
 });
 
 router.get('/edit/:id', (req, res) => {
@@ -40,17 +52,28 @@ router.get('/edit/:id', (req, res) => {
   if (!bilty) return res.redirect('/bilty');
   const orders = db.prepare(`SELECT o.id, o.order_no, c.name as customer_name FROM orders o JOIN customers c ON c.id = o.customer_id ORDER BY o.id DESC`).all();
   const invoices = db.prepare(`SELECT i.id, i.invoice_no, c.name as customer_name FROM invoices i JOIN customers c ON c.id = i.customer_id ORDER BY i.id DESC`).all();
-  res.render('bilty/form', { page: 'bilty', bilty, orders, invoices, edit: true });
+  const transports = db.prepare("SELECT id, name FROM transports WHERE status='active' ORDER BY name").all();
+  res.render('bilty/form', { page: 'bilty', bilty, orders, invoices, transports, edit: true });
 });
 
-router.post('/edit/:id', (req, res) => {
-  const { order_id, invoice_id, transport_name, bilty_no, from_city, to_city, bilty_date, freight_charges, weight, packages_count, status, notes } = req.body;
-  const allowedScopes = ['plastic_markaz','wings_furniture','cooler'];
-  const account_scope = allowedScopes.includes(req.body.account_scope) ? req.body.account_scope : 'plastic_markaz';
-  db.prepare(
-    `UPDATE bilty SET order_id=?, invoice_id=?, transport_name=?, bilty_no=?, from_city=?, to_city=?, bilty_date=?, freight_charges=?, weight=?, packages_count=?, status=?, notes=?, account_scope=? WHERE id=?`
-  ).run(order_id||null, invoice_id||null, transport_name, bilty_no, from_city, to_city, bilty_date, parseFloat(freight_charges)||0, weight, parseInt(packages_count)||0, status||'in_transit', notes, account_scope, req.params.id);
-  res.redirect('/bilty');
+router.post('/edit/:id', validate(schemas.biltyCreate), (req, res) => {
+  try {
+    const { order_id, invoice_id, transport_id, transport_name, bilty_no, from_city, to_city, bilty_date, freight_charges, weight, packages_count, status, notes } = req.body;
+    const allowedScopes = ['plastic_markaz','wings_furniture','cooler'];
+    const account_scope = allowedScopes.includes(req.body.account_scope) ? req.body.account_scope : 'plastic_markaz';
+    let resolvedName = transport_name || null;
+    if (transport_id) {
+      const t = db.prepare('SELECT name FROM transports WHERE id = ?').get(parseInt(transport_id, 10));
+      if (t) resolvedName = t.name;
+    }
+    db.prepare(
+      `UPDATE bilty SET order_id=?, invoice_id=?, transport_id=?, transport_name=?, bilty_no=?, from_city=?, to_city=?, bilty_date=?, freight_charges=?, weight=?, packages_count=?, status=?, notes=?, account_scope=? WHERE id=?`
+    ).run(order_id||null, invoice_id||null, transport_id||null, resolvedName, bilty_no, from_city, to_city, bilty_date, parseFloat(freight_charges)||0, weight||null, parseInt(packages_count)||0, status||'in_transit', notes||null, account_scope, req.params.id);
+    res.redirect('/bilty');
+  } catch (e) {
+    require('../database').logError('bilty.edit', e);
+    res.redirect('/bilty?err=' + encodeURIComponent(e.message || 'server'));
+  }
 });
 
 router.get('/view/:id', (req, res) => {

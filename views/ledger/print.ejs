@@ -36,7 +36,7 @@
 <%
   var scope = (entity && entity.account_scope) ? entity.account_scope : 'plastic_markaz';
   var bizName = (typeof accountName === 'function') ? accountName(scope) : 'PLASTIC MARKAZ';
-  var logoPath = (typeof getLogoPath === 'function') ? getLogoPath(scope) : '/Logo.png';
+  var logoPath = '/Logo.png';
   var totalDebit = 0, totalCredit = 0;
   entries.forEach(function(e){ totalDebit += (e.debit||0); totalCredit += (e.credit||0); });
   var finalBalance = (entity.balance != null) ? Number(entity.balance) : (totalDebit - totalCredit);
@@ -76,9 +76,9 @@
   <tfoot>
     <tr class="totals-row">
       <td colspan="2" class="tr">TOTALS</td>
-      <td class="tr">Rs. <%= totalDebit.toFixed(2) %></td>
-      <td class="tr">Rs. <%= totalCredit.toFixed(2) %></td>
-      <td class="tr">Rs. <%= finalBalance.toFixed(2) %></td>
+      <td class="tr">PKR <%= totalDebit.toFixed(2) %></td>
+      <td class="tr">PKR <%= totalCredit.toFixed(2) %></td>
+      <td class="tr">PKR <%= finalBalance.toFixed(2) %></td>
     </tr>
   </tfoot>
 </table>

@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { validate, schemas } = require('../middleware/validate');
 const { db, generateNumber, addLedgerEntry, addAuditLog,
         applyStockMovement, reverseStockForRef, removeLedgerForRef,
         recomputeBalance, toNum, toInt, logError } = require('../database');
@@ -29,16 +30,19 @@ router.get('/add', (req, res) => {
   const vendors = db.prepare('SELECT id, name FROM vendors WHERE status = ? ORDER BY name').all('active');
   const products = db.prepare('SELECT id, name, qty_per_pack, rate FROM products WHERE status = ? ORDER BY name').all('active');
   const warehouses = db.prepare('SELECT id, name FROM warehouses WHERE status = ? ORDER BY name').all('active');
-  res.render('purchases/form', { page: 'purchases', purchase: null, items: [], vendors, products, warehouses, edit: false });
+  const transports = db.prepare("SELECT id, name FROM transports WHERE status='active' ORDER BY name").all();
+  res.render('purchases/form', { page: 'purchases', purchase: null, items: [], vendors, products, warehouses, transports, edit: false });
 });
 
-router.post('/add', (req, res) => {
+router.post('/add', validate(schemas.purchaseCreate), (req, res) => {
   try {
-    const { vendor_id, purchase_date, warehouse_id, bilty_no, discount, notes,
-            product_id, packages, packaging, quantity, rate, discount_per_pack } = req.body;
+    const { vendor_id, purchase_date, delivery_date, warehouse_id, transport_id, bilty_no, discount, delivery_charges, notes,
+            product_id, packages, packaging, quantity, rate, discount_per_pack, commission_pct } = req.body;
     const vid = toInt(vendor_id);
     if (!vid || !purchase_date) return res.redirect('/purchases?err=missing');
     const wid = warehouse_id ? toInt(warehouse_id) : null;
+    const tid = transport_id ? toInt(transport_id) : null;
+    const deliveryCharges = toNum(delivery_charges, 0);
     const purchaseNo = generateNumber('PUR', 'purchases');
     const allowedScopes = ['plastic_markaz','wings_furniture','cooler'];
     const account_scope = allowedScopes.includes(req.body.account_scope) ? req.body.account_scope : 'plastic_markaz';
@@ -49,8 +53,9 @@ router.post('/add', (req, res) => {
     const quantityArr = Array.isArray(quantity)          ? quantity          : [quantity];
     const rateArr     = Array.isArray(rate)              ? rate              : [rate];
     const discArr     = Array.isArray(discount_per_pack) ? discount_per_pack : [discount_per_pack];
+    const commArr     = Array.isArray(commission_pct)    ? commission_pct    : [commission_pct];
 
-    let subtotal = 0;
+    let subtotal = 0, totalCommission = 0;
     const itemsData = [];
     for (let i = 0; i < productIds.length; i++) {
       const pid = toInt(productIds[i]);
@@ -59,36 +64,39 @@ router.post('/add', (req, res) => {
       const r   = toNum(rateArr[i]);
       const amt = qty * r;
       const discPack = toNum(discArr[i]);
+      const commPct  = toNum(commArr[i]);
+      const commAmt  = amt * commPct / 100;
       if (qty <= 0 || r < 0) continue;
       subtotal += amt;
+      totalCommission += commAmt;
       itemsData.push({
         product_id: pid,
         packages: toInt(packagesArr[i], 0),
         packaging: toInt(packagingArr[i], 1) || 1,
-        quantity: qty, rate: r, amount: amt, discount_per_pack: discPack
+        quantity: qty, rate: r, amount: amt,
+        discount_per_pack: discPack,
+        commission_pct: commPct, commission_amount: commAmt
       });
     }
     if (!itemsData.length) return res.redirect('/purchases/add?err=no_items');
 
     const disc = toNum(discount, 0);
-    const total = subtotal - disc;
+    const total = subtotal - disc - totalCommission + deliveryCharges;
 
     db.transaction(() => {
       const result = db.prepare(
-        `INSERT INTO purchases (purchase_no, vendor_id, purchase_date, warehouse_id, bilty_no, status, subtotal, discount, total, notes, account_scope)
-         VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`
-      ).run(purchaseNo, vid, purchase_date, wid, bilty_no||null, subtotal, disc, total, notes||null, account_scope);
+        `INSERT INTO purchases (purchase_no, vendor_id, purchase_date, delivery_date, warehouse_id, transport_id, bilty_no, status, subtotal, discount, delivery_charges, commission_amount, total, notes, account_scope)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`
+      ).run(purchaseNo, vid, purchase_date, delivery_date||null, wid, tid, bilty_no||null, subtotal, disc, deliveryCharges, totalCommission, total, notes||null, account_scope);
 
       const purId = result.lastInsertRowid;
       const insertItem = db.prepare(
-        `INSERT INTO purchase_items (purchase_id, product_id, packages, packaging, quantity, rate, amount, discount_per_pack)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO purchase_items (purchase_id, product_id, packages, packaging, quantity, rate, amount, discount_per_pack, commission_pct, commission_amount)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       );
       for (const item of itemsData) {
-        insertItem.run(purId, item.product_id, item.packages, item.packaging, item.quantity, item.rate, item.amount, item.discount_per_pack);
-        // Stock IN via ledger
+        insertItem.run(purId, item.product_id, item.packages, item.packaging, item.quantity, item.rate, item.amount, item.discount_per_pack, item.commission_pct, item.commission_amount);
         applyStockMovement(item.product_id, wid, item.quantity, 'purchase', purId, 'purchase', `Purchase ${purchaseNo}`);
-        // Update last cost on product (so future invoices freeze the right cost)
         db.prepare('UPDATE products SET cost_price = ?, purchase_price = ? WHERE id = ?').run(item.rate, item.rate, item.product_id);
       }
 
@@ -110,19 +118,22 @@ router.get('/edit/:id', (req, res) => {
   const vendors = db.prepare('SELECT id, name FROM vendors WHERE status = ? ORDER BY name').all('active');
   const products = db.prepare('SELECT id, name, qty_per_pack, rate FROM products WHERE status = ? ORDER BY name').all('active');
   const warehouses = db.prepare('SELECT id, name FROM warehouses WHERE status = ? ORDER BY name').all('active');
-  res.render('purchases/form', { page: 'purchases', purchase, items, vendors, products, warehouses, edit: true });
+  const transports = db.prepare("SELECT id, name FROM transports WHERE status='active' ORDER BY name").all();
+  res.render('purchases/form', { page: 'purchases', purchase, items, vendors, products, warehouses, transports, edit: true });
 });
 
-router.post('/edit/:id', (req, res) => {
+router.post('/edit/:id', validate(schemas.purchaseCreate), (req, res) => {
   try {
     const purId = toInt(req.params.id);
     const existing = db.prepare('SELECT * FROM purchases WHERE id = ?').get(purId);
     if (!existing) return res.redirect('/purchases?err=notfound');
 
-    const { vendor_id, purchase_date, warehouse_id, bilty_no, discount, notes, status,
-            product_id, packages, packaging, quantity, rate, discount_per_pack } = req.body;
+    const { vendor_id, purchase_date, delivery_date, warehouse_id, transport_id, bilty_no, discount, delivery_charges, notes, status,
+            product_id, packages, packaging, quantity, rate, discount_per_pack, commission_pct } = req.body;
     const vid = toInt(vendor_id) || existing.vendor_id;
     const wid = warehouse_id ? toInt(warehouse_id) : null;
+    const tid = transport_id ? toInt(transport_id) : null;
+    const deliveryCharges = toNum(delivery_charges, 0);
     const allowedScopes = ['plastic_markaz','wings_furniture','cooler'];
     const account_scope = allowedScopes.includes(req.body.account_scope) ? req.body.account_scope : (existing.account_scope || 'plastic_markaz');
 
@@ -132,8 +143,9 @@ router.post('/edit/:id', (req, res) => {
     const quantityArr = Array.isArray(quantity)          ? quantity          : [quantity];
     const rateArr     = Array.isArray(rate)              ? rate              : [rate];
     const discArr     = Array.isArray(discount_per_pack) ? discount_per_pack : [discount_per_pack];
+    const commArr     = Array.isArray(commission_pct)    ? commission_pct    : [commission_pct];
 
-    let subtotal = 0;
+    let subtotal = 0, totalCommission = 0;
     const itemsData = [];
     for (let i = 0; i < productIds.length; i++) {
       const pid = toInt(productIds[i]);
@@ -142,40 +154,42 @@ router.post('/edit/:id', (req, res) => {
       const r   = toNum(rateArr[i]);
       const amt = qty * r;
       const discPack = toNum(discArr[i]);
+      const commPct  = toNum(commArr[i]);
+      const commAmt  = amt * commPct / 100;
       if (qty <= 0 || r < 0) continue;
-      subtotal += amt;
+      subtotal += amt; totalCommission += commAmt;
       itemsData.push({
         product_id: pid,
         packages: toInt(packagesArr[i], 0),
         packaging: toInt(packagingArr[i], 1) || 1,
-        quantity: qty, rate: r, amount: amt, discount_per_pack: discPack
+        quantity: qty, rate: r, amount: amt,
+        discount_per_pack: discPack,
+        commission_pct: commPct, commission_amount: commAmt
       });
     }
     if (!itemsData.length) return res.redirect('/purchases/edit/' + purId + '?err=no_items');
 
     const disc = toNum(discount, 0);
-    const total = subtotal - disc;
+    const total = subtotal - disc - totalCommission + deliveryCharges;
 
     db.transaction(() => {
-      // Reverse previous stock IN
       reverseStockForRef('purchase', purId);
-      // Reverse previous vendor ledger
       removeLedgerForRef('vendor', existing.vendor_id, 'purchase', purId);
       recomputeBalance('vendor', existing.vendor_id);
 
       db.prepare(
-        `UPDATE purchases SET vendor_id=?, purchase_date=?, warehouse_id=?, bilty_no=?, status=?,
-         subtotal=?, discount=?, total=?, notes=?, account_scope=? WHERE id=?`
-      ).run(vid, purchase_date, wid, bilty_no||null, status || existing.status || 'pending',
-            subtotal, disc, total, notes||null, account_scope, purId);
+        `UPDATE purchases SET vendor_id=?, purchase_date=?, delivery_date=?, warehouse_id=?, transport_id=?, bilty_no=?, status=?,
+         subtotal=?, discount=?, delivery_charges=?, commission_amount=?, total=?, notes=?, account_scope=? WHERE id=?`
+      ).run(vid, purchase_date, delivery_date||null, wid, tid, bilty_no||null, status || existing.status || 'pending',
+            subtotal, disc, deliveryCharges, totalCommission, total, notes||null, account_scope, purId);
 
       db.prepare('DELETE FROM purchase_items WHERE purchase_id = ?').run(purId);
       const insertItem = db.prepare(
-        `INSERT INTO purchase_items (purchase_id, product_id, packages, packaging, quantity, rate, amount, discount_per_pack)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO purchase_items (purchase_id, product_id, packages, packaging, quantity, rate, amount, discount_per_pack, commission_pct, commission_amount)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       );
       for (const item of itemsData) {
-        insertItem.run(purId, item.product_id, item.packages, item.packaging, item.quantity, item.rate, item.amount, item.discount_per_pack);
+        insertItem.run(purId, item.product_id, item.packages, item.packaging, item.quantity, item.rate, item.amount, item.discount_per_pack, item.commission_pct, item.commission_amount);
         applyStockMovement(item.product_id, wid, item.quantity, 'purchase', purId, 'purchase-edit', `Purchase ${existing.purchase_no} (edited)`);
       }
 

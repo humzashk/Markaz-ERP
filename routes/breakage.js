@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { validate, schemas } = require('../middleware/validate');
 const { db, generateNumber, addLedgerEntry, addAuditLog } = require('../database');
 
 router.get('/', (req, res) => {
@@ -21,7 +22,7 @@ router.get('/add', (req, res) => {
   res.render('breakage/form', { page: 'breakage', breakage: null, customers, products, edit: false });
 });
 
-router.post('/add', (req, res) => {
+router.post('/add', validate(schemas.breakageCreate), (req, res) => {
   const { customer_id, product_id, quantity, amount, breakage_date, notes } = req.body;
 
   const qty = parseInt(quantity) || 0;

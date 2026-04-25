@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { validate, schemas } = require('../middleware/validate');
 const { db, addAuditLog } = require('../database');
 
 router.get('/', (req, res) => {
@@ -15,7 +16,7 @@ router.get('/add', (req, res) => {
   res.render('warehouses/form', { page: 'warehouses', warehouse: null, edit: false });
 });
 
-router.post('/add', (req, res) => {
+router.post('/add', validate(schemas.warehouseCreate), (req, res) => {
   const { name, location, manager, phone, notes } = req.body;
   const result = db.prepare(
     `INSERT INTO warehouses (name, location, manager, phone, notes) VALUES (?, ?, ?, ?, ?)`
@@ -30,7 +31,7 @@ router.get('/edit/:id', (req, res) => {
   res.render('warehouses/form', { page: 'warehouses', warehouse, edit: true });
 });
 
-router.post('/edit/:id', (req, res) => {
+router.post('/edit/:id', validate(schemas.warehouseCreate), (req, res) => {
   const { name, location, manager, phone, notes, status } = req.body;
   db.prepare(
     `UPDATE warehouses SET name=?, location=?, manager=?, phone=?, notes=?, status=? WHERE id=?`

@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { validate, schemas } = require('../middleware/validate');
 const { db, addAuditLog } = require('../database');
 
 router.get('/', (req, res) => {
@@ -12,7 +13,7 @@ router.get('/add', (req, res) => {
   res.render('bank/form', { page: 'bank', account: null, edit: false });
 });
 
-router.post('/add', (req, res) => {
+router.post('/add', validate(schemas.bankCreate), (req, res) => {
   const { account_name, bank_name, account_number, account_type, opening_balance } = req.body;
   const bal = parseFloat(opening_balance) || 0;
   const result = db.prepare(
@@ -28,7 +29,7 @@ router.get('/edit/:id', (req, res) => {
   res.render('bank/form', { page: 'bank', account, edit: true });
 });
 
-router.post('/edit/:id', (req, res) => {
+router.post('/edit/:id', validate(schemas.bankCreate), (req, res) => {
   const { account_name, bank_name, account_number, account_type, status } = req.body;
   db.prepare(
     `UPDATE bank_accounts SET account_name=?, bank_name=?, account_number=?, account_type=?, status=? WHERE id=?`

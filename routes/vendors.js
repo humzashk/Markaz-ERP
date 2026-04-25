@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { validate, schemas } = require('../middleware/validate');
 const { db, addAuditLog } = require('../database');
 
 function getCategories() {
@@ -28,7 +29,7 @@ router.get('/add', (req, res) => {
   res.render('vendors/form', { page: 'vendors', vendor: null, edit: false, regions, types });
 });
 
-router.post('/add', (req, res) => {
+router.post('/add', validate(schemas.vendorCreate), (req, res) => {
   const { name, phone, email, address, city, opening_balance, region, party_type, notes, commission } = req.body;
   const bal = parseFloat(opening_balance) || 0;
   const result = db.prepare(
@@ -45,7 +46,7 @@ router.get('/edit/:id', (req, res) => {
   res.render('vendors/form', { page: 'vendors', vendor, edit: true, regions, types });
 });
 
-router.post('/edit/:id', (req, res) => {
+router.post('/edit/:id', validate(schemas.vendorCreate), (req, res) => {
   const { name, phone, email, address, city, status, region, party_type, notes, commission } = req.body;
   db.prepare(
     `UPDATE vendors SET name=?, phone=?, email=?, address=?, city=?, status=?, region=?, party_type=?, notes=?, commission=? WHERE id=?`

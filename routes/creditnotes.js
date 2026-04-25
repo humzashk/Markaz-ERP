@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { validate, schemas } = require('../middleware/validate');
 const { db, generateNumber, addLedgerEntry, addAuditLog } = require('../database');
 
 router.get('/', (req, res) => {
@@ -41,7 +42,7 @@ router.get('/add', (req, res) => {
   res.render('creditnotes/form', { page: 'creditnotes', note: null, noteType, customers, vendors, products, invoices, purchases, edit: false });
 });
 
-router.post('/add', (req, res) => {
+router.post('/add', validate(schemas.creditNoteCreate), (req, res) => {
   const { note_type, customer_id, vendor_id, invoice_id, purchase_id, note_date, reason, notes, product_id, quantity, rate } = req.body;
 
   const productIds = Array.isArray(product_id) ? product_id : [product_id];
@@ -92,8 +93,8 @@ router.post('/apply/:id', (req, res) => {
       // Credit note to customer: reduce their balance (refund)
       addLedgerEntry('customer', note.customer_id, note.note_date, `Credit Note ${note.note_no} - ${note.reason || 'Sales Return'}`, 0, note.amount, 'credit_note', note.id);
     } else if (note.note_type === 'debit' && note.vendor_id) {
-      // Debit note from vendor: reduce what we owe
-      addLedgerEntry('vendor', note.vendor_id, note.note_date, `Debit Note ${note.note_no} - ${note.reason || 'Purchase Return'}`, 0, note.amount, 'debit_note', note.id);
+      // Debit note to vendor: reduces what we owe (vendor balance = credit - debit, so put in DEBIT)
+      addLedgerEntry('vendor', note.vendor_id, note.note_date, `Debit Note ${note.note_no} - ${note.reason || 'Purchase Return'}`, note.amount, 0, 'debit_note', note.id);
     }
   })();
 

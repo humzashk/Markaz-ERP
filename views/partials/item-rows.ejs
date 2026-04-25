@@ -9,7 +9,8 @@
       <th width="80" class="text-center">Pcs/Ctn</th>
       <th width="100" class="text-center">Total Pcs</th>
       <th width="80" class="text-center">Rate/Pc</th>
-      <th width="80" class="text-center">Disc/Pack</th>
+      <% var _hideDisc = (typeof hideDiscount !== 'undefined' && hideDiscount); %>
+      <% if (!_hideDisc) { %><th width="80" class="text-center">Disc/Pack</th><% } %>
       <th width="80" class="text-center">Comm %</th>
       <th width="110" class="text-center">Amount</th>
       <th width="40"></th>
@@ -40,12 +41,10 @@
         <td>
           <input type="number" name="rate" class="form-control rate-input text-center" min="0" step="0.01" value="<%= item.rate %>" required oninput="calcTotal()">
         </td>
-        <td>
-          <input type="number" name="discount_per_pack" class="form-control discount-input text-center" min="0" step="0.01" value="<%= item.discount_per_pack || 0 %>" oninput="calcTotal()">
-        </td>
-        <td>
-          <input type="number" name="commission_pct" class="form-control commission-input text-center" min="0" step="0.01" max="100" value="<%= item.commission_pct || 0 %>" oninput="calcTotal()">
-        </td>
+        <% if (!_hideDisc) { %>
+        <td><input type="number" name="discount_per_pack" class="form-control discount-input text-center" min="0" step="0.01" value="<%= item.discount_per_pack || 0 %>" oninput="calcTotal()"></td>
+        <% } else { %><input type="hidden" name="discount_per_pack" value="0"><% } %>
+        <td><input type="number" name="commission_pct" class="form-control commission-input text-center" min="0" step="0.01" max="50" value="<%= item.commission_pct || 0 %>" oninput="calcTotal()"></td>
         <td class="text-center">
           <span class="row-amount fw-bold text-success"><%= item.amount.toFixed(2) %></span>
         </td>
@@ -67,8 +66,10 @@
         <td><input type="number" name="packaging" class="form-control packaging-input text-center text-muted" min="1" value="1" oninput="calcRow(this)"></td>
         <td><input type="number" name="quantity" class="form-control qty-input text-center fw-bold text-primary" min="0" value="" required oninput="onQtyInput(this)" placeholder="0"></td>
         <td><input type="number" name="rate" class="form-control rate-input text-center" min="0" step="0.01" value="" required oninput="calcTotal()" placeholder="0.00"></td>
+        <% if (!_hideDisc) { %>
         <td><input type="number" name="discount_per_pack" class="form-control discount-input text-center" min="0" step="0.01" value="0" oninput="calcTotal()"></td>
-        <td><input type="number" name="commission_pct" class="form-control commission-input text-center" min="0" step="0.01" max="100" value="0" oninput="calcTotal()"></td>
+        <% } else { %><input type="hidden" name="discount_per_pack" value="0"><% } %>
+        <td><input type="number" name="commission_pct" class="form-control commission-input text-center" min="0" step="0.01" max="50" value="0" oninput="calcTotal()"></td>
         <td class="text-center"><span class="row-amount fw-bold text-success">0.00</span></td>
         <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="removeRow(this)"><i class="bi bi-x"></i></button></td>
       </tr>

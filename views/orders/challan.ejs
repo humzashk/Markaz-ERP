@@ -4,15 +4,16 @@
 <meta charset="UTF-8">
 <title>Delivery Challan - <%= order.order_no %></title>
 <style>
+@page { size: A5; margin: 6mm; }
 * { margin:0; padding:0; box-sizing:border-box; }
-body { font-family: Arial, 'Helvetica', sans-serif; font-size: 12px; color:#000; background:#fff; line-height:1.4; }
-.page { width:210mm; min-height:297mm; margin:0 auto; padding:12mm 14mm 10mm; display:flex; flex-direction:column; }
+body { font-family: Arial, 'Helvetica', sans-serif; font-size: 10px; color:#000; background:#fff; line-height:1.35; }
+.page { width:148mm; min-height:0; margin:0 auto; padding:4mm 5mm; display:flex; flex-direction:column; }
 .no-print { text-align:center; padding:10px 0 14px; }
 .no-print button, .no-print a { padding:8px 22px; margin:0 5px; border:1px solid #000; background:#fff; color:#000; cursor:pointer; font-size:13px; text-decoration:none; display:inline-block; font-weight:600; }
 
 .header { display:flex; align-items:center; justify-content:flex-start; gap:16px; border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:10px; }
-.header .logo-box { width:140px; height:140px; flex-shrink:0; display:flex; align-items:center; justify-content:center; padding:4px; background:#fff; }
-.header .logo-box img { max-width:100%; max-height:100%; object-fit:contain; filter: grayscale(100%); display:block; }
+.header .logo-box { width: var(--logo-w, 150px); height: var(--logo-h, 120px); flex-shrink:0; display:flex; align-items:center; justify-content:center; padding:2px; background:#fff; }
+.header .logo-box img { max-width:100%; max-height:100%; object-fit:contain; display:block; visibility:visible !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 .header .company-block { flex:1; text-align:center; }
 .header .spacer-right { width:70px; flex-shrink:0; }
 .company-name { font-size:24px; font-weight:900; letter-spacing:2px; text-transform:uppercase; }
@@ -45,9 +46,10 @@ table.items tbody tr.total-row td { background:#000; color:#fff; font-weight:800
 .for-company { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px; }
 
 @media print {
-  body { background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .no-print { display:none; }
-  .page { margin:0; padding:10mm 12mm 8mm; width:100%; }
+  html, body { background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; width:148mm; }
+  .no-print { display:none !important; }
+  .page { margin:0; padding:4mm 5mm; width:148mm !important; min-height:0 !important; }
+  .header .logo-box img { display:block !important; visibility:visible !important; }
 }
 </style>
 </head>
@@ -55,7 +57,7 @@ table.items tbody tr.total-row td { background:#000; color:#fff; font-weight:800
 <%
   var scope = (order && order.account_scope) ? order.account_scope : 'plastic_markaz';
   var bizName = (typeof accountName === 'function') ? accountName(scope) : 'PLASTIC MARKAZ';
-  var logoPath = (typeof getLogoPath === 'function') ? getLogoPath(scope) : '/Logo.png';
+  var logoPath = '/Logo.png';
   var bizAddr = (settings && settings.business_address) || '';
   var bizPhone= (settings && settings.business_phone)  || '';
   var bizCity = (settings && settings.business_city)   || '';
@@ -149,8 +151,8 @@ table.items tbody tr.total-row td { background:#000; color:#fff; font-weight:800
       <% } %>
       <tr class="total-row">
         <td colspan="2" class="tr" style="padding-right:14px;">GRAND TOTAL</td>
-        <td class="tc"><%= fmtQty(totalPkg) %> ctn</td>
-        <td class="tc">&mdash;</td>
+        <td class="tc"><%= fmtQty(totalPkg) %></td>
+        <td class="tc"><%= fmtQty(totalQty) %></td>
         <td class="fw"><%= fmtQty(totalPkg) %> cartons = <%= fmtQty(totalQty) %> pcs</td>
       </tr>
     </tbody>

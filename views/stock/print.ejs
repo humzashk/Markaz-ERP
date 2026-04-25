@@ -51,7 +51,7 @@
 <%
   var scope = (adj && adj.account_scope) ? adj.account_scope : 'plastic_markaz';
   var bizName = (typeof accountName === 'function') ? accountName(scope) : 'PLASTIC MARKAZ';
-  var logoPath = (typeof getLogoPath === 'function') ? getLogoPath(scope) : '/Logo.png';
+  var logoPath = '/Logo.png';
 %>
 
 <div class="page">

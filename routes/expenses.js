@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { validate, schemas } = require('../middleware/validate');
 const { db, addAuditLog } = require('../database');
 
 router.get('/', (req, res) => {
@@ -23,7 +24,7 @@ router.get('/add', (req, res) => {
   res.render('expenses/form', { page: 'expenses', expense: null, edit: false, allCats });
 });
 
-router.post('/add', (req, res) => {
+router.post('/add', validate(schemas.expenseCreate), (req, res) => {
   const { category, description, amount, expense_date, payment_method, reference, paid_to } = req.body;
   const result = db.prepare(
     `INSERT INTO expenses (category, description, amount, expense_date, payment_method, reference, paid_to) VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -39,7 +40,7 @@ router.get('/edit/:id', (req, res) => {
   res.render('expenses/form', { page: 'expenses', expense, edit: true, allCats });
 });
 
-router.post('/edit/:id', (req, res) => {
+router.post('/edit/:id', validate(schemas.expenseCreate), (req, res) => {
   const { category, description, amount, expense_date, payment_method, reference, paid_to } = req.body;
   db.prepare(
     `UPDATE expenses SET category=?, description=?, amount=?, expense_date=?, payment_method=?, reference=?, paid_to=? WHERE id=?`

@@ -144,13 +144,13 @@ function calcTotal() {
   document.querySelectorAll('[name="amount[]"]').forEach(i => sub += parseFloat(i.value)||0);
   const commPct = parseFloat(document.getElementById('commission_pct').value)||0;
   const comm = sub * commPct / 100;
-  document.getElementById('subtotalDisplay').textContent = 'Rs. ' + sub.toLocaleString('en-PK',{minimumFractionDigits:2});
-  document.getElementById('totalDisplay').textContent = 'Rs. ' + sub.toLocaleString('en-PK',{minimumFractionDigits:2});
+  document.getElementById('subtotalDisplay').textContent = 'PKR ' + sub.toLocaleString('en-PK',{minimumFractionDigits:2});
+  document.getElementById('totalDisplay').textContent = 'PKR ' + sub.toLocaleString('en-PK',{minimumFractionDigits:2});
   // Update commission display if elements exist
   const cd = document.getElementById('commDisplay');
   const gd = document.getElementById('grossDisplay');
-  if (cd) cd.textContent = 'Rs. ' + comm.toLocaleString('en-PK',{minimumFractionDigits:2});
-  if (gd) gd.textContent = 'Rs. ' + (sub-comm).toLocaleString('en-PK',{minimumFractionDigits:2});
+  if (cd) cd.textContent = 'PKR ' + comm.toLocaleString('en-PK',{minimumFractionDigits:2});
+  if (gd) gd.textContent = 'PKR ' + (sub-comm).toLocaleString('en-PK',{minimumFractionDigits:2});
   const cl = document.getElementById('commPctLabel');
   if (cl) cl.textContent = commPct;
 }

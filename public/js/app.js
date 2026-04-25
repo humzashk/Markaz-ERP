@@ -48,32 +48,87 @@ function renumberRows() {
 function onProductChange(sel) {
   const row = sel.closest('tr');
   const opt = sel.options[sel.selectedIndex];
-  if (opt.dataset.packaging) {
-    row.querySelector('.packaging-input').value = opt.dataset.packaging;
-  }
-  // AUTO RATE: auto-fill sell rate from products master (user can still override)
+  // Optimistic fill from <option> dataset (instant)
+  if (opt.dataset.packaging) row.querySelector('.packaging-input').value = opt.dataset.packaging;
   if (opt.dataset.rate) {
     const rateInput = row.querySelector('.rate-input');
     if (rateInput) rateInput.value = parseFloat(opt.dataset.rate).toFixed(2);
   }
-  // Auto-fill default commission % if product has one
   if (opt.dataset.commission) {
     const commInput = row.querySelector('.commission-input');
-    if (commInput && (!commInput.value || commInput.value === '0')) {
-      commInput.value = parseFloat(opt.dataset.commission) || 0;
-    }
+    if (commInput && (!commInput.value || commInput.value === '0')) commInput.value = parseFloat(opt.dataset.commission) || 0;
   }
-  // Highlight stock info
-  const stock = parseInt(opt.dataset.stock) || 0;
   const stockInfo = sel.parentElement.querySelector('.stock-hint');
   if (stockInfo) stockInfo.remove();
-  if (opt.value) {
+  if (!opt.value) return calcRow(sel);
+
+  // Async: fetch warehouse-scoped stock + best sell rate from /api/stock
+  const apiBase = (window.location.pathname.indexOf('/orders') === 0) ? '/orders' :
+                  (window.location.pathname.indexOf('/invoices') === 0) ? '/invoices' :
+                  (window.location.pathname.indexOf('/purchases') === 0) ? null : null;
+  const wid = document.querySelector('select[name="warehouse_id"]')?.value || '';
+  const customerSel = document.querySelector('select[name="customer_id"]');
+  const customerType = customerSel?.options[customerSel.selectedIndex]?.dataset.customerType || 'retail';
+  if (apiBase) {
+    fetch(`${apiBase}/api/stock/${opt.value}?warehouse_id=${wid}&customer_type=${customerType}`)
+      .then(r => r.json())
+      .then(d => {
+        const qpp = d.qty_per_pack || 1;
+        const ctn = d.stock_ctn != null ? d.stock_ctn : Math.floor((d.stock||0)/qpp);
+        const loose = d.stock_loose != null ? d.stock_loose : ((d.stock||0) % qpp);
+        const hint = document.createElement('small');
+        hint.className = 'stock-hint ' + ((d.stock||0) < 10 ? 'text-danger' : 'text-muted') + ' d-block';
+        hint.innerHTML = `Stock: <strong>${d.stock||0}</strong> pcs &nbsp;·&nbsp; <strong>${ctn}</strong> ctn ${loose ? '+ '+loose+' loose' : ''}`;
+        sel.parentElement.appendChild(hint);
+        // Apply rate from rate_list if backend returned one
+        if (d.rate != null) {
+          const rateInput = row.querySelector('.rate-input');
+          if (rateInput && (!rateInput.dataset._userEdited)) rateInput.value = parseFloat(d.rate).toFixed(2);
+        }
+        // Stash stock on row for over-stock warning
+        row.dataset.stockPcs = d.stock || 0;
+        row.dataset.qtyPerPack = qpp;
+        calcRow(sel);
+      })
+      .catch(() => { /* fall back silently */ });
+  } else {
+    const stock = parseInt(opt.dataset.stock) || 0;
     const hint = document.createElement('small');
-    hint.className = 'stock-hint ' + (stock < 10 ? 'text-danger' : 'text-muted');
-    hint.innerHTML = `Stock: <strong>${stock}</strong> pcs available`;
+    hint.className = 'stock-hint text-muted d-block';
+    hint.innerHTML = `Stock: <strong>${stock}</strong> pcs`;
     sel.parentElement.appendChild(hint);
+    row.dataset.stockPcs = stock;
+    calcRow(sel);
   }
-  calcRow(sel);
+}
+
+// Mark rate input as user-edited so async API doesn't overwrite manual entry
+document.addEventListener('input', e => {
+  if (e.target && e.target.classList && e.target.classList.contains('rate-input')) {
+    e.target.dataset._userEdited = '1';
+  }
+});
+
+// Re-fetch all rows' stock when warehouse changes
+document.addEventListener('change', e => {
+  if (e.target && e.target.name === 'warehouse_id') {
+    document.querySelectorAll('select.product-select').forEach(s => { if (s.value) onProductChange(s); });
+  }
+});
+
+// Over-stock warning
+function _checkOverStock(row) {
+  const qty = parseFloat(row.querySelector('.qty-input')?.value) || 0;
+  const stockPcs = parseFloat(row.dataset.stockPcs || '0') || 0;
+  const cell = row.querySelector('.qty-input');
+  if (!cell) return;
+  if (stockPcs > 0 && qty > stockPcs) {
+    cell.classList.add('is-invalid');
+    cell.title = 'Exceeds available stock (' + stockPcs + ' pcs)';
+  } else {
+    cell.classList.remove('is-invalid');
+    cell.title = '';
+  }
 }
 
 // When packages or pcs/ctn change → auto-fill qty
@@ -99,7 +154,6 @@ function onQtyInput(el) {
   const row = el.closest('tr');
   const pkg = parseInt(row.querySelector('.pkg-input').value) || 0;
   const packaging = parseInt(row.querySelector('.packaging-input').value) || 1;
-  // Reverse: if qty entered and packaging known, suggest packages
   if (el.value && packaging > 0) {
     const qty = parseInt(el.value) || 0;
     const suggestedPkg = qty / packaging;
@@ -107,6 +161,7 @@ function onQtyInput(el) {
       row.querySelector('.pkg-input').value = suggestedPkg;
     }
   }
+  _checkOverStock(row);
   calcTotal();
 }
 
@@ -132,8 +187,10 @@ function calcTotal() {
   });
 
   const transport = parseFloat(document.getElementById('transport_charges')?.value) || 0;
-  const grand = subtotal + transport;
-  const gross = grand - totalCommission - totalDiscount;
+  const delivery  = parseFloat(document.getElementById('delivery_charges')?.value) || 0;
+  const discountField = parseFloat(document.getElementById('discount')?.value) || 0;
+  const grand = subtotal + transport + delivery - totalCommission - totalDiscount - discountField;
+  const gross = grand;
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
   set('subtotal', subtotal.toLocaleString('en-PK', {minimumFractionDigits:2}));
@@ -161,5 +218,69 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!confirm('Are you sure you want to delete this record?')) e.preventDefault();
     });
   });
+
+  // ============ CLIENT-SIDE REQUIRED FIELD GUARD ============
+  // Pre-flight check before save confirm — surfaces missing required fields with a clear message.
+  document.querySelectorAll('form').forEach(form => {
+    if (form.classList.contains('no-validate')) return;
+    if ((form.getAttribute('method') || 'GET').toUpperCase() !== 'POST') return;
+    form.addEventListener('submit', e => {
+      if (form.dataset._validated === '1') return;
+      const missing = [];
+      form.querySelectorAll('[required]').forEach(el => {
+        const v = (el.value || '').trim();
+        if (!v) {
+          const lbl = (el.closest('.mb-3')?.querySelector('label')?.textContent || el.name || 'field').replace(/\*$/,'').trim();
+          missing.push(lbl);
+          el.classList.add('is-invalid');
+        } else {
+          el.classList.remove('is-invalid');
+        }
+      });
+      // Item-row guard: at least one row with product + quantity
+      const rows = form.querySelectorAll('#itemsBody tr');
+      if (rows.length) {
+        let validRow = 0;
+        rows.forEach(r => {
+          const pid = r.querySelector('select[name="product_id"]')?.value;
+          const qty = parseFloat(r.querySelector('input[name="quantity"]')?.value || '0');
+          if (pid && qty > 0) validRow++;
+        });
+        if (validRow === 0) missing.push('At least one valid line item (product + quantity)');
+      }
+      if (missing.length) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        alert('Please provide valid values for:\n\n• ' + missing.join('\n• '));
+        return;
+      }
+      form.dataset._validated = '1';
+    });
+  });
+
+  // ============ UNIVERSAL SAVE CONFIRMATION ============
+  // Any POST form that mutates data is wrapped with a confirm dialog.
+  // Opt out per-form by adding class="no-confirm" or attribute data-no-confirm.
+  document.querySelectorAll('form').forEach(form => {
+    if (form.classList.contains('delete-form')) return;          // already handled
+    if (form.classList.contains('no-confirm')) return;
+    if (form.hasAttribute('data-no-confirm')) return;
+    const method = (form.getAttribute('method') || 'GET').toUpperCase();
+    if (method !== 'POST') return;
+    // Skip search/filter forms (heuristic: contains only inputs named search/period/status/from/to/etc.)
+    const action = (form.getAttribute('action') || '').toLowerCase();
+    if (/\/search|\/filter|\/login|\/logout/.test(action)) return;
+
+    form.addEventListener('submit', e => {
+      if (form.dataset._confirmed === '1') return;
+      e.preventDefault();
+      const verb = form.dataset.confirmVerb || 'save this entry';
+      if (confirm('Are you sure you want to ' + verb + '?')) {
+        form.dataset._confirmed = '1';
+        form.submit();
+      }
+    });
+  });
+
   calcTotal();
 });

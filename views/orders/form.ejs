@@ -4,6 +4,7 @@
   <a href="/orders" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
 </div>
 <form method="post" action="/orders/<%= edit ? 'edit/'+order.id : 'add' %>">
+<%- include("../partials/form-error") %>
   <div class="row g-3 mb-3">
     <div class="col-md-4">
       <div class="card">
@@ -35,7 +36,18 @@
             </select>
           </div>
           <div class="mb-3"><label class="form-label">Bilty #</label><input type="text" name="bilty_no" class="form-control" value="<%= order?.bilty_no || '' %>"></div>
-          <div class="mb-3"><label class="form-label">Transporter</label><input type="text" name="transporter_name" class="form-control" value="<%= order?.transporter_name || '' %>"></div>
+          <div class="mb-3"><label class="form-label">Transport</label>
+            <div class="input-group">
+              <select name="transport_id" class="form-select">
+                <option value="">— None —</option>
+                <% (typeof transports !== 'undefined' ? transports : []).forEach(t => { %>
+                  <option value="<%= t.id %>" <%= (order && order.transport_id==t.id)?'selected':'' %>><%= t.name %></option>
+                <% }) %>
+              </select>
+              <a href="/transports/add" target="_blank" class="btn btn-outline-secondary" title="New transport"><i class="bi bi-plus"></i></a>
+            </div>
+            <input type="hidden" name="transporter_name" value="<%= order?.transporter_name || '' %>">
+          </div>
           <div class="mb-3"><label class="form-label">Notes</label><textarea name="notes" class="form-control" rows="2"><%= order?.notes || '' %></textarea></div>
         </div>
       </div>
@@ -51,7 +63,7 @@
           <span id="stockMeter"></span>
         </div>
         <div class="card-body">
-          <%- include('../partials/item-rows') %>
+          <%- include('../partials/item-rows', { hideDiscount: true }) %>
           <div class="text-end border-top pt-3">
             <div class="d-flex justify-content-end gap-4 mb-2">
               <span class="text-muted">Subtotal:</span><strong id="subtotal">0.00</strong>

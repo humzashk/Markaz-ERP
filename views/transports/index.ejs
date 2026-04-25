@@ -1,0 +1,33 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-truck"></i> Transports</h2>
+  <a href="/transports/add" class="btn btn-primary"><i class="bi bi-plus"></i> Add Transport</a>
+</div>
+<form method="get" class="mb-3 no-confirm no-validate">
+  <div class="input-group" style="max-width:400px">
+    <input type="text" name="search" class="form-control" placeholder="Search by name" value="<%= search %>">
+    <button class="btn btn-outline-secondary"><i class="bi bi-search"></i></button>
+  </div>
+</form>
+<div class="card"><div class="table-responsive"><table class="table table-striped mb-0">
+  <thead><tr><th>Name</th><th>Contact</th><th>Phone</th><th>City</th><th>Vehicle</th><th>Driver</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+    <% transports.forEach(t => { %>
+      <tr>
+        <td class="fw-bold"><%= t.name %></td>
+        <td><%= t.contact || '-' %></td>
+        <td><%= t.phone || '-' %></td>
+        <td><%= t.city || '-' %></td>
+        <td><%= t.vehicle_no || '-' %></td>
+        <td><%= t.driver_name || '-' %></td>
+        <td><span class="badge bg-<%= statusBadge(t.status) %>"><%= t.status %></span></td>
+        <td>
+          <a href="/transports/edit/<%= t.id %>" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+          <form method="post" action="/transports/delete/<%= t.id %>" class="d-inline delete-form"><button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form>
+        </td>
+      </tr>
+    <% }); %>
+    <% if (!transports.length) { %><tr><td colspan="8" class="text-center text-muted">No transports yet</td></tr><% } %>
+  </tbody>
+</table></div></div>
+<%- include('../partials/footer') %>

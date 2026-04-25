@@ -1,0 +1,77 @@
+/* print.css — A5 / Half-Letter print enforcement for invoices, orders, challans, purchases.
+   Add class="printable" to the root container of any printable view. */
+
+@page {
+  size: A5;
+  margin: 8mm 8mm 8mm 8mm;
+}
+
+@media print {
+  html, body {
+    width: 148mm;       /* A5 width */
+    background: #fff !important;
+    color: #000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 10pt;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* Hide all chrome */
+  #sidebar, .sidebar, .topbar, .no-print, nav, header, footer.no-print,
+  .btn, .form-control, .alert, .pagination, .breadcrumb { display: none !important; }
+  .main-content, .content-wrapper { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+
+  /* Force A5 single sheet */
+  .printable, .print-sheet {
+    width: 132mm !important;     /* A5 minus margins */
+    max-width: 132mm !important;
+    min-height: 0 !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    page-break-after: avoid;
+  }
+
+  .print-sheet table { width: 100% !important; border-collapse: collapse !important; }
+  .print-sheet table th, .print-sheet table td {
+    padding: 2px 4px !important;
+    font-size: 9pt !important;
+    border: 1px solid #333 !important;
+  }
+  .print-sheet h1 { font-size: 14pt !important; margin: 2mm 0 !important; }
+  .print-sheet h2 { font-size: 12pt !important; margin: 1mm 0 !important; }
+  .print-sheet h3 { font-size: 11pt !important; margin: 1mm 0 !important; }
+
+  /* Logo: always render, configurable size via CSS var (set inline in template) */
+  .print-logo {
+    max-height: var(--print-logo-h, 22mm) !important;
+    max-width:  var(--print-logo-w, 50mm) !important;
+    height: auto !important; width: auto !important;
+    object-fit: contain;
+    display: inline-block !important;
+    visibility: visible !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Avoid page-breaks inside line items */
+  tr, td, th { page-break-inside: avoid; }
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+}
+
+/* Screen styling — keep printable preview at A5 too */
+.print-sheet {
+  width: 148mm;
+  margin: 12px auto;
+  background: #fff;
+  padding: 8mm;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.1);
+  font-size: 11px;
+  color: #111;
+}
+.print-sheet table { width: 100%; border-collapse: collapse; }
+.print-sheet table th, .print-sheet table td { border: 1px solid #555; padding: 3px 5px; }
+.print-logo { max-height: 60px; max-width: 180px; object-fit: contain; }

@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { validate, schemas } = require('../middleware/validate');
 const bcrypt = require('bcryptjs');
 const { db } = require('../database');
 const { ALL_MODULES, requireRole } = require('../middleware/auth');
@@ -78,7 +79,7 @@ function modulesFromBody(body) {
 }
 
 // CREATE
-router.post('/', (req, res) => {
+router.post('/', validate(schemas.userCreate), (req, res) => {
   try {
     const username = String(req.body.username || '').trim().toLowerCase();
     const name     = String(req.body.name || '').trim();
@@ -115,7 +116,7 @@ router.post('/', (req, res) => {
 });
 
 // UPDATE
-router.post('/edit/:id', (req, res) => {
+router.post('/edit/:id', validate(schemas.userCreate), (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const target = db.prepare('SELECT * FROM users WHERE id = ?').get(id);

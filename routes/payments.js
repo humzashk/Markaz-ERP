@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { validate, schemas } = require('../middleware/validate');
 const { db, addLedgerEntry, addAuditLog } = require('../database');
 
 // ============ ALL PAYMENTS LIST ============
@@ -109,7 +110,7 @@ router.get('/add', (req, res) => {
   return res.redirect(`/payments/receive${req.query.entity_id ? '?customer_id=' + req.query.entity_id : ''}`);
 });
 
-router.post('/add', (req, res) => {
+router.post('/add', validate(schemas.paymentCreate), (req, res) => {
   const { entity_type } = req.body;
   if (entity_type === 'vendor') {
     req.url = '/pay';

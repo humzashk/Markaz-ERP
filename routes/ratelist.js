@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { validate, schemas } = require('../middleware/validate');
 const { db, addAuditLog } = require('../database');
 
 router.get('/', (req, res) => {
@@ -20,7 +21,7 @@ router.get('/', (req, res) => {
   res.render('ratelist/index', { page: 'ratelist', rates, products, rateHistory });
 });
 
-router.post('/add', (req, res) => {
+router.post('/add', validate(schemas.rateListCreate), (req, res) => {
   const { product_id, customer_type, rate, effective_date } = req.body;
   db.prepare(
     `INSERT INTO rate_list (product_id, customer_type, rate, effective_date) VALUES (?, ?, ?, ?)`
@@ -29,7 +30,7 @@ router.post('/add', (req, res) => {
   res.redirect('/ratelist');
 });
 
-router.post('/edit/:id', (req, res) => {
+router.post('/edit/:id', validate(schemas.rateListCreate), (req, res) => {
   const { rate, effective_date } = req.body;
   db.prepare(
     `UPDATE rate_list SET rate=?, effective_date=? WHERE id=?`

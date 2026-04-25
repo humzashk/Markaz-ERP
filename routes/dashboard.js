@@ -25,8 +25,9 @@ const DASH_WIDGETS = ['dash.financials','dash.profit','dash.cash','dash.aging','
 // Helper: which widgets can current user see?
 function visibleWidgets(req) {
   const role = req.user && req.user.role;
-  if (role === 'superadmin') return DASH_WIDGETS.slice();
-  // Admin and below: only widgets explicitly granted via user_permissions
+  // Admins + superadmins always see all widgets.
+  if (role === 'superadmin' || role === 'admin') return DASH_WIDGETS.slice();
+  // Employees: granted explicitly via user_permissions (dash.* keys saved alongside module names).
   const mods = req.userModules || [];
   return DASH_WIDGETS.filter(w => mods.includes(w));
 }
@@ -74,17 +75,17 @@ router.get('/', (req, res) => {
   const accClause = accountFilter ? ` AND account_scope = '${accountFilter.replace(/[^a-z_]/g,'')}'` : '';
 
   // ===== CORE FINANCIALS =====
-  const rangeRev       = safe(() => db.prepare(`SELECT COALESCE(SUM(total),0) v FROM invoices WHERE invoice_date BETWEEN ? AND ?${accClause}`).get(rangeStart, rangeEnd).v, 0);
-  const rangeExp       = safe(() => db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM expenses WHERE expense_date BETWEEN ? AND ?`).get(rangeStart, rangeEnd).v, 0);
-  const rangePurchases = safe(() => db.prepare(`SELECT COALESCE(SUM(total),0) v FROM purchases WHERE purchase_date BETWEEN ? AND ?${accClause}`).get(rangeStart, rangeEnd).v, 0);
-  const rangeCommission= safe(() => db.prepare(`SELECT COALESCE(SUM(commission_amount),0) v FROM invoices WHERE invoice_date BETWEEN ? AND ?${accClause}`).get(rangeStart, rangeEnd).v, 0);
-  const rangeDelivery  = safe(() => db.prepare(`SELECT COALESCE(SUM(transport_charge),0) v FROM invoices WHERE invoice_date BETWEEN ? AND ?${accClause}`).get(rangeStart, rangeEnd).v, 0);
+  const rangeRev       = safe(() => db.prepare(`SELECT COALESCE(SUM(total),0) v FROM invoices WHERE invoice_date BETWEEN ? AND ?${accClause}`).get(rangeStart, rangeEnd).v, 0, 'rangeRev');
+  const rangeExp       = safe(() => db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM expenses WHERE expense_date BETWEEN ? AND ?`).get(rangeStart, rangeEnd).v, 0, 'rangeExp');
+  const rangePurchases = safe(() => db.prepare(`SELECT COALESCE(SUM(total),0) v FROM purchases WHERE purchase_date BETWEEN ? AND ?${accClause}`).get(rangeStart, rangeEnd).v, 0, 'rangePurchases');
+  const rangeCommission= safe(() => db.prepare(`SELECT COALESCE(SUM(commission_amount),0) v FROM invoices WHERE invoice_date BETWEEN ? AND ?${accClause}`).get(rangeStart, rangeEnd).v, 0, 'rangeCommission');
+  const rangeDelivery  = safe(() => db.prepare(`SELECT COALESCE(SUM(transport_charges),0) v FROM invoices WHERE invoice_date BETWEEN ? AND ?${accClause}`).get(rangeStart, rangeEnd).v, 0, 'rangeDelivery');
   const rangeCOGS      = safe(() => db.prepare(`
-    SELECT COALESCE(SUM(ii.quantity * COALESCE(p.cost_price, p.purchase_rate, 0)), 0) v
+    SELECT COALESCE(SUM(ii.quantity * COALESCE(p.cost_price, p.purchase_price, 0)), 0) v
     FROM invoice_items ii JOIN products p ON p.id = ii.product_id
     JOIN invoices i ON i.id = ii.invoice_id
     WHERE i.invoice_date BETWEEN ? AND ?
-  `).get(rangeStart, rangeEnd).v, 0);
+  `).get(rangeStart, rangeEnd).v, 0, 'rangeCOGS');
 
   const rangeProfit = rangeRev - rangeCOGS - rangeCommission - rangeDelivery - rangeExp;
   const rangeMargin = rangeRev > 0 ? ((rangeProfit / rangeRev) * 100).toFixed(1) : 0;
@@ -122,7 +123,7 @@ router.get('/', (req, res) => {
   const conversionRate  = totalOrders > 0 ? Math.round((totalInvoices / totalOrders) * 100) : 0;
 
   // ===== STOCK =====
-  const stockValue = safe(() => db.prepare(`SELECT COALESCE(SUM(stock * COALESCE(cost_price, purchase_rate, rate, 0)),0) v FROM products WHERE status='active'`).get().v, 0);
+  const stockValue = safe(() => db.prepare(`SELECT COALESCE(SUM(stock * COALESCE(cost_price, purchase_price, rate, 0)),0) v FROM products WHERE status='active'`).get().v, 0);
   const lowStock = safe(() => db.prepare(`SELECT id, name, stock, min_stock FROM products WHERE stock <= COALESCE(min_stock,0) AND stock >= 0 AND status='active' ORDER BY stock ASC LIMIT 8`).all(), []);
   const negativeStock = safe(() => db.prepare(`SELECT id, name, stock FROM products WHERE stock < 0 AND status='active' ORDER BY stock ASC LIMIT 5`).all(), []);
   const outOfStockCount = safe(() => db.prepare(`SELECT COUNT(*) c FROM products WHERE stock <= 0 AND status='active'`).get().c, 0);
@@ -154,7 +155,7 @@ router.get('/', (req, res) => {
     SELECT p.id, p.name,
       COALESCE(SUM(ii.quantity),0) qty,
       COALESCE(SUM(ii.quantity * ii.rate),0) revenue,
-      COALESCE(SUM(ii.quantity * (ii.rate - COALESCE(p.cost_price, p.purchase_rate, 0))),0) profit
+      COALESCE(SUM(ii.quantity * (ii.rate - COALESCE(p.cost_price, p.purchase_price, 0))),0) profit
     FROM invoice_items ii
     JOIN products p ON p.id = ii.product_id
     JOIN invoices i ON i.id = ii.invoice_id
@@ -186,14 +187,91 @@ router.get('/', (req, res) => {
     ORDER BY p.id DESC LIMIT 5
   `).all(), []);
 
-  // ===== 6-MONTH CHART =====
+  // ===== REVENUE vs EXPENSES CHART (multi-granularity) =====
+  // Granularity controlled by ?chart= (day|week|month|quarter|lastquarter|6months|year). Default: 6months.
+  const chartGran = (req.query.chart || '6months').toLowerCase();
   const chartData = [];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(); d.setMonth(d.getMonth() - i);
-    const m = d.toISOString().substring(0, 7);
-    const rev = safe(() => db.prepare(`SELECT COALESCE(SUM(total),0) v FROM invoices WHERE invoice_date LIKE ?`).get(m + '%').v, 0);
-    const exp = safe(() => db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM expenses WHERE expense_date LIKE ?`).get(m + '%').v, 0);
-    chartData.push({ month: d.toLocaleString('default', { month: 'short', year: '2-digit' }), revenue: rev, expense: exp });
+  const pad = n => (n < 10 ? '0' + n : '' + n);
+  const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  function bucketSum(table, dateCol, sumCol, from, to) {
+    return safe(() => db.prepare(
+      `SELECT COALESCE(SUM(${sumCol}),0) v FROM ${table} WHERE ${dateCol} BETWEEN ? AND ?`
+    ).get(from, to).v, 0, 'chart.' + table);
+  }
+  function bucketCOGS(from, to) {
+    return safe(() => db.prepare(`
+      SELECT COALESCE(SUM(ii.quantity * COALESCE(NULLIF(ii.cost_at_sale,0), p.cost_price, p.purchase_price, 0)),0) v
+      FROM invoice_items ii
+      JOIN products p ON p.id = ii.product_id
+      JOIN invoices i ON i.id = ii.invoice_id
+      WHERE i.invoice_date BETWEEN ? AND ?
+    `).get(from, to).v, 0, 'chart.cogs');
+  }
+  function pushBucket(label, from, to) {
+    chartData.push({
+      month: label,
+      sales: bucketSum('invoices', 'invoice_date', 'total', from, to),
+      cogs:  bucketCOGS(from, to)
+    });
+  }
+
+  if (chartGran === 'day') {
+    // Last 14 days
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const s = ymd(d);
+      pushBucket(d.toLocaleString('default', { day: '2-digit', month: 'short' }), s, s);
+    }
+  } else if (chartGran === 'week') {
+    // Last 12 weeks (Mon-Sun)
+    const today = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const end = new Date(today); end.setDate(today.getDate() - i * 7);
+      const dow = (end.getDay() + 6) % 7; // Monday=0
+      const start = new Date(end); start.setDate(end.getDate() - dow);
+      const stop = new Date(start); stop.setDate(start.getDate() + 6);
+      pushBucket('W' + (12 - i) + ' ' + ymd(start).slice(5), ymd(start), ymd(stop));
+    }
+  } else if (chartGran === 'month') {
+    // Current month, daily
+    const now = new Date();
+    const first = new Date(now.getFullYear(), now.getMonth(), 1);
+    const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    for (let d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
+      const s = ymd(d);
+      pushBucket(String(d.getDate()), s, s);
+    }
+  } else if (chartGran === 'quarter' || chartGran === 'lastquarter') {
+    // Quarter, weekly
+    const now = new Date();
+    const offset = chartGran === 'lastquarter' ? -3 : 0;
+    const qStartMonth = Math.floor((now.getMonth() + offset) / 3) * 3;
+    const qStart = new Date(now.getFullYear(), qStartMonth, 1);
+    const qEnd = new Date(now.getFullYear(), qStartMonth + 3, 0);
+    let s = new Date(qStart);
+    let n = 1;
+    while (s <= qEnd) {
+      const e = new Date(s); e.setDate(s.getDate() + 6);
+      if (e > qEnd) e.setTime(qEnd.getTime());
+      pushBucket('W' + n, ymd(s), ymd(e));
+      s.setDate(s.getDate() + 7); n++;
+    }
+  } else if (chartGran === 'year') {
+    // Last 12 months
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
+      const start = new Date(d.getFullYear(), d.getMonth(), 1);
+      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      pushBucket(d.toLocaleString('default', { month: 'short', year: '2-digit' }), ymd(start), ymd(end));
+    }
+  } else {
+    // 6months (default)
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
+      const start = new Date(d.getFullYear(), d.getMonth(), 1);
+      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      pushBucket(d.toLocaleString('default', { month: 'short', year: '2-digit' }), ymd(start), ymd(end));
+    }
   }
 
   // ===== RATE CHANGES (with product_id link) =====
@@ -259,10 +337,10 @@ router.get('/', (req, res) => {
   // ===== AI: ANOMALIES =====
   const lowMarginInvoices = safe(() => db.prepare(`
     SELECT i.id, i.invoice_no, i.total, i.invoice_date, c.name customer_name, c.id customer_id,
-      i.commission_amount, COALESCE(i.discount_amount,0) disc_amt
+      i.commission_amount, COALESCE(i.discount,0) disc_amt
     FROM invoices i JOIN customers c ON c.id = i.customer_id
     WHERE i.invoice_date >= ?
-      AND ( (COALESCE(i.commission_amount,0) + COALESCE(i.discount_amount,0)) > i.total * 0.20 )
+      AND ( (COALESCE(i.commission_amount,0) + COALESCE(i.discount,0)) > i.total * 0.20 )
     ORDER BY i.id DESC LIMIT 5
   `).all(last30), []);
 
@@ -334,7 +412,7 @@ router.get('/', (req, res) => {
 
   // ===== AI: SMART SUGGESTIONS - with action links =====
   const suggestions = [];
-  if (overdueInvoices > 0) suggestions.push({ icon: 'exclamation-triangle', color: 'danger', text: `Follow up on ${overdueInvoices} overdue invoice(s) totaling Rs. ${(overdueAmount).toLocaleString()}`, link: '/invoices?status=overdue' });
+  if (overdueInvoices > 0) suggestions.push({ icon: 'exclamation-triangle', color: 'danger', text: `Follow up on ${overdueInvoices} overdue invoice(s) totaling PKR ${(overdueAmount).toLocaleString()}`, link: '/invoices?status=overdue' });
   if (negativeStock.length > 0) suggestions.push({ icon: 'dash-circle', color: 'danger', text: `${negativeStock.length} product(s) have negative stock — investigate immediately`, link: '/stock' });
   if (lowStock.length >= 3) suggestions.push({ icon: 'box', color: 'warning', text: `${lowStock.length} products below minimum stock — reorder soon`, link: '/reports/low-stock' });
   if (oldPendingOrders.length > 0) suggestions.push({ icon: 'clock', color: 'warning', text: `${oldPendingOrders.length} pending order(s) older than 7 days`, link: '/orders?status=pending' });
@@ -348,8 +426,8 @@ router.get('/', (req, res) => {
   const profitLeakage = safe(() => db.prepare(`
     SELECT p.id, p.name,
       COALESCE(SUM(ii.quantity * ii.rate),0) revenue,
-      COALESCE(SUM(ii.quantity * COALESCE(p.cost_price, p.purchase_rate, 0)),0) cost,
-      COALESCE(SUM(ii.quantity * (ii.rate - COALESCE(p.cost_price, p.purchase_rate, 0))),0) profit
+      COALESCE(SUM(ii.quantity * COALESCE(p.cost_price, p.purchase_price, 0)),0) cost,
+      COALESCE(SUM(ii.quantity * (ii.rate - COALESCE(p.cost_price, p.purchase_price, 0))),0) profit
     FROM invoice_items ii
     JOIN products p ON p.id = ii.product_id
     JOIN invoices i ON i.id = ii.invoice_id
@@ -375,7 +453,7 @@ router.get('/', (req, res) => {
     topCustomersMonth, topCustomersQuarter, topCustomersYear, topCustomersAllTime,
     topProductsByProfit,
     accountList,
-    recentOrders, recentPayments, chartData,
+    recentOrders, recentPayments, chartData, chartGran,
     rateChanges, stockVelocity,
     forecast7d, forecast30d, dailyAvg,
     reorderPredictions, creditRiskScored, lowMarginInvoices, oldPendingOrders, userEdits,

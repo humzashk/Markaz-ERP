@@ -120,7 +120,7 @@ router.get('/pdf/:type/:id', (req, res) => {
 
   y += 10;
   doc.font('Helvetica-Bold').fontSize(11);
-  doc.text(`Current Balance: Rs. ${entity.balance.toFixed(2)}`, 40, y);
+  doc.text(`Current Balance: PKR ${entity.balance.toFixed(2)}`, 40, y);
   if (entity.balance > 0) {
     doc.fillColor('#e74c3c').text(type === 'customer' ? '(Amount Due from Customer)' : '(Amount Payable to Vendor)', 40);
   }

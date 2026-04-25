@@ -4,6 +4,7 @@
   <a href="/invoices" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
 </div>
 <form method="post" action="/invoices/<%= edit ? 'edit/'+invoice.id : 'add' %>">
+<%- include("../partials/form-error") %>
   <div class="row g-3 mb-3">
     <div class="col-md-4">
       <div class="card">
@@ -27,6 +28,7 @@
           </div>
           <div class="mb-3"><label class="form-label">Invoice Date *</label><input type="date" name="invoice_date" class="form-control" value="<%= invoice?.invoice_date || new Date().toISOString().split('T')[0] %>" required></div>
           <div class="mb-3"><label class="form-label">Due Date</label><input type="date" name="due_date" class="form-control" value="<%= invoice?.due_date || '' %>"></div>
+          <div class="mb-3"><label class="form-label">Delivery Date</label><input type="date" name="delivery_date" class="form-control" value="<%= invoice?.delivery_date || '' %>"></div>
           <div class="mb-3"><label class="form-label">Warehouse</label>
             <select name="warehouse_id" class="form-select">
               <option value="">Select Warehouse</option>
@@ -34,8 +36,20 @@
             </select>
           </div>
           <div class="mb-3"><label class="form-label">Bilty #</label><input type="text" name="bilty_no" class="form-control" value="<%= invoice?.bilty_no || '' %>"></div>
-          <div class="mb-3"><label class="form-label">Transporter</label><input type="text" name="transporter_name" class="form-control" value="<%= invoice?.transporter_name || '' %>"></div>
-          <div class="mb-3"><label class="form-label">Transport / Delivery Charges (+/-)</label><input type="number" step="0.01" name="transport_charges" id="transport_charges" class="form-control" value="<%= invoice?.transport_charges || 0 %>" onchange="calcTotal()"></div>
+          <div class="mb-3"><label class="form-label">Transport</label>
+            <div class="input-group">
+              <select name="transport_id" class="form-select">
+                <option value="">— None —</option>
+                <% (typeof transports !== 'undefined' ? transports : []).forEach(t => { %>
+                  <option value="<%= t.id %>" <%= (invoice && invoice.transport_id==t.id)?'selected':'' %>><%= t.name %></option>
+                <% }) %>
+              </select>
+              <a href="/transports/add" target="_blank" class="btn btn-outline-secondary" title="New transport"><i class="bi bi-plus"></i></a>
+            </div>
+            <input type="hidden" name="transporter_name" value="<%= invoice?.transporter_name || '' %>">
+          </div>
+          <div class="mb-3"><label class="form-label">Transport Charges (+/-)</label><input type="number" step="0.01" name="transport_charges" id="transport_charges" class="form-control" value="<%= invoice?.transport_charges || 0 %>" onchange="calcTotal()"></div>
+          <div class="mb-3"><label class="form-label">Delivery Charges</label><input type="number" step="0.01" name="delivery_charges" id="delivery_charges" class="form-control" value="<%= invoice?.delivery_charges || 0 %>" onchange="calcTotal()"></div>
           <div class="mb-3"><label class="form-label">Account *</label>
             <select name="account_scope" class="form-select" required>
               <% ['plastic_markaz','wings_furniture','cooler'].forEach(a => { %>
@@ -107,8 +121,9 @@ function calcTotal() {
     totalDiscount += disc;
   });
   const transport = parseFloat(document.getElementById('transport_charges')?.value) || 0;
-  const total = subtotal + transport;
-  const gross = total - totalCommission - totalDiscount;
+  const delivery  = parseFloat(document.getElementById('delivery_charges')?.value) || 0;
+  const total = subtotal + transport + delivery - totalCommission - totalDiscount;
+  const gross = total;
   document.getElementById('subtotal').textContent = subtotal.toFixed(2);
   document.getElementById('commPctDisp').textContent = (totalCommission > 0 ? 'Item-wise' : '0');
   document.getElementById('commAmount').textContent = totalCommission.toFixed(2);

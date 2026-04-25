@@ -1,7 +1,7 @@
 const express = require('express');
 const path = require('path');
 const session = require('express-session');
-const { initDatabase } = require('./database');
+const { initDatabase, runStabilization } = require('./database');
 const { loadUser, autoGuard } = require('./middleware/auth');
 
 const app = express();
@@ -24,8 +24,8 @@ app.use(session({
 
 // Template helpers
 app.locals.formatCurrency = (num) => {
-  if (num == null) return 'Rs. 0.00';
-  return 'Rs. ' + Number(num).toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (num == null) return 'PKR 0.00';
+  return 'PKR ' + Number(num).toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 app.locals.formatDate = (d) => {
   if (!d) return '-';
@@ -53,6 +53,9 @@ app.use((req, res, next) => {
     const { getSettings } = require('./database');
     res.locals.appSettings = getSettings();
   } catch(e) { res.locals.appSettings = {}; }
+  // Make query string available to every view (used by partials/form-error.ejs)
+  res.locals.query = req.query || {};
+  res.locals.req = req;
   next();
 });
 app.locals.statusBadge = (status) => {
@@ -69,6 +72,20 @@ async function startServer() {
   // Initialize database first
   await initDatabase();
 
+  // Idempotent data-integrity pass (indices, canonical columns, balance/stock reconciliation, orphan report)
+  try {
+    const report = runStabilization();
+    if (report && report.steps) {
+      const failed = report.steps.filter(s => !s.ok);
+      if (failed.length) console.warn('[stabilize] failed steps:', failed.map(s => s.name).join(','));
+      const orph = report.orphans || {};
+      const totalOrph = Object.values(orph).reduce((s, v) => s + (Number(v) || 0), 0);
+      if (totalOrph > 0) console.warn('[stabilize] orphan rows detected:', JSON.stringify(orph));
+    }
+  } catch (e) {
+    console.error('[stabilize] error:', e && e.message);
+  }
+
   // Auth + RBAC (must be before protected routes)
   app.use(loadUser);
 
@@ -77,6 +94,10 @@ async function startServer() {
   app.use((req, res, next) => {
     auditContext.run({ userId: req.user ? req.user.id : null }, () => next());
   });
+
+  // Idempotency / double-submit prevention (applies to all POSTs site-wide).
+  const { preventDoubleSubmit } = require('./middleware/validate');
+  app.use(preventDoubleSubmit);
 
   app.use('/', require('./routes/auth'));     // /login, /logout, /profile (public bits handled inside)
   app.use(autoGuard);                         // anything below requires auth + module permission
@@ -93,6 +114,7 @@ async function startServer() {
   app.use('/purchases', require('./routes/purchases'));
   app.use('/expenses', require('./routes/expenses'));
   app.use('/bilty', require('./routes/bilty'));
+  app.use('/transports', require('./routes/transports'));
   app.use('/breakage', require('./routes/breakage'));
   app.use('/ledger', require('./routes/ledger'));
   app.use('/payments', require('./routes/payments'));
@@ -145,14 +167,19 @@ async function startServer() {
     }
   });
 
-  // Global error handler — prevent crashes from schema mismatches
-  app.use((err, req, res, next) => {
-    console.error('Route error:', req.method, req.url, '→', err.message);
-    if (res.headersSent) return next(err);
-    res.status(500).send(`<div style="font-family:sans-serif;padding:20px">
-      <h3>Something went wrong</h3>
-      <pre style="background:#f4f4f4;padding:10px">${(err.message||'Unknown error').replace(/</g,'&lt;')}</pre>
-      <a href="javascript:history.back()">← Back</a></div>`);
+  // Global error handler — prevent crashes from schema mismatches & log + redirect
+  const { globalErrorHandler, notFound } = require('./middleware/errorHandler');
+  app.use(notFound);
+  app.use(globalErrorHandler);
+
+  // Last-resort process-level guards: never crash on unhandled rejection.
+  process.on('unhandledRejection', (reason) => {
+    try { require('./database').logError('process.unhandledRejection', reason instanceof Error ? reason : new Error(String(reason))); } catch(_) {}
+    console.error('[unhandledRejection]', reason && reason.message || reason);
+  });
+  process.on('uncaughtException', (err) => {
+    try { require('./database').logError('process.uncaughtException', err); } catch(_) {}
+    console.error('[uncaughtException]', err && err.message);
   });
 
   app.listen(PORT, () => {

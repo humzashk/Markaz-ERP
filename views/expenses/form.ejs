@@ -6,6 +6,7 @@
 <div class="card" style="max-width:620px">
   <div class="card-body">
     <form method="post" action="/expenses/<%= edit ? 'edit/'+expense.id : 'add' %>">
+<%- include("../partials/form-error") %>
       <div class="row g-3">
         <div class="col-12">
           <label class="form-label fw-semibold">Category *</label>
@@ -18,9 +19,9 @@
           </datalist>
         </div>
         <div class="col-md-6">
-          <label class="form-label fw-semibold">Amount (Rs.) *</label>
+          <label class="form-label fw-semibold">Amount (PKR) *</label>
           <div class="input-group">
-            <span class="input-group-text">Rs.</span>
+            <span class="input-group-text">PKR</span>
             <input type="number" name="amount" class="form-control" step="0.01" min="0" required value="<%= expense?.amount || '' %>" placeholder="0.00">
           </div>
         </div>

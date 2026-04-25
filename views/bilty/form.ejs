@@ -6,6 +6,7 @@
 <div class="card" style="max-width:700px">
   <div class="card-body">
     <form method="post" action="/bilty/<%= edit ? 'edit/'+bilty.id : 'add' %>">
+<%- include("../partials/form-error") %>
       <div class="row g-3">
         <div class="col-md-12">
           <label class="form-label fw-bold">Account *</label>
@@ -16,12 +17,23 @@
             <option value="cooler"          <%= _bScope === 'cooler'          ? 'selected' : '' %>>Cooler</option>
           </select>
         </div>
-        <div class="col-md-6"><label class="form-label">Transport Name *</label><input type="text" name="transport_name" class="form-control" required value="<%= bilty?.transport_name || '' %>"></div>
-        <div class="col-md-6"><label class="form-label">Bilty Number</label><input type="text" name="bilty_no" class="form-control" value="<%= bilty?.bilty_no || '' %>"></div>
+        <div class="col-md-6"><label class="form-label">Transport *</label>
+          <div class="input-group">
+            <select name="transport_id" id="transport_id" class="form-select">
+              <option value="">— Select existing —</option>
+              <% (typeof transports !== 'undefined' ? transports : []).forEach(t => { %>
+                <option value="<%= t.id %>" <%= (bilty && bilty.transport_id==t.id)?'selected':'' %>><%= t.name %></option>
+              <% }) %>
+            </select>
+            <a href="/transports/add" target="_blank" class="btn btn-outline-secondary" title="Create new transport"><i class="bi bi-plus"></i></a>
+          </div>
+          <input type="text" name="transport_name" class="form-control mt-1" placeholder="…or type a new transport name" value="<%= bilty?.transport_name || '' %>">
+        </div>
+        <div class="col-md-6"><label class="form-label">Bilty Number *</label><input type="text" name="bilty_no" class="form-control" required value="<%= bilty?.bilty_no || '' %>"></div>
         <div class="col-md-6"><label class="form-label">From City *</label><input type="text" name="from_city" class="form-control" required value="<%= bilty?.from_city || '' %>"></div>
         <div class="col-md-6"><label class="form-label">To City *</label><input type="text" name="to_city" class="form-control" required value="<%= bilty?.to_city || '' %>"></div>
         <div class="col-md-4"><label class="form-label">Date *</label><input type="date" name="bilty_date" class="form-control" required value="<%= bilty?.bilty_date || new Date().toISOString().split('T')[0] %>"></div>
-        <div class="col-md-4"><label class="form-label">Freight (Rs.)</label><input type="number" name="freight_charges" class="form-control" step="0.01" value="<%= bilty?.freight_charges || 0 %>"></div>
+        <div class="col-md-4"><label class="form-label">Freight (PKR)</label><input type="number" name="freight_charges" class="form-control" step="0.01" value="<%= bilty?.freight_charges || 0 %>"></div>
         <div class="col-md-4"><label class="form-label">Packages Count</label><input type="number" name="packages_count" class="form-control" value="<%= bilty?.packages_count || 0 %>"></div>
         <div class="col-md-6"><label class="form-label">Link to Order</label>
           <select name="order_id" class="form-select">

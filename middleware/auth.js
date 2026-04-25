@@ -8,7 +8,7 @@ const getDb = () => _database.db;
 const ALL_MODULES = [
   'dashboard', 'customers', 'vendors',
   'products', 'ratelist', 'warehouses', 'stock',
-  'orders', 'invoices', 'purchases', 'creditnotes', 'bilty', 'breakage', 'expenses',
+  'orders', 'invoices', 'purchases', 'creditnotes', 'bilty', 'transports', 'breakage', 'expenses',
   'payments-receive', 'payments-pay', 'bank',
   'daybook', 'journal', 'ledger', 'reports',
   'categories', 'importexport', 'settings',
@@ -29,6 +29,7 @@ const PATH_MODULE_MAP = {
   '/purchases': 'purchases',
   '/creditnotes': 'creditnotes',
   '/bilty': 'bilty',
+  '/transports': 'transports',
   '/breakage': 'breakage',
   '/expenses': 'expenses',
   '/payments/receive': 'payments-receive',
