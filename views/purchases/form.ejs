@@ -27,7 +27,7 @@
             </select>
           </div>
           <div class="mb-3"><label class="form-label">Purchase Date *</label><input type="date" name="purchase_date" class="form-control" value="<%= purchase?.purchase_date || new Date().toISOString().split('T')[0] %>" required></div>
-          <div class="mb-3"><label class="form-label">Delivery Date</label><input type="date" name="delivery_date" class="form-control" value="<%= purchase?.delivery_date || '' %>"></div>
+          <div class="mb-3"><label class="form-label">Delivery Date</label><input type="date" name="delivery_date" class="form-control" value="<%= purchase?.delivery_date || new Date().toISOString().split('T')[0] %>"></div>
           <div class="mb-3"><label class="form-label">Warehouse</label>
             <select name="warehouse_id" class="form-select">
               <option value="">Select Warehouse</option>

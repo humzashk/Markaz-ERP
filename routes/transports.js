@@ -1,77 +1,55 @@
+'use strict';
 const express = require('express');
 const router = express.Router();
+const { pool, addAuditLog } = require('../database');
+const { wrap } = require('../middleware/errorHandler');
 const { validate, schemas } = require('../middleware/validate');
-const { db, addAuditLog, toInt, logError } = require('../database');
 
-// Inline schema for transports (kept here so it stays beside the route)
-const transportSchema = {
-  required: { name: ['str', { max: 100, min: 1 }] },
-  optional: {
-    contact: ['str', { max: 100 }], phone: ['str', { max: 30 }],
-    city: ['str', { max: 50 }], vehicle_no: ['str', { max: 50 }],
-    driver_name: ['str', { max: 100 }], notes: ['str', { max: 500 }],
-    status: ['oneOf', { choices: ['active','inactive'] }],
-  }
-};
-
-router.get('/', (req, res) => {
+router.get('/', wrap(async (req, res) => {
   const search = req.query.search || '';
-  let sql = 'SELECT * FROM transports WHERE 1=1';
   const params = [];
-  if (search) { sql += ' AND name LIKE ?'; params.push('%' + search + '%'); }
-  sql += ' ORDER BY name';
-  const transports = db.prepare(sql).all(...params);
-  res.render('transports/index', { page: 'transports', transports, search });
-});
+  let sql = `SELECT * FROM transports WHERE 1=1`;
+  if (search) { sql += ` AND (name ILIKE $1 OR city ILIKE $1 OR vehicle_no ILIKE $1)`; params.push('%'+search+'%'); }
+  sql += ` ORDER BY id DESC`;
+  const r = await pool.query(sql, params);
+  res.render('transports/index', { page:'transports', transports: r.rows, search });
+}));
 
-router.get('/add', (req, res) => {
-  res.render('transports/form', { page: 'transports', transport: null, edit: false });
-});
+router.get('/add', (req, res) => res.render('transports/form', { page:'transports', transport:null, edit:false }));
 
-router.post('/add', validate(transportSchema), (req, res) => {
-  try {
-    const v = req.valid;
-    db.prepare(
-      `INSERT INTO transports (name, contact, phone, city, vehicle_no, driver_name, notes, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(v.name, v.contact, v.phone, v.city, v.vehicle_no, v.driver_name, v.notes, v.status || 'active');
-    res.redirect('/transports');
-  } catch (e) { logError('transports.create', e); res.redirect('/transports?err=server'); }
-});
+router.post('/add', validate(schemas.transportCreate), wrap(async (req, res) => {
+  const v = req.valid;
+  const r = await pool.query(`
+    INSERT INTO transports(name,contact,phone,city,vehicle_no,driver_name,status)
+    VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7,'active')) RETURNING id`,
+    [v.name, v.contact, v.phone, v.city, v.vehicle_no, v.driver_name, v.status]);
+  await addAuditLog('create','transports', r.rows[0].id, `Created ${v.name}`);
+  res.redirect('/transports');
+}));
 
-router.get('/edit/:id', (req, res) => {
-  const transport = db.prepare('SELECT * FROM transports WHERE id = ?').get(toInt(req.params.id));
-  if (!transport) return res.redirect('/transports');
-  res.render('transports/form', { page: 'transports', transport, edit: true });
-});
+router.get('/edit/:id', wrap(async (req, res) => {
+  const r = await pool.query(`SELECT * FROM transports WHERE id=$1`, [req.params.id]);
+  if (!r.rows[0]) return res.redirect('/transports');
+  res.render('transports/form', { page:'transports', transport: r.rows[0], edit:true });
+}));
 
-router.post('/edit/:id', validate(transportSchema), (req, res) => {
-  try {
-    const id = toInt(req.params.id);
-    const v = req.valid;
-    db.prepare(
-      `UPDATE transports SET name=?, contact=?, phone=?, city=?, vehicle_no=?, driver_name=?, notes=?, status=? WHERE id=?`
-    ).run(v.name, v.contact, v.phone, v.city, v.vehicle_no, v.driver_name, v.notes, v.status || 'active', id);
-    res.redirect('/transports');
-  } catch (e) { logError('transports.edit', e); res.redirect('/transports?err=server'); }
-});
+router.post('/edit/:id', validate(schemas.transportCreate), wrap(async (req, res) => {
+  const v = req.valid;
+  await pool.query(`UPDATE transports SET name=$1,contact=$2,phone=$3,city=$4,vehicle_no=$5,driver_name=$6,status=COALESCE($7,'active') WHERE id=$8`,
+    [v.name, v.contact, v.phone, v.city, v.vehicle_no, v.driver_name, v.status, req.params.id]);
+  res.redirect('/transports');
+}));
 
-router.post('/delete/:id', (req, res) => {
-  try {
-    db.prepare('DELETE FROM transports WHERE id = ?').run(toInt(req.params.id));
-    res.redirect('/transports');
-  } catch (e) { logError('transports.delete', e); res.redirect('/transports?err=server'); }
-});
+router.post('/delete/:id', wrap(async (req, res) => {
+  await pool.query(`DELETE FROM transports WHERE id=$1`, [req.params.id]);
+  res.redirect('/transports');
+}));
 
-// Inline create endpoint (used by AJAX modal in invoice/order/bilty forms)
-router.post('/api/quick-create', (req, res) => {
-  try {
-    const name = (req.body.name || '').toString().trim().substring(0, 100);
-    if (!name) return res.status(400).json({ success: false, error: 'name required' });
-    const phone = (req.body.phone || '').toString().trim().substring(0, 30) || null;
-    const result = db.prepare(`INSERT INTO transports (name, phone, status) VALUES (?, ?, 'active')`).run(name, phone);
-    const row = db.prepare('SELECT * FROM transports WHERE id = ?').get(result.lastInsertRowid);
-    res.json({ success: true, transport: row });
-  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
-});
+router.post('/api/quick-create', wrap(async (req, res) => {
+  const name = (req.body.name || '').trim();
+  if (!name) return res.status(400).json({ ok:false, error:'name required' });
+  const r = await pool.query(`INSERT INTO transports(name) VALUES ($1) RETURNING id, name`, [name]);
+  res.json({ ok:true, transport: r.rows[0] });
+}));
 
 module.exports = router;

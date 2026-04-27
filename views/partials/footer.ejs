@@ -4,18 +4,20 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="/js/app.js"></script>
+  <script src="/js/spa.js"></script>
+  <script src="/js/session.js"></script>
   <script>
+    window.__SESSION_TIMEOUT_MS__ = <%= typeof sessionTimeoutMs !== 'undefined' ? sessionTimeoutMs : (15*60*1000) %>;
+    window.__IS_AUTH__ = <%= typeof currentUser !== 'undefined' && currentUser ? 'true' : 'false' %>;
     // Init all date pickers
-    flatpickr('.datepicker', {
-      dateFormat: 'Y-m-d',
-      allowInput: true,
-      disableMobile: false
-    });
-    flatpickr('.datepicker-range', {
-      dateFormat: 'Y-m-d',
-      allowInput: true,
-      mode: 'range'
-    });
+    function initFlatpickr() {
+      if (typeof flatpickr === 'undefined') return;
+      flatpickr('.datepicker', { dateFormat: 'Y-m-d', allowInput: true, disableMobile: false });
+      flatpickr('.datepicker-range', { dateFormat: 'Y-m-d', allowInput: true, mode: 'range' });
+    }
+    initFlatpickr();
+    // Re-init pickers after SPA swap
+    document.addEventListener('spa:loaded', initFlatpickr);
   </script>
 </body>
 </html>

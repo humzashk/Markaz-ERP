@@ -2,7 +2,8 @@
 <%
   var _biltyScope = (bilty && bilty.account_scope) ? bilty.account_scope : 'plastic_markaz';
   var _biltyBiz   = (typeof accountName === 'function') ? accountName(_biltyScope) : ((appSettings && appSettings.business_name) || 'PLASTIC MARKAZ');
-  var _biltyLogo = '/Logo.png';
+  var _biltyLogo = (typeof getLogoPath === 'function') ? getLogoPath(_biltyScope) : '/Logo.png';
+  var _biltyLogoMeta = (typeof getLogoMeta === 'function') ? getLogoMeta(_biltyScope) : { w:180, h:70, align:'left', offsetX:0, offsetY:0 };
   var _biltyAddr  = (appSettings && appSettings.business_address) || '';
   var _biltyCity  = (appSettings && appSettings.business_city) || '';
   var _biltyPh    = (appSettings && appSettings.business_phone) || '';
@@ -50,7 +51,7 @@
     background: radial-gradient(circle, rgba(255,255,255,0.08), transparent 70%);
   }
   #biltyCard .bc-logo {
-    width: 64px; height: 64px; border-radius: 12px;
+    width: 180px; height: 70px; border-radius: 10px;
     background:#fff; display:flex; align-items:center; justify-content:center;
     padding:6px; box-shadow: 0 4px 14px rgba(0,0,0,0.25);
     flex-shrink:0;
@@ -177,7 +178,7 @@
   <div id="biltyCard">
     <!-- Header -->
     <div class="bc-header">
-      <div class="bc-logo">
+      <div class="bc-logo" style="width:<%= _biltyLogoMeta.w %>px; height:<%= _biltyLogoMeta.h %>px; align-self:<%= _biltyLogoMeta.align==='left'?'flex-start':_biltyLogoMeta.align==='right'?'flex-end':'center' %>; transform:translate(<%= _biltyLogoMeta.offsetX %>px, <%= _biltyLogoMeta.offsetY %>px);">
         <% if (_biltyLogo) { %>
           <img src="<%= _biltyLogo %>" alt="logo" crossorigin="anonymous">
         <% } else { %>

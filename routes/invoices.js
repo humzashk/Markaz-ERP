@@ -1,500 +1,284 @@
+'use strict';
 const express = require('express');
 const router = express.Router();
+const { pool, tx, nextDocNo, applyStockMovement, reverseStockForRef,
+        addLedgerEntry, removeLedgerForRef, recomputeBalance,
+        getProductCost, addAuditLog, toInt, toNum } = require('../database');
+const { wrap } = require('../middleware/errorHandler');
 const { validate, schemas } = require('../middleware/validate');
-const { db, generateNumber, addLedgerEntry, addAuditLog, getSettings,
-        applyStockMovement, reverseStockForRef, removeLedgerForRef,
-        recomputeBalance, getProductCost, toNum, toInt, logError } = require('../database');
-const PDFDocument = require('pdfkit');
 
-router.get('/', (req, res) => {
+router.get('/', wrap(async (req, res) => {
   const status = req.query.status || '';
   const search = req.query.search || '';
-  let sql = `SELECT i.*, c.name as customer_name FROM invoices i JOIN customers c ON c.id = i.customer_id WHERE 1=1`;
-  const params = [];
-  if (status) { sql += ` AND i.status = ?`; params.push(status); }
-  if (search) { sql += ` AND (i.invoice_no LIKE ? OR c.name LIKE ?)`; params.push(`%${search}%`, `%${search}%`); }
-  sql += ` ORDER BY i.id DESC`;
-  const invoices = db.prepare(sql).all(...params);
-  res.render('invoices/index', { page: 'invoices', invoices, status, search });
-});
+  const params = []; let i = 1;
+  let sql = `SELECT i.*, c.name AS customer_name FROM invoices i JOIN customers c ON c.id = i.customer_id WHERE 1=1`;
+  if (status) { sql += ` AND i.status=$${i}`; params.push(status); i++; }
+  if (search) { sql += ` AND (i.invoice_no ILIKE $${i} OR c.name ILIKE $${i})`; params.push('%'+search+'%'); i++; }
+  sql += ` ORDER BY i.id DESC LIMIT 500`;
+  const r = await pool.query(sql, params);
+  res.render('invoices/index', { page:'invoices', invoices: r.rows, status, search });
+}));
 
-router.get('/add', (req, res) => {
-  const customers = db.prepare('SELECT id, name FROM customers WHERE status = ? ORDER BY name').all('active');
-  const products = db.prepare('SELECT id, name, qty_per_pack, selling_price as rate, stock, default_commission_rate FROM products WHERE status = ? ORDER BY name').all('active');
-  const warehouses = db.prepare('SELECT id, name FROM warehouses WHERE status = ? ORDER BY name').all('active');
-
-  // Pre-load items if redirected from "Generate from Orders" flow
-  let items = [];
-  let linkedOrderIds = [];
-  let presetCustomerId = null;
+router.get('/add', wrap(async (req, res) => {
+  const [customers, products, warehouses, transports] = await Promise.all([
+    pool.query(`SELECT id, name FROM customers WHERE status='active' ORDER BY name`),
+    pool.query(`SELECT id, name, qty_per_pack, selling_price AS rate, stock, default_commission_rate FROM products WHERE status='active' ORDER BY name`),
+    pool.query(`SELECT id, name FROM warehouses WHERE status='active' ORDER BY name`),
+    pool.query(`SELECT id, name FROM transports WHERE status='active' ORDER BY name`)
+  ]);
+  let items = []; let linkedOrderIds = []; let presetCustomerId = null;
   if (req.query.from_orders) {
     const ids = String(req.query.from_orders).split(',').map(s => parseInt(s,10)).filter(Boolean);
     if (ids.length) {
-      const placeholders = ids.map(()=>'?').join(',');
-      const orders = db.prepare(`SELECT id, customer_id FROM orders WHERE id IN (${placeholders})`).all(...ids);
+      const orders = (await pool.query(`SELECT id, customer_id FROM orders WHERE id = ANY($1::int[])`, [ids])).rows;
       if (orders.length) {
         presetCustomerId = orders[0].customer_id;
         linkedOrderIds = orders.map(o => o.id);
-        items = db.prepare(`
+        const raw = (await pool.query(`
           SELECT oi.product_id, oi.quantity, oi.rate, oi.amount,
-                 COALESCE(oi.packages,0) as packages,
-                 COALESCE(oi.packaging,1) as packaging,
-                 COALESCE(oi.commission_pct,0) as commission_pct,
-                 COALESCE(oi.discount_per_pack,0) as discount_per_pack,
-                 p.name as product_name
+                 COALESCE(oi.packages,0) AS packages,
+                 COALESCE(oi.packaging,1) AS packaging,
+                 COALESCE(oi.commission_pct,0) AS commission_pct,
+                 0 AS discount_per_pack,
+                 p.name AS product_name
           FROM order_items oi JOIN products p ON p.id = oi.product_id
-          WHERE oi.order_id IN (${placeholders})
-        `).all(...ids);
+          WHERE oi.order_id = ANY($1::int[])`, [ids])).rows;
+        // Merge same product+rate+packaging+commission rows
+        const merged = {};
+        for (const it of raw) {
+          const k = `${it.product_id}|${it.rate}|${it.packaging}|${it.commission_pct}`;
+          if (!merged[k]) merged[k] = { ...it, packages:Number(it.packages), quantity:Number(it.quantity), amount:Number(it.amount) };
+          else { merged[k].packages += Number(it.packages); merged[k].quantity += Number(it.quantity); merged[k].amount += Number(it.amount); }
+        }
+        items = Object.values(merged);
       }
     }
   }
-
   const invoice = presetCustomerId ? { customer_id: presetCustomerId } : null;
-  const transports = db.prepare("SELECT id, name FROM transports WHERE status='active' ORDER BY name").all();
-  res.render('invoices/form', { page: 'invoices', invoice, items, customers, products, warehouses, transports, linkedOrderIds, edit: false });
-});
+  res.render('invoices/form', {
+    page:'invoices', invoice, items,
+    customers: customers.rows, products: products.rows, warehouses: warehouses.rows, transports: transports.rows,
+    linkedOrderIds, edit:false
+  });
+}));
 
-// Step 1: pick customer → list pending orders
-router.get('/from-orders', (req, res) => {
-  const customers = db.prepare(`
-    SELECT DISTINCT c.id, c.name
-    FROM customers c JOIN orders o ON o.customer_id = c.id
-    WHERE o.status IN ('pending','confirmed') AND c.status = 'active'
+router.get('/from-orders', wrap(async (req, res) => {
+  const customers = (await pool.query(`
+    SELECT DISTINCT c.id, c.name FROM customers c
+    JOIN orders o ON o.customer_id = c.id
+    WHERE o.status IN ('pending','confirmed') AND c.status='active'
     ORDER BY c.name
-  `).all();
+  `)).rows;
   const customerId = req.query.customer_id ? parseInt(req.query.customer_id,10) : null;
   let orders = [];
   if (customerId) {
-    orders = db.prepare(`
+    orders = (await pool.query(`
       SELECT o.id, o.order_no, o.order_date, o.total,
-             (SELECT COUNT(*) FROM order_items WHERE order_id = o.id) as item_count
-      FROM orders o
-      WHERE o.customer_id = ? AND o.status IN ('pending','confirmed')
+        (SELECT COUNT(*) FROM order_items WHERE order_id = o.id) AS item_count
+      FROM orders o WHERE o.customer_id=$1 AND o.status IN ('pending','confirmed')
       ORDER BY o.order_date DESC
-    `).all(customerId);
+    `, [customerId])).rows;
   }
-  res.render('invoices/from-orders', { page: 'invoices', customers, orders, customerId });
-});
+  res.render('invoices/from-orders', { page:'invoices', customers, orders, customerId });
+}));
 
-// Stock + sell-rate lookup (warehouse-scoped)
-router.get('/api/stock/:product_id', (req, res) => {
+router.get('/api/stock/:product_id', wrap(async (req, res) => {
   const pid = parseInt(req.params.product_id, 10);
   const wid = req.query.warehouse_id ? parseInt(req.query.warehouse_id, 10) : null;
   const customerType = req.query.customer_type || 'retail';
-  const prod = db.prepare('SELECT id, name, stock, qty_per_pack, selling_price, default_commission_rate FROM products WHERE id = ?').get(pid);
-  if (!prod) return res.json({ stock: 0, qty_per_pack: 1, name: '', commission: 0, rate: 0 });
-  let stockPcs = prod.stock;
+  const p = await pool.query(`SELECT id, name, stock, qty_per_pack, selling_price, default_commission_rate FROM products WHERE id=$1`, [pid]);
+  const prod = p.rows[0];
+  if (!prod) return res.json({ stock:0, qty_per_pack:1, name:'', commission:0, rate:0 });
+  let stockPcs = Number(prod.stock) || 0;
   if (wid) {
-    const ws = db.prepare('SELECT quantity FROM warehouse_stock WHERE product_id = ? AND warehouse_id = ?').get(pid, wid);
-    stockPcs = ws ? ws.quantity : 0;
+    const ws = await pool.query(`SELECT quantity FROM warehouse_stock WHERE product_id=$1 AND warehouse_id=$2`, [pid, wid]);
+    stockPcs = ws.rows[0] ? Number(ws.rows[0].quantity) : 0;
   }
-  let rate = prod.selling_price || 0;
-  try {
-    const rl = db.prepare(`SELECT rate FROM rate_list WHERE product_id = ? AND customer_type = ? AND effective_date <= date('now') ORDER BY effective_date DESC, id DESC LIMIT 1`).get(pid, customerType);
-    if (rl && rl.rate != null) rate = rl.rate;
-  } catch (_) {}
+  let rate = Number(prod.selling_price) || 0;
+  const rl = await pool.query(`SELECT rate FROM rate_list WHERE product_id=$1 AND customer_type=$2 AND effective_date <= CURRENT_DATE ORDER BY effective_date DESC, id DESC LIMIT 1`, [pid, customerType]);
+  if (rl.rows[0] && rl.rows[0].rate != null) rate = Number(rl.rows[0].rate);
   const qpp = prod.qty_per_pack || 1;
-  res.json({ stock: stockPcs, stock_ctn: qpp > 0 ? Math.floor(stockPcs/qpp) : 0, stock_loose: qpp > 0 ? stockPcs % qpp : stockPcs, qty_per_pack: qpp, name: prod.name, commission: prod.default_commission_rate || 0, rate });
-});
+  res.json({ stock: stockPcs, stock_ctn: qpp>0?Math.floor(stockPcs/qpp):0, stock_loose: qpp>0?stockPcs%qpp:stockPcs, qty_per_pack: qpp, name: prod.name, commission: Number(prod.default_commission_rate)||0, rate });
+}));
 
-router.post('/add', validate(schemas.invoiceCreate), (req, res) => {
-  try {
-    const { customer_id, invoice_date, due_date, delivery_date, warehouse_id, transport_id, bilty_no, transporter_name, notes,
-            product_id, packages, packaging, quantity, rate, commission_pct, discount_per_pack,
-            transport_charges, delivery_charges, account_scope, order_ids } = req.body;
+// CREATE: atomic — invoice + items + stock OUT + customer DR (sale)
+router.post('/add', validate(schemas.invoiceCreate), wrap(async (req, res) => {
+  const v = req.valid;
+  const items = v._items || [];
+  if (!items.length) return res.redirect('/invoices/add?err=no_items');
 
-    const cid = toInt(customer_id);
-    if (!cid || !invoice_date) return res.redirect('/invoices?err=missing');
-    const wid = warehouse_id ? toInt(warehouse_id) : null;
-    const tid = transport_id ? toInt(transport_id) : null;
-    // Resolve transporter name from selected transport, fallback to free-text
-    let resolvedTransporter = transporter_name || null;
-    if (tid) {
-      const t = db.prepare('SELECT name FROM transports WHERE id = ?').get(tid);
+  let subtotal = 0, totalComm = 0;
+  // Freeze cost_at_sale BEFORE the transaction so getProductCost reflects committed cost.
+  for (const it of items) {
+    it.amount = it.quantity * it.rate;
+    it.commission_amount = it.amount * (it.commission_pct || 0) / 100;
+    it.discount_per_pack = it.discount_per_pack || 0;
+    it.cost_at_sale = await getProductCost(null, it.product_id);
+    subtotal += it.amount; totalComm += it.commission_amount;
+  }
+  const transportCharges = toNum(req.body.transport_charges, 0);
+  const total = subtotal + transportCharges - totalComm;
+
+  const orderIds = req.body.order_ids ? (Array.isArray(req.body.order_ids) ? req.body.order_ids : [req.body.order_ids]).map(toInt).filter(Boolean) : [];
+
+  const newId = await tx(async (db) => {
+    const invoiceNo = await nextDocNo(db, 'INV', 'invoices', 'invoice_no');
+    let resolvedTransporter = req.body.transporter_name || null;
+    if (v.transport_id) {
+      const t = await db.one(`SELECT name FROM transports WHERE id=$1`, [v.transport_id]);
       if (t) resolvedTransporter = t.name;
     }
-    const transportCharges = toNum(transport_charges, 0);
-    const deliveryCharges  = toNum(delivery_charges, 0);
-    const invoiceNo = generateNumber('INV', 'invoices');
+    const ins = await db.run(`
+      INSERT INTO invoices(invoice_no, order_id, customer_id, warehouse_id, transport_id, bilty_no, transporter_name,
+                            invoice_date, due_date, delivery_date,
+                            subtotal, commission_amount, transport_charges, total, paid,
+                            status, account_scope, notes)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,0,'unpaid',$15,$16) RETURNING id`,
+      [invoiceNo, orderIds[0] || null, v.customer_id, v.warehouse_id, v.transport_id, v.bilty_no, resolvedTransporter,
+       v.invoice_date, v.due_date, v.delivery_date,
+       subtotal, totalComm, transportCharges, total,
+       v.account_scope || 'plastic_markaz', v.notes]);
+    const invId = ins.id;
 
-    const productIds  = Array.isArray(product_id)        ? product_id        : [product_id];
-    const packagesArr = Array.isArray(packages)          ? packages          : [packages];
-    const packagingArr= Array.isArray(packaging)         ? packaging         : [packaging];
-    const quantityArr = Array.isArray(quantity)          ? quantity          : [quantity];
-    const rateArr     = Array.isArray(rate)              ? rate              : [rate];
-    const commArr     = Array.isArray(commission_pct)    ? commission_pct    : [commission_pct];
-    const discArr     = Array.isArray(discount_per_pack) ? discount_per_pack : [discount_per_pack];
-
-    let subtotal = 0, totalCommission = 0;
-    const itemsData = [];
-    for (let i = 0; i < productIds.length; i++) {
-      const pid = toInt(productIds[i]);
-      if (!pid) continue;
-      const qty = toInt(quantityArr[i]);
-      const r   = toNum(rateArr[i]);
-      const amt = qty * r;
-      const commPct  = toNum(commArr[i]);
-      const commAmt  = amt * commPct / 100;
-      const discPack = toNum(discArr[i]);
-      if (qty <= 0 || r < 0) continue; // skip invalid lines silently — input validated
-      const costAtSale = getProductCost(pid); // freeze historic cost
-      subtotal += amt;
-      totalCommission += commAmt;
-      itemsData.push({
-        product_id: pid,
-        packages: toInt(packagesArr[i], 0),
-        packaging: toInt(packagingArr[i], 1) || 1,
-        quantity: qty, rate: r, amount: amt,
-        commission_pct: commPct, commission_amount: commAmt,
-        discount_per_pack: discPack,
-        cost_at_sale: costAtSale
-      });
+    for (const it of items) {
+      await db.run(`
+        INSERT INTO invoice_items(invoice_id,product_id,packages,packaging,quantity,rate,amount,commission_pct,commission_amount,discount_per_pack,cost_at_sale)
+        VALUES ($1,$2,COALESCE($3,0),COALESCE($4,1),$5,$6,$7,COALESCE($8,0),$9,COALESCE($10,0),$11)`,
+        [invId, it.product_id, it.packages, it.packaging, it.quantity, it.rate, it.amount,
+         it.commission_pct, it.commission_amount, it.discount_per_pack, it.cost_at_sale]);
+      await applyStockMovement(db, it.product_id, v.warehouse_id, -it.quantity, 'invoice', invId, 'sale', `Invoice ${invoiceNo}`);
     }
-    if (!itemsData.length) return res.redirect('/invoices/add?err=no_items');
 
-    const total = subtotal + transportCharges + deliveryCharges - totalCommission;
-
-    db.transaction(() => {
-      const result = db.prepare(
-        `INSERT INTO invoices (invoice_no, customer_id, invoice_date, due_date, delivery_date, warehouse_id, transport_id, bilty_no, transporter_name, subtotal, discount, transport_charges, delivery_charges, total, commission_pct, commission_amount, status, notes, account_scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 0, ?, 'unpaid', ?, ?)`
-      ).run(invoiceNo, cid, invoice_date, due_date||null, delivery_date||null, wid, tid, bilty_no||null, resolvedTransporter,
-            subtotal, transportCharges, deliveryCharges, total, totalCommission, notes||null, account_scope || 'plastic_markaz');
-
-      const invId = result.lastInsertRowid;
-
-      if (order_ids) {
-        const oids = (Array.isArray(order_ids) ? order_ids : [order_ids]).map(toInt).filter(Boolean);
-        if (oids.length) {
-          const upd = db.prepare("UPDATE orders SET status='invoiced' WHERE id=? AND status IN ('pending','confirmed')");
-          for (const oid of oids) upd.run(oid);
-          db.prepare('UPDATE invoices SET order_id=? WHERE id=?').run(oids[0], invId);
-        }
-      }
-
-      const insertItem = db.prepare(
-        `INSERT INTO invoice_items (invoice_id, product_id, packages, packaging, quantity, rate, amount, commission_pct, commission_amount, discount_per_pack, cost_at_sale)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      );
-      for (const item of itemsData) {
-        insertItem.run(invId, item.product_id, item.packages, item.packaging, item.quantity, item.rate,
-                       item.amount, item.commission_pct, item.commission_amount, item.discount_per_pack, item.cost_at_sale);
-        // Stock OUT via ledger
-        applyStockMovement(item.product_id, wid, -item.quantity, 'invoice', invId, 'sale', `Invoice ${invoiceNo}`);
-      }
-
-      addLedgerEntry('customer', cid, invoice_date, `Invoice ${invoiceNo}`, total, 0, 'invoice', invId);
-      addAuditLog('create', 'invoices', invId, `Created invoice ${invoiceNo} total ${total}`);
-    })();
-
-    res.redirect('/invoices');
-  } catch (e) {
-    logError('invoices.create', e, { body: req.body });
-    res.redirect('/invoices?err=server');
-  }
-});
-
-router.get('/edit/:id', (req, res) => {
-  const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
-  if (!invoice) return res.redirect('/invoices');
-  const items = db.prepare('SELECT ii.*, p.name as product_name FROM invoice_items ii JOIN products p ON p.id = ii.product_id WHERE ii.invoice_id = ?').all(req.params.id);
-  const customers = db.prepare('SELECT id, name FROM customers WHERE status = ? ORDER BY name').all('active');
-  const products = db.prepare('SELECT id, name, qty_per_pack, selling_price as rate, stock, default_commission_rate FROM products WHERE status = ? ORDER BY name').all('active');
-  const warehouses = db.prepare('SELECT id, name FROM warehouses WHERE status = ? ORDER BY name').all('active');
-  const transports = db.prepare("SELECT id, name FROM transports WHERE status='active' ORDER BY name").all();
-  res.render('invoices/form', { page: 'invoices', invoice, items, customers, products, warehouses, transports, pendingOrders: [], edit: true });
-});
-
-router.post('/edit/:id', validate(schemas.invoiceCreate), (req, res) => {
-  try {
-    const invId = toInt(req.params.id);
-    const existing = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invId);
-    if (!existing) return res.redirect('/invoices?err=notfound');
-
-    const { customer_id, invoice_date, due_date, delivery_date, warehouse_id, transport_id, bilty_no, transporter_name, notes, status,
-            product_id, packages, packaging, quantity, rate, commission_pct, discount_per_pack,
-            transport_charges, delivery_charges, account_scope } = req.body;
-
-    const cid = toInt(customer_id) || existing.customer_id;
-    const wid = warehouse_id ? toInt(warehouse_id) : null;
-    const tid = transport_id ? toInt(transport_id) : (existing.transport_id || null);
-    let resolvedTransporter = transporter_name || null;
-    if (tid) {
-      const t = db.prepare('SELECT name FROM transports WHERE id = ?').get(tid);
-      if (t) resolvedTransporter = t.name;
+    // Mark linked orders invoiced
+    if (orderIds.length) {
+      await db.run(`UPDATE orders SET status='invoiced' WHERE id = ANY($1::int[]) AND status IN ('pending','confirmed')`, [orderIds]);
     }
-    const transportCharges = toNum(transport_charges, 0);
-    const deliveryCharges  = toNum(delivery_charges, 0);
 
-    const productIds  = Array.isArray(product_id)        ? product_id        : [product_id];
-    const packagesArr = Array.isArray(packages)          ? packages          : [packages];
-    const packagingArr= Array.isArray(packaging)         ? packaging         : [packaging];
-    const quantityArr = Array.isArray(quantity)          ? quantity          : [quantity];
-    const rateArr     = Array.isArray(rate)              ? rate              : [rate];
-    const commArr     = Array.isArray(commission_pct)    ? commission_pct    : [commission_pct];
-    const discArr     = Array.isArray(discount_per_pack) ? discount_per_pack : [discount_per_pack];
+    // Customer DEBIT = sale
+    await addLedgerEntry(db, 'customer', v.customer_id, v.invoice_date, `Invoice ${invoiceNo}`, total, 0, 'invoice', invId, v.account_scope || 'plastic_markaz');
 
-    // Snapshot existing items to preserve cost_at_sale (NEVER recompute on edit — preserves historic profit)
-    const oldItems = db.prepare('SELECT * FROM invoice_items WHERE invoice_id = ?').all(invId);
-    const oldCostByProduct = {};
-    oldItems.forEach(oi => { if (oi.product_id && oi.cost_at_sale != null) oldCostByProduct[oi.product_id] = oi.cost_at_sale; });
-
-    let subtotal = 0, totalCommission = 0;
-    const itemsData = [];
-    for (let i = 0; i < productIds.length; i++) {
-      const pid = toInt(productIds[i]);
-      if (!pid) continue;
-      const qty = toInt(quantityArr[i]);
-      const r   = toNum(rateArr[i]);
-      const amt = qty * r;
-      const commPct  = toNum(commArr[i]);
-      const commAmt  = amt * commPct / 100;
-      const discPack = toNum(discArr[i]);
-      if (qty <= 0 || r < 0) continue;
-      // Preserve original cost_at_sale if this product was already on the invoice
-      const costAtSale = (oldCostByProduct[pid] != null) ? oldCostByProduct[pid] : getProductCost(pid);
-      subtotal += amt;
-      totalCommission += commAmt;
-      itemsData.push({
-        product_id: pid,
-        packages: toInt(packagesArr[i], 0),
-        packaging: toInt(packagingArr[i], 1) || 1,
-        quantity: qty, rate: r, amount: amt,
-        commission_pct: commPct, commission_amount: commAmt,
-        discount_per_pack: discPack,
-        cost_at_sale: costAtSale
-      });
-    }
-    if (!itemsData.length) return res.redirect('/invoices/edit/' + invId + '?err=no_items');
-
-    const total = subtotal + transportCharges + deliveryCharges - totalCommission;
-
-    db.transaction(() => {
-      // 1) Reverse previous stock movements for this invoice
-      reverseStockForRef('invoice', invId);
-
-      // 2) Reverse previous ledger entry for this invoice and recompute customer balance
-      removeLedgerForRef('customer', existing.customer_id, 'invoice', invId);
-      recomputeBalance('customer', existing.customer_id);
-
-      // 3) Update invoice header
-      db.prepare(
-        `UPDATE invoices SET customer_id=?, invoice_date=?, due_date=?, delivery_date=?, warehouse_id=?, transport_id=?, bilty_no=?, transporter_name=?,
-         subtotal=?, discount=0, transport_charges=?, delivery_charges=?, total=?, commission_pct=0, commission_amount=?,
-         status=?, notes=?, account_scope=? WHERE id=?`
-      ).run(cid, invoice_date, due_date||null, delivery_date||null, wid, tid, bilty_no||null, resolvedTransporter,
-            subtotal, transportCharges, deliveryCharges, total, totalCommission,
-            status || existing.status || 'unpaid', notes||null,
-            account_scope || existing.account_scope || 'plastic_markaz', invId);
-
-      // 4) Replace items
-      db.prepare('DELETE FROM invoice_items WHERE invoice_id = ?').run(invId);
-      const insertItem = db.prepare(
-        `INSERT INTO invoice_items (invoice_id, product_id, packages, packaging, quantity, rate, amount, commission_pct, commission_amount, discount_per_pack, cost_at_sale)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      );
-      for (const item of itemsData) {
-        insertItem.run(invId, item.product_id, item.packages, item.packaging, item.quantity, item.rate,
-                       item.amount, item.commission_pct, item.commission_amount, item.discount_per_pack, item.cost_at_sale);
-        // 5) Re-apply stock OUT via ledger
-        applyStockMovement(item.product_id, wid, -item.quantity, 'invoice', invId, 'sale-edit', `Invoice ${existing.invoice_no} (edited)`);
-      }
-
-      // 6) Re-post customer ledger entry
-      addLedgerEntry('customer', cid, invoice_date, `Invoice ${existing.invoice_no}`, total, 0, 'invoice', invId);
-      // If customer changed, also recompute previous customer (already cleared above)
-      if (cid !== existing.customer_id) recomputeBalance('customer', existing.customer_id);
-
-      addAuditLog('update', 'invoices', invId, `Updated invoice ${existing.invoice_no} new total ${total}`);
-    })();
-
-    res.redirect('/invoices');
-  } catch (e) {
-    logError('invoices.edit', e, { id: req.params.id, body: req.body });
-    res.redirect('/invoices?err=server');
-  }
-});
-
-// DELETE invoice — atomic: reverse stock, reverse ledger, remove rows
-router.post('/delete/:id', (req, res) => {
-  try {
-    const invId = toInt(req.params.id);
-    const existing = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invId);
-    if (!existing) return res.redirect('/invoices?err=notfound');
-    db.transaction(() => {
-      reverseStockForRef('invoice', invId);
-      removeLedgerForRef('customer', existing.customer_id, 'invoice', invId);
-      recomputeBalance('customer', existing.customer_id);
-      db.prepare('DELETE FROM invoice_items WHERE invoice_id = ?').run(invId);
-      db.prepare('DELETE FROM invoices WHERE id = ?').run(invId);
-      addAuditLog('delete', 'invoices', invId, `Deleted invoice ${existing.invoice_no}`);
-    })();
-    res.redirect('/invoices');
-  } catch (e) {
-    logError('invoices.delete', e, { id: req.params.id });
-    res.redirect('/invoices?err=server');
-  }
-});
-
-router.get('/view/:id', (req, res) => {
-  const invoice = db.prepare(`
-    SELECT i.*, c.name as customer_name, c.phone as customer_phone, c.address as customer_address, c.city as customer_city, c.commission as customer_commission
-    FROM invoices i JOIN customers c ON c.id = i.customer_id WHERE i.id = ?
-  `).get(req.params.id);
-  if (!invoice) return res.redirect('/invoices');
-  const items = db.prepare('SELECT ii.*, p.name as product_name FROM invoice_items ii JOIN products p ON p.id = ii.product_id WHERE ii.invoice_id = ?').all(req.params.id);
-  const bilty = db.prepare('SELECT * FROM bilty WHERE invoice_id = ?').get(req.params.id);
-  res.render('invoices/view', { page: 'invoices', invoice, items, bilty });
-});
-
-// Print-friendly invoice
-router.get('/print/:id', (req, res) => {
-  const invoice = db.prepare(`
-    SELECT i.*, c.name as customer_name, c.phone as customer_phone, c.address as customer_address, c.city as customer_city, c.category as customer_category, c.commission as customer_commission
-    FROM invoices i JOIN customers c ON c.id = i.customer_id WHERE i.id = ?
-  `).get(req.params.id);
-  if (!invoice) return res.redirect('/invoices');
-  const items = db.prepare('SELECT ii.*, p.name as product_name FROM invoice_items ii JOIN products p ON p.id = ii.product_id WHERE ii.invoice_id = ?').all(req.params.id);
-  const bilty = db.prepare('SELECT * FROM bilty WHERE invoice_id = ?').get(req.params.id);
-  const settings = getSettings();
-  res.render('invoices/print', { page: 'invoices', invoice, items, bilty, settings, layout: false });
-});
-
-// PDF Invoice
-router.get('/pdf/:id', (req, res) => {
-  const invoice = db.prepare(`
-    SELECT i.*, c.name as customer_name, c.phone as customer_phone, c.address as customer_address, c.city as customer_city
-    FROM invoices i JOIN customers c ON c.id = i.customer_id WHERE i.id = ?
-  `).get(req.params.id);
-  if (!invoice) return res.status(404).send('Invoice not found');
-  const items = db.prepare('SELECT ii.*, p.name as product_name FROM invoice_items ii JOIN products p ON p.id = ii.product_id WHERE ii.invoice_id = ?').all(req.params.id);
-  const bilty = db.prepare('SELECT * FROM bilty WHERE invoice_id = ?').get(req.params.id);
-  const settings = getSettings();
-
-  const doc = new PDFDocument({ margin: 40, size: 'A4' });
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename=Invoice-${invoice.invoice_no}.pdf`);
-  doc.pipe(res);
-
-  // Header
-  doc.fontSize(22).font('Helvetica-Bold').text(settings.business_name || 'PLASTIC MARKAZ', { align: 'center' });
-  doc.fontSize(10).font('Helvetica').text(settings.business_tagline || 'Plastic Products & Trading', { align: 'center' });
-  if (settings.business_phone || settings.business_city) {
-    doc.fontSize(9).text([settings.business_address, settings.business_city, settings.business_phone].filter(Boolean).join('  |  '), { align: 'center' });
-  }
-  doc.moveDown(0.5);
-  doc.moveTo(40, doc.y).lineTo(555, doc.y).stroke('#333');
-  doc.moveDown(0.5);
-
-  // Invoice details
-  doc.fontSize(16).font('Helvetica-Bold').text('INVOICE', { align: 'center' });
-  doc.moveDown(0.5);
-
-  doc.fontSize(10).font('Helvetica');
-  const startY = doc.y;
-  doc.text(`Invoice No: ${invoice.invoice_no}`, 40, startY);
-  doc.text(`Date: ${invoice.invoice_date}`, 40);
-  if (invoice.due_date) doc.text(`Due Date: ${invoice.due_date}`, 40);
-  doc.text(`Status: ${invoice.status.toUpperCase()}`, 40);
-
-  doc.text(`Customer: ${invoice.customer_name}`, 300, startY);
-  if (invoice.customer_phone) doc.text(`Phone: ${invoice.customer_phone}`, 300);
-  if (invoice.customer_address) doc.text(`Address: ${invoice.customer_address}`, 300);
-  if (invoice.customer_city) doc.text(`City: ${invoice.customer_city}`, 300);
-
-  doc.moveDown(1.5);
-  doc.y = Math.max(doc.y, startY + 70);
-
-  // Table header
-  const tableTop = doc.y;
-  doc.font('Helvetica-Bold').fontSize(9);
-  doc.rect(40, tableTop - 3, 515, 20).fill('#2c3e50');
-  doc.fillColor('#fff');
-  doc.text('#', 45, tableTop, { width: 25 });
-  doc.text('Product', 70, tableTop, { width: 150 });
-  doc.text('Pkg(Ctn)', 220, tableTop, { width: 50, align: 'right' });
-  doc.text('Pcs/Ctn', 270, tableTop, { width: 50, align: 'right' });
-  doc.text('Qty(Pcs)', 320, tableTop, { width: 55, align: 'right' });
-  doc.text('Rate', 380, tableTop, { width: 60, align: 'right' });
-  doc.text('Amount', 450, tableTop, { width: 100, align: 'right' });
-
-  doc.fillColor('#000').font('Helvetica').fontSize(9);
-  let y = tableTop + 22;
-  items.forEach((item, idx) => {
-    if (idx % 2 === 0) doc.rect(40, y - 3, 515, 18).fill('#f8f9fa').fillColor('#000');
-    doc.text(idx + 1, 45, y, { width: 25 });
-    doc.text(item.product_name, 70, y, { width: 150 });
-    doc.text(item.packages.toString(), 220, y, { width: 50, align: 'right' });
-    doc.text(item.packaging.toString(), 270, y, { width: 50, align: 'right' });
-    doc.text(item.quantity.toString(), 320, y, { width: 55, align: 'right' });
-    doc.text(item.rate.toFixed(2), 380, y, { width: 60, align: 'right' });
-    doc.text(item.amount.toFixed(2), 450, y, { width: 100, align: 'right' });
-    y += 18;
+    await addAuditLog('create','invoices', invId, `Created invoice ${invoiceNo} total ${total}`);
+    return invId;
   });
 
-  // Totals
-  y += 5;
-  doc.moveTo(40, y).lineTo(555, y).stroke('#333');
-  y += 10;
-  doc.font('Helvetica').fontSize(10);
-  doc.text('Subtotal:', 380, y); doc.text(`PKR ${invoice.subtotal.toFixed(2)}`, 450, y, { width: 100, align: 'right' });
-  y += 18;
-  if (invoice.discount > 0) {
-    doc.text('Discount:', 380, y); doc.text(`PKR ${invoice.discount.toFixed(2)}`, 450, y, { width: 100, align: 'right' });
-    y += 18;
-  }
-  doc.font('Helvetica-Bold').fontSize(12);
-  doc.text('TOTAL:', 380, y); doc.text(`PKR ${invoice.total.toFixed(2)}`, 450, y, { width: 100, align: 'right' });
+  res.redirect('/invoices/view/' + newId);
+}));
 
-  // Bilty info
-  if (bilty) {
-    y += 30;
-    doc.font('Helvetica-Bold').fontSize(11).text('Transport Details', 40, y);
-    y += 15;
-    doc.font('Helvetica').fontSize(9);
-    doc.text(`Transport: ${bilty.transport_name}  |  Bilty No: ${bilty.bilty_no || '-'}  |  From: ${bilty.from_city}  To: ${bilty.to_city}  |  Freight: PKR ${bilty.freight_charges.toFixed(2)}`, 40, y);
-  }
+router.get('/edit/:id', wrap(async (req, res) => {
+  const id = toInt(req.params.id);
+  const inv = (await pool.query(`SELECT * FROM invoices WHERE id=$1`, [id])).rows[0];
+  if (!inv) return res.redirect('/invoices');
+  const [items, customers, products, warehouses, transports] = await Promise.all([
+    pool.query(`SELECT ii.*, p.name AS product_name FROM invoice_items ii JOIN products p ON p.id=ii.product_id WHERE ii.invoice_id=$1`, [id]),
+    pool.query(`SELECT id, name FROM customers WHERE status='active' ORDER BY name`),
+    pool.query(`SELECT id, name, qty_per_pack, selling_price AS rate, stock, default_commission_rate FROM products WHERE status='active' ORDER BY name`),
+    pool.query(`SELECT id, name FROM warehouses WHERE status='active' ORDER BY name`),
+    pool.query(`SELECT id, name FROM transports WHERE status='active' ORDER BY name`)
+  ]);
+  res.render('invoices/form', {
+    page:'invoices', invoice: inv, items: items.rows,
+    customers: customers.rows, products: products.rows, warehouses: warehouses.rows, transports: transports.rows,
+    pendingOrders: [], edit:true
+  });
+}));
 
-  // Terms and footer
-  if (settings.invoice_terms) {
-    y += 25;
-    doc.font('Helvetica').fontSize(8).fillColor('#888').text(`Terms: ${settings.invoice_terms}`, 40, y);
-  }
-  doc.fontSize(8).font('Helvetica').fillColor('#888').text(settings.invoice_footer || 'Thank you for your business!', 40, 750, { align: 'center' });
-  doc.text(`${settings.business_name || 'PLASTIC MARKAZ'} — All rights reserved`, 40, 762, { align: 'center' });
+router.post('/edit/:id', validate(schemas.invoiceCreate), wrap(async (req, res) => {
+  const id = toInt(req.params.id);
+  const v = req.valid; const items = v._items || [];
+  if (!items.length) return res.redirect('/invoices/edit/' + id + '?err=no_items');
+  const transportCharges = toNum(req.body.transport_charges, 0);
 
-  doc.end();
-});
+  await tx(async (db) => {
+    const existing = await db.one(`SELECT * FROM invoices WHERE id=$1`, [id]);
+    if (!existing) throw new Error('Invoice not found');
 
-router.post('/delete/:id', (req, res) => {
-  db.transaction(() => {
-    db.prepare('DELETE FROM invoice_items WHERE invoice_id = ?').run(req.params.id);
-    db.prepare('DELETE FROM invoices WHERE id = ?').run(req.params.id);
-  })();
-  addAuditLog('delete', 'invoices', req.params.id, 'Deleted invoice');
+    // Snapshot existing cost_at_sale per product to preserve historic profit on edit
+    const old = await db.many(`SELECT product_id, cost_at_sale FROM invoice_items WHERE invoice_id=$1`, [id]);
+    const oldCost = {}; for (const r of old) oldCost[r.product_id] = Number(r.cost_at_sale) || 0;
+
+    let subtotal=0, totalComm=0;
+    for (const it of items) {
+      it.amount = it.quantity * it.rate;
+      it.commission_amount = it.amount * (it.commission_pct || 0) / 100;
+      it.discount_per_pack = it.discount_per_pack || 0;
+      it.cost_at_sale = (oldCost[it.product_id] != null) ? oldCost[it.product_id] : await getProductCost(db, it.product_id);
+      subtotal += it.amount; totalComm += it.commission_amount;
+    }
+    const total = subtotal + transportCharges - totalComm;
+
+    let resolvedTransporter = req.body.transporter_name || null;
+    if (v.transport_id) {
+      const t = await db.one(`SELECT name FROM transports WHERE id=$1`, [v.transport_id]);
+      if (t) resolvedTransporter = t.name;
+    }
+
+    // Reverse stock + ledger then re-apply
+    await reverseStockForRef(db, 'invoice', id);
+    await removeLedgerForRef(db, 'customer', existing.customer_id, 'invoice', id);
+    await recomputeBalance(db, 'customer', existing.customer_id);
+
+    await db.run(`UPDATE invoices SET customer_id=$1,warehouse_id=$2,transport_id=$3,bilty_no=$4,transporter_name=$5,
+                    invoice_date=$6,due_date=$7,delivery_date=$8,
+                    subtotal=$9,commission_amount=$10,transport_charges=$11,total=$12,
+                    notes=$13, account_scope=$14
+                  WHERE id=$15`,
+      [v.customer_id, v.warehouse_id, v.transport_id, v.bilty_no, resolvedTransporter,
+       v.invoice_date, v.due_date, v.delivery_date,
+       subtotal, totalComm, transportCharges, total,
+       v.notes, v.account_scope || existing.account_scope || 'plastic_markaz', id]);
+
+    await db.run(`DELETE FROM invoice_items WHERE invoice_id=$1`, [id]);
+    for (const it of items) {
+      await db.run(`INSERT INTO invoice_items(invoice_id,product_id,packages,packaging,quantity,rate,amount,commission_pct,commission_amount,discount_per_pack,cost_at_sale)
+                    VALUES ($1,$2,COALESCE($3,0),COALESCE($4,1),$5,$6,$7,COALESCE($8,0),$9,COALESCE($10,0),$11)`,
+        [id, it.product_id, it.packages, it.packaging, it.quantity, it.rate, it.amount, it.commission_pct, it.commission_amount, it.discount_per_pack, it.cost_at_sale]);
+      await applyStockMovement(db, it.product_id, v.warehouse_id, -it.quantity, 'invoice', id, 'sale-edit', `Invoice ${existing.invoice_no} (edited)`);
+    }
+
+    await addLedgerEntry(db, 'customer', v.customer_id, v.invoice_date, `Invoice ${existing.invoice_no}`, total, 0, 'invoice', id, v.account_scope || existing.account_scope || 'plastic_markaz');
+    if (v.customer_id !== existing.customer_id) await recomputeBalance(db, 'customer', existing.customer_id);
+
+    await addAuditLog('update','invoices', id, `Updated invoice ${existing.invoice_no} new total ${total}`);
+  });
+
+  res.redirect('/invoices/view/' + id);
+}));
+
+router.post('/delete/:id', wrap(async (req, res) => {
+  const id = toInt(req.params.id);
+  await tx(async (db) => {
+    const existing = await db.one(`SELECT * FROM invoices WHERE id=$1`, [id]);
+    if (!existing) return;
+    await reverseStockForRef(db, 'invoice', id);
+    await removeLedgerForRef(db, 'customer', existing.customer_id, 'invoice', id);
+    await recomputeBalance(db, 'customer', existing.customer_id);
+    await db.run(`DELETE FROM invoice_items WHERE invoice_id=$1`, [id]);
+    await db.run(`DELETE FROM invoices WHERE id=$1`, [id]);
+    await addAuditLog('delete','invoices', id, `Deleted invoice ${existing.invoice_no}`);
+  });
   res.redirect('/invoices');
-});
+}));
 
-router.post('/bulk', (req, res) => {
-  const { action, ids } = req.body;
-  if (!ids || !action) return res.redirect('/invoices');
-  const idList = ids.split(',').map(Number).filter(Boolean);
-  if (!idList.length) return res.redirect('/invoices');
+router.get('/view/:id', wrap(async (req, res) => {
+  const id = toInt(req.params.id);
+  const inv = (await pool.query(`
+    SELECT i.*, c.name AS customer_name, c.phone AS customer_phone, c.address AS customer_address, c.city AS customer_city, c.default_commission_rate AS customer_commission
+    FROM invoices i JOIN customers c ON c.id=i.customer_id WHERE i.id=$1`, [id])).rows[0];
+  if (!inv) return res.redirect('/invoices');
+  const items = (await pool.query(`SELECT ii.*, p.name AS product_name FROM invoice_items ii JOIN products p ON p.id=ii.product_id WHERE ii.invoice_id=$1`, [id])).rows;
+  const bilty = (await pool.query(`SELECT * FROM bilty WHERE invoice_id=$1`, [id])).rows[0] || null;
+  res.render('invoices/view', { page:'invoices', invoice: inv, items, bilty });
+}));
 
-  if (action === 'mark_paid') {
-    const stmt = db.prepare('UPDATE invoices SET status = ? WHERE id = ?');
-    idList.forEach(id => stmt.run('paid', id));
-  } else if (action === 'mark_unpaid') {
-    const stmt = db.prepare('UPDATE invoices SET status = ? WHERE id = ?');
-    idList.forEach(id => stmt.run('unpaid', id));
-  } else if (action === 'delete') {
-    db.transaction(() => {
-      idList.forEach(id => {
-        db.prepare('DELETE FROM invoice_items WHERE invoice_id = ?').run(id);
-        db.prepare('DELETE FROM invoices WHERE id = ?').run(id);
-      });
-    })();
-  }
-  res.redirect('/invoices');
-});
+router.get('/print/:id', wrap(async (req, res) => {
+  const id = toInt(req.params.id);
+  const inv = (await pool.query(`
+    SELECT i.*, c.name AS customer_name, c.phone AS customer_phone, c.address AS customer_address, c.city AS customer_city, c.category AS customer_category, c.default_commission_rate AS customer_commission
+    FROM invoices i JOIN customers c ON c.id=i.customer_id WHERE i.id=$1`, [id])).rows[0];
+  if (!inv) return res.redirect('/invoices');
+  const items = (await pool.query(`SELECT ii.*, p.name AS product_name FROM invoice_items ii JOIN products p ON p.id=ii.product_id WHERE ii.invoice_id=$1`, [id])).rows;
+  const bilty = (await pool.query(`SELECT * FROM bilty WHERE invoice_id=$1`, [id])).rows[0] || null;
+  res.render('invoices/print', { page:'invoices', invoice: inv, items, bilty, settings: res.locals.appSettings || {}, layout:false });
+}));
 
 module.exports = router;

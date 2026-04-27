@@ -1,6 +1,12 @@
 <%- include('../partials/header') %>
-<div class="page-header"><h2><i class="bi bi-speedometer"></i> Sale Performance</h2><button onclick="window.print()" class="btn btn-outline-secondary no-print"><i class="bi bi-printer"></i></button></div>
-<div class="filter-bar no-print">
+<div class="page-header">
+  <h2><i class="bi bi-speedometer"></i> Sale Performance</h2>
+  <div>
+    <a href="javascript:history.back()" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+    <button onclick="window.print()" class="btn btn-outline-secondary no-print"><i class="bi bi-printer"></i></button>
+  </div>
+</div>
+<div class="filter-bar no-print mb-3">
   <form class="row g-2" method="get">
     <div class="col-md-3"><input type="date" name="from" class="form-control" value="<%= from %>"></div>
     <div class="col-md-3"><input type="date" name="to" class="form-control" value="<%= to %>"></div>
@@ -8,16 +14,54 @@
   </form>
 </div>
 <div class="row g-3 mb-3">
-  <div class="col-md-4"><div class="stat-card stat-blue"><div class="stat-info"><h3><%= formatCurrency(totalSales) %></h3><p>Total Sales</p></div></div></div>
-  <div class="col-md-4"><div class="stat-card stat-green"><div class="stat-info"><h3><%= formatCurrency(avgDaily) %></h3><p>Avg Daily Sales</p></div></div></div>
-  <div class="col-md-4"><div class="stat-card stat-purple"><div class="stat-info"><h3><%= daily.length %></h3><p>Active Days</p></div></div></div>
+  <div class="col-md-3"><div class="stat-card stat-blue"><div class="stat-info"><h3><%= formatCurrency(totalSales) %></h3><p>Total Sales</p></div></div></div>
+  <div class="col-md-3"><div class="stat-card stat-green"><div class="stat-info"><h3><%= formatCurrency(avgDaily) %></h3><p>Avg Daily Sales</p></div></div></div>
+  <div class="col-md-3"><div class="stat-card stat-purple"><div class="stat-info"><h3><%= daily.length %></h3><p>Active Days</p></div></div></div>
+  <div class="col-md-3">
+    <div class="stat-card <%= trendPct >= 0 ? 'stat-green' : 'stat-red' %>">
+      <div class="stat-info">
+        <h3><%= (trendPct >= 0 ? '+' : '') + trendPct.toFixed(1) %>%</h3>
+        <p>Trend vs Prior Period</p>
+        <small style="opacity:.85">Prior: <%= formatCurrency(priorSum) %></small>
+      </div>
+    </div>
+  </div>
 </div>
+
+<!-- AI Insights -->
+<div class="card mb-3" style="border-left: 4px solid #6366f1; background: linear-gradient(135deg,#f5f3ff,#fff);">
+  <div class="card-header"><i class="bi bi-stars text-primary"></i> <strong>AI Insights & Forecast</strong></div>
+  <div class="card-body">
+    <div class="row g-2">
+      <% insights.forEach(s => { %>
+        <div class="col-md-6">
+          <div class="d-flex align-items-center gap-2 p-2 rounded bg-<%= s.color %> bg-opacity-10 text-<%= s.color %>">
+            <i class="bi bi-<%= s.icon %>"></i><span><%= s.text %></span>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+    <div class="row g-2 mt-3">
+      <div class="col-md-3"><div class="metric-mini text-center p-2 border rounded"><div class="text-muted small">Daily Avg (30d)</div><h5 class="mb-0"><%= formatCurrency(dailyAvg30) %></h5></div></div>
+      <div class="col-md-3"><div class="metric-mini text-center p-2 border rounded"><div class="text-muted small">Next 7 Days</div><h5 class="mb-0 text-primary"><%= formatCurrency(forecast7d) %></h5></div></div>
+      <div class="col-md-3"><div class="metric-mini text-center p-2 border rounded"><div class="text-muted small">Next 30 Days</div><h5 class="mb-0 text-success"><%= formatCurrency(forecast30d) %></h5></div></div>
+      <div class="col-md-3"><div class="metric-mini text-center p-2 border rounded"><div class="text-muted small">Best Day</div><h5 class="mb-0"><%= bestDay ? formatCurrency(bestDay.total) : '-' %></h5></div></div>
+    </div>
+  </div>
+</div>
+
 <div class="card"><div class="card-body"><canvas id="perfChart" height="80"></canvas></div></div>
 <script>
-const d = <%- JSON.stringify(daily) %>;
-new Chart(document.getElementById('perfChart'), {
-  type: 'line', data: { labels: d.map(x=>x.date), datasets: [{ label: 'Daily Sales', data: d.map(x=>x.total), borderColor: '#3498db', fill: true, backgroundColor: 'rgba(52,152,219,0.1)', tension: 0.3 }] },
-  options: { responsive: true, scales: { y: { beginAtZero: true } } }
-});
+function initPerfChart(){
+  if (typeof Chart === 'undefined') { return setTimeout(initPerfChart, 50); }
+  const d = <%- JSON.stringify(daily) %>;
+  new Chart(document.getElementById('perfChart'), {
+    type: 'line',
+    data: { labels: d.map(x=>x.date), datasets: [{ label: 'Daily Sales', data: d.map(x=>x.total), borderColor: '#3498db', fill: true, backgroundColor: 'rgba(52,152,219,0.1)', tension: 0.3 }] },
+    options: { responsive: true, scales: { y: { beginAtZero: true } } }
+  });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initPerfChart);
+else initPerfChart();
 </script>
 <%- include('../partials/footer') %>

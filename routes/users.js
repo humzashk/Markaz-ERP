@@ -1,197 +1,71 @@
+'use strict';
 const express = require('express');
 const router = express.Router();
-const { validate, schemas } = require('../middleware/validate');
 const bcrypt = require('bcryptjs');
-const { db } = require('../database');
-const { ALL_MODULES, requireRole } = require('../middleware/auth');
+const { pool, addAuditLog, toInt } = require('../database');
+const { wrap } = require('../middleware/errorHandler');
+const { requireRole, ALL_MODULES } = require('../middleware/auth');
+const { validate, schemas } = require('../middleware/validate');
+const { DASH_WIDGETS } = require('./dashboard');
 
-// Only SuperAdmin + Admin can manage users
-router.use(requireRole('superadmin', 'admin'));
+router.use(requireRole('superadmin','admin'));
 
-// LIST
-router.get('/', (req, res) => {
-  let users;
-  if (req.user.role === 'superadmin') {
-    users = db.prepare(
-      `SELECT u.*, (SELECT name FROM users WHERE id = u.created_by) AS created_by_name
-       FROM users u ORDER BY u.id ASC`
-    ).all();
-  } else {
-    // admin sees only employees they created (or any employee)
-    users = db.prepare(
-      `SELECT u.*, (SELECT name FROM users WHERE id = u.created_by) AS created_by_name
-       FROM users u WHERE u.role = 'employee' ORDER BY u.id ASC`
-    ).all();
+router.get('/', wrap(async (req, res) => {
+  const r = await pool.query(`SELECT id, username, name, email, role, status, created_at, last_login FROM users ORDER BY id`);
+  res.render('users/index', { page:'users', users: r.rows });
+}));
+
+router.get('/add', (req, res) => res.render('users/form', { page:'users', editUser:null, edit:false, ALL_MODULES, DASH_WIDGETS, perms: [] }));
+
+router.post('/add', validate(schemas.userCreate), wrap(async (req, res) => {
+  const v = req.valid;
+  const password = req.body.password || 'changeme';
+  const hash = bcrypt.hashSync(password, 10);
+  const r = await pool.query(`
+    INSERT INTO users(username, name, email, password_hash, role, status, created_by)
+    VALUES (LOWER($1),$2,$3,$4,$5,COALESCE($6,'active'),$7) RETURNING id`,
+    [v.username, v.name || v.username, v.email, hash, v.role, v.status, req.user.id]);
+  const id = r.rows[0].id;
+  if (v.role === 'employee') {
+    const mods = req.body.modules ? (Array.isArray(req.body.modules) ? req.body.modules : [req.body.modules]) : [];
+    for (const m of mods) await pool.query(`INSERT INTO user_permissions(user_id, module) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [id, m]);
   }
-  res.render('users/index', {
-    page: 'users',
-    users,
-    saved: req.query.saved,
-    err: req.query.err
-  });
-});
+  await addAuditLog('create','users', id, `Created user ${v.username}`);
+  res.redirect('/users');
+}));
 
-// NEW FORM
-router.get('/new', (req, res) => {
-  res.render('users/form', {
-    page: 'users',
-    user: { status: 'active', role: 'employee' },
-    perms: [],
-    ALL_MODULES,
-    isNew: true,
-    err: req.query.err
-  });
-});
+router.get('/edit/:id', wrap(async (req, res) => {
+  const id = toInt(req.params.id);
+  const u = (await pool.query(`SELECT id, username, name, email, role, status FROM users WHERE id=$1`, [id])).rows[0];
+  if (!u) return res.redirect('/users');
+  const perms = (await pool.query(`SELECT module FROM user_permissions WHERE user_id=$1`, [id])).rows.map(r => r.module);
+  res.render('users/form', { page:'users', editUser: u, edit:true, ALL_MODULES, DASH_WIDGETS, perms });
+}));
 
-// EDIT FORM
-router.get('/edit/:id', (req, res) => {
-  const u = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
-  if (!u) return res.redirect('/users?err=notfound');
-  // admins can only edit employees; superadmin can edit anyone except themselves via this flow
-  if (req.user.role === 'admin' && u.role !== 'employee') return res.redirect('/users?err=forbidden');
-  const perms = db.prepare('SELECT module FROM user_permissions WHERE user_id = ?').all(u.id).map(r => r.module);
-  res.render('users/form', {
-    page: 'users',
-    user: u,
-    perms,
-    ALL_MODULES,
-    isNew: false,
-    err: req.query.err
-  });
-});
-
-function sanitizeRole(currentUserRole, requestedRole) {
-  // superadmin may create admin OR employee (NOT another superadmin through UI)
-  // admin may create only employee
-  if (currentUserRole === 'superadmin') {
-    if (requestedRole === 'admin' || requestedRole === 'employee') return requestedRole;
-    return 'employee';
+router.post('/edit/:id', validate(schemas.userCreate), wrap(async (req, res) => {
+  const id = toInt(req.params.id);
+  const v = req.valid;
+  await pool.query(`UPDATE users SET username=LOWER($1), name=$2, email=$3, role=$4, status=COALESCE($5,'active') WHERE id=$6`,
+    [v.username, v.name || v.username, v.email, v.role, v.status, id]);
+  if (req.body.password && req.body.password.length >= 6) {
+    const hash = bcrypt.hashSync(req.body.password, 10);
+    await pool.query(`UPDATE users SET password_hash=$1 WHERE id=$2`, [hash, id]);
   }
-  return 'employee';
-}
-
-const DASH_WIDGET_KEYS = ['dash.financials','dash.profit','dash.cash','dash.aging','dash.activity','dash.accounts','dash.charts','dash.stock','dash.customers','dash.products','dash.ai','dash.audit','dash.recent'];
-function modulesFromBody(body) {
-  let mods = body.modules;
-  if (!mods) return [];
-  if (!Array.isArray(mods)) mods = [mods];
-  return mods.filter(m => ALL_MODULES.includes(m) || DASH_WIDGET_KEYS.includes(m));
-}
-
-// CREATE
-router.post('/', validate(schemas.userCreate), (req, res) => {
-  try {
-    const username = String(req.body.username || '').trim().toLowerCase();
-    const name     = String(req.body.name || '').trim();
-    const email    = String(req.body.email || '').trim();
-    const password = String(req.body.password || '');
-    const role     = sanitizeRole(req.user.role, String(req.body.role || 'employee'));
-    const status   = req.body.status === 'inactive' ? 'inactive' : 'active';
-
-    if (!username || !name || !password || password.length < 6) {
-      return res.redirect('/users/new?err=invalid');
-    }
-    const exists = db.prepare('SELECT id FROM users WHERE LOWER(username) = ?').get(username);
-    if (exists) return res.redirect('/users/new?err=dup');
-
-    const hash = bcrypt.hashSync(password, 10);
-    const result = db.prepare(
-      `INSERT INTO users (username, name, email, password_hash, role, status, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(username, name, email, hash, role, status, req.user.id);
-
-    const newId = result.lastInsertRowid;
-    // save permissions (only relevant for employee; admin/superadmin get full by role)
-    if (role === 'employee') {
-      const mods = modulesFromBody(req.body);
-      for (const m of mods) {
-        try { db.prepare('INSERT OR IGNORE INTO user_permissions (user_id, module) VALUES (?, ?)').run(newId, m); } catch(e){}
-      }
-    }
-    res.redirect('/users?saved=1');
-  } catch (e) {
-    console.error('create user error:', e.message);
-    res.redirect('/users/new?err=server');
+  await pool.query(`DELETE FROM user_permissions WHERE user_id=$1`, [id]);
+  if (v.role === 'employee') {
+    const mods = req.body.modules ? (Array.isArray(req.body.modules) ? req.body.modules : [req.body.modules]) : [];
+    for (const m of mods) await pool.query(`INSERT INTO user_permissions(user_id, module) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [id, m]);
   }
-});
+  await addAuditLog('update','users', id, `Updated user ${v.username}`);
+  res.redirect('/users');
+}));
 
-// UPDATE
-router.post('/edit/:id', validate(schemas.userCreate), (req, res) => {
-  try {
-    const id = parseInt(req.params.id, 10);
-    const target = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-    if (!target) return res.redirect('/users?err=notfound');
-    if (req.user.role === 'admin' && target.role !== 'employee') {
-      return res.redirect('/users?err=forbidden');
-    }
-    // prevent self-demotion from superadmin
-    if (target.id === req.user.id && req.user.role === 'superadmin' && req.body.role !== 'superadmin') {
-      return res.redirect('/users/edit/' + id + '?err=self_role');
-    }
-
-    const name   = String(req.body.name || target.name).trim();
-    const email  = String(req.body.email || '').trim();
-    const status = req.body.status === 'inactive' ? 'inactive' : 'active';
-
-    let role = target.role;
-    if (req.user.role === 'superadmin' && target.role !== 'superadmin') {
-      role = sanitizeRole('superadmin', String(req.body.role || target.role));
-    }
-
-    db.prepare(
-      'UPDATE users SET name = ?, email = ?, role = ?, status = ? WHERE id = ?'
-    ).run(name, email, role, status, id);
-
-    // optional password reset
-    const np = String(req.body.new_password || '');
-    if (np) {
-      if (np.length < 6) return res.redirect('/users/edit/' + id + '?err=short');
-      const hash = bcrypt.hashSync(np, 10);
-      db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, id);
-    }
-
-    // rewrite permissions for employees
-    if (role === 'employee') {
-      db.prepare('DELETE FROM user_permissions WHERE user_id = ?').run(id);
-      const mods = modulesFromBody(req.body);
-      for (const m of mods) {
-        try { db.prepare('INSERT OR IGNORE INTO user_permissions (user_id, module) VALUES (?, ?)').run(id, m); } catch(e){}
-      }
-    } else {
-      // role escalated or stayed admin/superadmin → wipe explicit perms (they have implicit all)
-      db.prepare('DELETE FROM user_permissions WHERE user_id = ?').run(id);
-    }
-
-    res.redirect('/users?saved=1');
-  } catch (e) {
-    console.error('update user error:', e.message);
-    res.redirect('/users?err=server');
-  }
-});
-
-// TOGGLE STATUS
-router.post('/toggle/:id', (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  const u = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-  if (!u) return res.redirect('/users?err=notfound');
-  if (u.id === req.user.id) return res.redirect('/users?err=self');
-  if (req.user.role === 'admin' && u.role !== 'employee') return res.redirect('/users?err=forbidden');
-  const newStatus = u.status === 'active' ? 'inactive' : 'active';
-  db.prepare('UPDATE users SET status = ? WHERE id = ?').run(newStatus, id);
-  res.redirect('/users?saved=1');
-});
-
-// DELETE
-router.post('/delete/:id', (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  const u = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-  if (!u) return res.redirect('/users?err=notfound');
-  if (u.id === req.user.id) return res.redirect('/users?err=self');
-  if (u.role === 'superadmin') return res.redirect('/users?err=protected');
-  if (req.user.role === 'admin' && u.role !== 'employee') return res.redirect('/users?err=forbidden');
-  db.prepare('DELETE FROM user_permissions WHERE user_id = ?').run(id);
-  db.prepare('DELETE FROM users WHERE id = ?').run(id);
-  res.redirect('/users?saved=1');
-});
+router.post('/delete/:id', wrap(async (req, res) => {
+  const id = toInt(req.params.id);
+  if (id === req.user.id) return res.redirect('/users?err=cannot_delete_self');
+  await pool.query(`DELETE FROM users WHERE id=$1`, [id]);
+  await addAuditLog('delete','users', id, 'Deleted');
+  res.redirect('/users');
+}));
 
 module.exports = router;

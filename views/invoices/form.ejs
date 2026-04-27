@@ -26,19 +26,31 @@
               <% customers.forEach(c => { %><option value="<%= c.id %>" <%= (invoice && c.id==invoice.customer_id)?'selected':'' %>><%= c.name %></option><% }) %>
             </select>
           </div>
-          <div class="mb-3"><label class="form-label">Invoice Date *</label><input type="date" name="invoice_date" class="form-control" value="<%= invoice?.invoice_date || new Date().toISOString().split('T')[0] %>" required></div>
-          <div class="mb-3"><label class="form-label">Due Date</label><input type="date" name="due_date" class="form-control" value="<%= invoice?.due_date || '' %>"></div>
-          <div class="mb-3"><label class="form-label">Delivery Date</label><input type="date" name="delivery_date" class="form-control" value="<%= invoice?.delivery_date || '' %>"></div>
-          <div class="mb-3"><label class="form-label">Warehouse</label>
-            <select name="warehouse_id" class="form-select">
+          <div class="mb-3"><label class="form-label">Invoice Date *</label><input type="date" name="invoice_date" id="invoice_date" class="form-control" value="<%= invoice?.invoice_date || new Date().toISOString().split('T')[0] %>" required onchange="applyDuePreset()"></div>
+          <div class="mb-3">
+            <label class="form-label">Due Date *</label>
+            <div class="input-group">
+              <select id="due_preset" class="form-select" style="max-width:130px" onchange="applyDuePreset()">
+                <option value="">— Custom —</option>
+                <option value="15">+15 days</option>
+                <option value="30" selected>+30 days</option>
+                <option value="45">+45 days</option>
+                <option value="60">+60 days</option>
+              </select>
+              <input type="date" name="due_date" id="due_date" class="form-control" value="<%= invoice?.due_date || '' %>" required>
+            </div>
+          </div>
+          <div class="mb-3"><label class="form-label">Delivery Date</label><input type="date" name="delivery_date" class="form-control" value="<%= invoice?.delivery_date || new Date().toISOString().split('T')[0] %>"></div>
+          <div class="mb-3"><label class="form-label fw-bold">Warehouse *</label>
+            <select name="warehouse_id" class="form-select" required>
               <option value="">Select Warehouse</option>
               <% warehouses?.forEach(w => { %><option value="<%= w.id %>" <%= (invoice && w.id==invoice.warehouse_id)?'selected':'' %>><%= w.name %></option><% }) %>
             </select>
           </div>
-          <div class="mb-3"><label class="form-label">Bilty #</label><input type="text" name="bilty_no" class="form-control" value="<%= invoice?.bilty_no || '' %>"></div>
-          <div class="mb-3"><label class="form-label">Transport</label>
+          <div class="mb-3"><label class="form-label">Bilty # <small class="text-muted">(format: BLT-0000)</small></label><input type="text" name="bilty_no" id="bilty_no" class="form-control" value="<%= invoice?.bilty_no || '' %>" pattern="^(BLT-\d{4,})?$" placeholder="BLT-0001"></div>
+          <div class="mb-3"><label class="form-label">Transport <span id="transportRequired" class="text-danger d-none">*</span></label>
             <div class="input-group">
-              <select name="transport_id" class="form-select">
+              <select name="transport_id" id="transport_id" class="form-select">
                 <option value="">— None —</option>
                 <% (typeof transports !== 'undefined' ? transports : []).forEach(t => { %>
                   <option value="<%= t.id %>" <%= (invoice && invoice.transport_id==t.id)?'selected':'' %>><%= t.name %></option>
@@ -49,14 +61,7 @@
             <input type="hidden" name="transporter_name" value="<%= invoice?.transporter_name || '' %>">
           </div>
           <div class="mb-3"><label class="form-label">Transport Charges (+/-)</label><input type="number" step="0.01" name="transport_charges" id="transport_charges" class="form-control" value="<%= invoice?.transport_charges || 0 %>" onchange="calcTotal()"></div>
-          <div class="mb-3"><label class="form-label">Delivery Charges</label><input type="number" step="0.01" name="delivery_charges" id="delivery_charges" class="form-control" value="<%= invoice?.delivery_charges || 0 %>" onchange="calcTotal()"></div>
-          <div class="mb-3"><label class="form-label">Account *</label>
-            <select name="account_scope" class="form-select" required>
-              <% ['plastic_markaz','wings_furniture','cooler'].forEach(a => { %>
-                <option value="<%= a %>" <%= (invoice && invoice.account_scope===a) || (!invoice && a==='plastic_markaz') ?'selected':'' %>><%= a.replace('_',' ').replace(/\b\w/g, x=>x.toUpperCase()) %></option>
-              <% }) %>
-            </select>
-          </div>
+          <input type="hidden" name="delivery_charges" id="delivery_charges" value="0">
           <!-- Link Orders dropdown removed — use 'Generate Invoice from Orders' button on listing page -->
           <% if (!edit && typeof linkedOrderIds !== 'undefined' && linkedOrderIds && linkedOrderIds.length) { %>
             <% linkedOrderIds.forEach(oid => { %>
@@ -121,8 +126,7 @@ function calcTotal() {
     totalDiscount += disc;
   });
   const transport = parseFloat(document.getElementById('transport_charges')?.value) || 0;
-  const delivery  = parseFloat(document.getElementById('delivery_charges')?.value) || 0;
-  const total = subtotal + transport + delivery - totalCommission - totalDiscount;
+  const total = subtotal + transport - totalCommission - totalDiscount;
   const gross = total;
   document.getElementById('subtotal').textContent = subtotal.toFixed(2);
   document.getElementById('commPctDisp').textContent = (totalCommission > 0 ? 'Item-wise' : '0');
@@ -132,8 +136,35 @@ function calcTotal() {
   document.getElementById('grossAmount').textContent = gross.toFixed(2);
 }
 
+function applyDuePreset() {
+  const sel = document.getElementById('due_preset');
+  const inv = document.getElementById('invoice_date');
+  const due = document.getElementById('due_date');
+  if (!sel || !inv || !due) return;
+  if (!sel.value) return;
+  const days = parseInt(sel.value, 10);
+  if (!Number.isFinite(days)) return;
+  const d = new Date(inv.value || new Date().toISOString().split('T')[0]);
+  d.setDate(d.getDate() + days);
+  due.value = d.toISOString().split('T')[0];
+}
+function syncTransportReq() {
+  const bilty = document.getElementById('bilty_no');
+  const trans = document.getElementById('transport_id');
+  const star = document.getElementById('transportRequired');
+  if (!bilty || !trans) return;
+  const has = (bilty.value || '').trim().length > 0;
+  trans.required = has;
+  if (star) star.classList.toggle('d-none', !has);
+}
 document.addEventListener('DOMContentLoaded', () => {
   calcTotal();
+  // Default due_date to invoice_date+30 only when empty
+  const due = document.getElementById('due_date');
+  if (due && !due.value) applyDuePreset();
+  const bilty = document.getElementById('bilty_no');
+  if (bilty) bilty.addEventListener('input', syncTransportReq);
+  syncTransportReq();
 });
 </script>
 <%- include('../partials/footer') %>

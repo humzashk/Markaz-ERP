@@ -8,7 +8,7 @@
     .no-print { text-align:center; margin-bottom:14px; }
     .no-print button, .no-print a { padding:8px 22px; margin:0 5px; border:1px solid #000; background:#fff; cursor:pointer; font-size:13px; text-decoration:none; color:#000; font-weight:600; }
     .header { display:flex; align-items:center; gap:24px; border-bottom:3px solid #000; padding-bottom:14px; margin-bottom:18px; }
-    .logo-box { width:140px; height:140px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+    .logo-box { width:260px; height:100px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
     .logo-box img { max-width:100%; max-height:100%; object-fit:contain; }
     .company-block { flex:1; text-align:center; }
     .company-name { font-size:32px; font-weight:900; letter-spacing:3px; text-transform:uppercase; }
@@ -36,13 +36,14 @@
 <%
   var scope = (entity && entity.account_scope) ? entity.account_scope : 'plastic_markaz';
   var bizName = (typeof accountName === 'function') ? accountName(scope) : 'PLASTIC MARKAZ';
-  var logoPath = '/Logo.png';
+  var logoPath = (typeof getLogoPath === 'function') ? getLogoPath(scope) : '/Logo.png';
+  var logoMeta = (typeof getLogoMeta === 'function') ? getLogoMeta(scope) : { w:260, h:100, align:'left', offsetX:0, offsetY:0 };
   var totalDebit = 0, totalCredit = 0;
   entries.forEach(function(e){ totalDebit += (e.debit||0); totalCredit += (e.credit||0); });
   var finalBalance = (entity.balance != null) ? Number(entity.balance) : (totalDebit - totalCredit);
 %>
 <div class="header">
-  <div class="logo-box"><img src="<%= logoPath %>" alt="logo"></div>
+  <div class="logo-box" style="width:<%= logoMeta.w %>px; height:<%= logoMeta.h %>px; align-self:<%= logoMeta.align==='left'?'flex-start':logoMeta.align==='right'?'flex-end':'center' %>; transform:translate(<%= logoMeta.offsetX %>px, <%= logoMeta.offsetY %>px);"><img src="<%= logoPath %>" alt="logo"></div>
   <div class="company-block">
     <div class="company-name"><%= bizName %></div>
     <div class="doc-title"><%= entityType === 'customer' ? 'Customer' : 'Vendor' %> Ledger Statement</div>

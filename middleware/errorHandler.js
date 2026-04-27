@@ -1,46 +1,23 @@
-// middleware/errorHandler.js — central error wrapper + global handler.
 'use strict';
-const path = require('path');
+const { logError } = require('../database');
 
-let _logError = (..._a) => {};
-try { _logError = require(path.join('..','database')).logError || _logError; } catch (_) {}
-
-// Wrap an async/sync handler so any thrown error is caught and forwarded.
 function wrap(fn) {
-  return function (req, res, next) {
-    try {
-      const ret = fn(req, res, next);
-      if (ret && typeof ret.then === 'function') ret.catch(next);
-    } catch (e) { next(e); }
+  return function(req, res, next) {
+    Promise.resolve(fn(req, res, next)).catch(next);
   };
 }
 
-// Global error handler — last middleware in the chain.
-function globalErrorHandler(err, req, res, _next) {
-  const scope = (req && req.path) || 'app';
-  try { _logError('http.' + scope, err, { method: req && req.method, query: req && req.query }); } catch (_) {}
-  if (res.headersSent) return;
-  const wantsJson = ((req.headers && req.headers.accept) || '').includes('application/json') || req.xhr;
-  const code = err && err.status ? err.status : 500;
-  const message = (err && err.message) || 'Server error';
-  if (wantsJson) {
-    return res.status(code).json({ success: false, error: message });
-  }
-  // For non-JSON: redirect to referer with err= or render simple message
-  const back = (req.get && req.get('Referer')) || '/';
-  if (back && back !== req.originalUrl) {
-    const sep = back.includes('?') ? '&' : '?';
-    return res.redirect(back + sep + 'err=' + encodeURIComponent(message).slice(0, 800));
-  }
-  res.status(code).send('<pre>' + (message || '').replace(/[<>]/g,'') + '</pre>');
-}
-
-// 404 handler
 function notFound(req, res) {
-  if ((req.headers.accept || '').includes('application/json')) {
-    return res.status(404).json({ success: false, error: 'Not found' });
-  }
-  res.status(404).send('<h2>404 — Not found</h2><a href="/">Home</a>');
+  if (req.xhr || (req.headers.accept || '').includes('application/json')) return res.status(404).json({ error: 'Not found' });
+  res.status(404).render('error', { page:'error', message:'Page not found.', back:'/' });
 }
 
-module.exports = { wrap, globalErrorHandler, notFound };
+function globalErrorHandler(err, req, res, next) {
+  try { logError('http.' + (req.path || ''), err, { method: req.method, body: req.body, params: req.params, query: req.query }); } catch (_) {}
+  if (res.headersSent) return next(err);
+  const wantsJson = req.xhr || (req.headers.accept || '').includes('application/json');
+  if (wantsJson) return res.status(500).json({ error: err.message || 'Server error' });
+  res.status(500).render('error', { page:'error', message: 'A server error occurred. ' + (err.message || ''), back:'/' });
+}
+
+module.exports = { wrap, notFound, globalErrorHandler };

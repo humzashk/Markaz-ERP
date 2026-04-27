@@ -339,3 +339,69 @@ input.datepicker, input.datepicker-range {
   .content-wrapper { padding: 12px; }
   .page-header { flex-direction: column; align-items: flex-start; }
 }
+
+/* ========================================================================
+   MINIMAL THEME OVERRIDES — white background, black/grey text, alerts only
+   ======================================================================== */
+body, .main-content, .content-wrapper { background:#ffffff; color:#1f2937; }
+body { font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+h1,h2,h3,h4,h5,h6 { color:#111827; font-weight:600; letter-spacing:-.005em; }
+h2 { font-size:22px; }
+h3 { font-size:18px; }
+.text-muted { color:#6b7280 !important; }
+
+/* Page header */
+.page-header { background:#fff; border-bottom:1px solid #e5e7eb; padding:14px 0; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; }
+
+/* Cards */
+.card { background:#fff; border:1px solid #e5e7eb; border-radius:10px; box-shadow:none; }
+.card-header { background:#fafafa; border-bottom:1px solid #e5e7eb; color:#111827; font-weight:600; }
+
+/* Tables */
+.table { color:#1f2937; }
+.table thead th { background:#fafafa; color:#374151; font-weight:600; font-size:13px; border-bottom:1px solid #e5e7eb; }
+.table tbody tr:hover { background:#f9fafb; }
+
+/* Buttons — neutral by default; color reserved for alerts/destructive */
+.btn-primary { background:#1f2937; border-color:#1f2937; }
+.btn-primary:hover, .btn-primary:focus { background:#111827; border-color:#111827; }
+.btn-outline-primary { color:#1f2937; border-color:#d1d5db; }
+.btn-outline-primary:hover { background:#1f2937; color:#fff; border-color:#1f2937; }
+.btn-secondary, .btn-outline-secondary { color:#374151; border-color:#d1d5db; background:#fff; }
+.btn-outline-secondary:hover { background:#f3f4f6; color:#111827; }
+
+/* Forms */
+.form-control, .form-select { border-color:#d1d5db; color:#1f2937; }
+.form-control:focus, .form-select:focus { border-color:#1f2937; box-shadow:0 0 0 2px rgba(31,41,55,.10); }
+.form-label { color:#374151; font-weight:500; font-size:14px; }
+
+/* Sidebar — keep current dark theme but remove gradient noise */
+.sidebar { background:#111827; }
+.sidebar-brand, .sidebar .sidebar-section { color:#9ca3af; }
+.sidebar-nav li a { color:#d1d5db; }
+.sidebar-nav li a:hover { background:#1f2937; color:#fff; }
+.sidebar-nav li a.active { background:#1f2937; color:#fff; border-left:3px solid #fff; }
+
+/* Alerts (the only place color is allowed) */
+.alert-success { background:#ecfdf5; border-color:#a7f3d0; color:#065f46; }
+.alert-warning { background:#fffbeb; border-color:#fde68a; color:#92400e; }
+.alert-danger  { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
+.alert-info    { background:#eff6ff; border-color:#bfdbfe; color:#1e40af; }
+
+/* Badges → flat neutrals + alert palette */
+.badge.bg-primary, .badge.bg-secondary, .badge.bg-info, .badge.bg-light { background:#f3f4f6 !important; color:#374151 !important; border:1px solid #e5e7eb; }
+.badge.bg-success { background:#d1fae5 !important; color:#065f46 !important; }
+.badge.bg-warning { background:#fef3c7 !important; color:#92400e !important; }
+.badge.bg-danger  { background:#fee2e2 !important; color:#991b1b !important; }
+
+/* Stat-card legacy override → minimal flat */
+.stat-card { background:#fff !important; border:1px solid #e5e7eb !important; color:#1f2937 !important; box-shadow:none !important; padding:16px 18px !important; }
+.stat-card .stat-icon { color:#6b7280 !important; background:#f3f4f6 !important; }
+.stat-card h3 { color:#111827 !important; font-size:22px !important; }
+.stat-card p { color:#6b7280 !important; font-size:12px !important; text-transform:uppercase; letter-spacing:.5px; }
+
+/* Topbar */
+.topbar { background:#fff; border-bottom:1px solid #e5e7eb; }
+
+/* Spacing */
+.content-wrapper { padding:24px; }

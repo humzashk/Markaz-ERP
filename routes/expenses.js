@@ -1,56 +1,52 @@
+'use strict';
 const express = require('express');
 const router = express.Router();
+const { pool, addAuditLog, toInt } = require('../database');
+const { wrap } = require('../middleware/errorHandler');
 const { validate, schemas } = require('../middleware/validate');
-const { db, addAuditLog } = require('../database');
 
-router.get('/', (req, res) => {
-  const category = req.query.category || '';
-  const from = req.query.from || '';
-  const to = req.query.to || '';
-  let sql = `SELECT * FROM expenses WHERE 1=1`;
-  const params = [];
-  if (category) { sql += ` AND category = ?`; params.push(category); }
-  if (from) { sql += ` AND expense_date >= ?`; params.push(from); }
-  if (to) { sql += ` AND expense_date <= ?`; params.push(to); }
-  sql += ` ORDER BY expense_date DESC, id DESC`;
-  const expenses = db.prepare(sql).all(...params);
-  const totalAmount = expenses.reduce((s, e) => s + e.amount, 0);
-  const categories = db.prepare('SELECT DISTINCT category FROM expenses ORDER BY category').all().map(r => r.category);
-  res.render('expenses/index', { page: 'expenses', expenses, totalAmount, categories, category, from, to });
-});
+router.get('/', wrap(async (req, res) => {
+  const r = await pool.query(`SELECT * FROM expenses ORDER BY id DESC LIMIT 500`);
+  const catsR = (await pool.query(`SELECT name FROM expense_categories ORDER BY sort_order, name`)).rows;
+  const cats = catsR.map(c => c.name);
+  res.render('expenses/index', { page:'expenses', expenses: r.rows, categories: cats });
+}));
 
-router.get('/add', (req, res) => {
-  const allCats = db.prepare('SELECT name FROM expense_categories ORDER BY sort_order, name').all().map(r => r.name);
-  res.render('expenses/form', { page: 'expenses', expense: null, edit: false, allCats });
-});
+router.get('/add', wrap(async (req, res) => {
+  const catsR = (await pool.query(`SELECT name FROM expense_categories ORDER BY sort_order, name`)).rows;
+  const cats = catsR.map(c => c.name);
+  res.render('expenses/form', { page:'expenses', expense:null, categories: cats, edit:false });
+}));
 
-router.post('/add', validate(schemas.expenseCreate), (req, res) => {
-  const { category, description, amount, expense_date, payment_method, reference, paid_to } = req.body;
-  const result = db.prepare(
-    `INSERT INTO expenses (category, description, amount, expense_date, payment_method, reference, paid_to) VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(category, description, parseFloat(amount), expense_date, payment_method || 'cash', reference, paid_to || '');
-  addAuditLog('create', 'expenses', result.lastInsertRowid, `Added expense: ${category} Rs.${amount}`);
+router.post('/add', validate(schemas.expenseCreate), wrap(async (req, res) => {
+  const v = req.valid;
+  const r = await pool.query(`
+    INSERT INTO expenses(category, description, amount, expense_date, payment_method, reference, paid_to, account_scope)
+    VALUES ($1,$2,$3,$4,COALESCE($5,'cash'),$6,$7,COALESCE($8,'plastic_markaz')) RETURNING id`,
+    [v.category, v.description, v.amount, v.expense_date, v.payment_method, req.body.reference, req.body.paid_to, v.account_scope]);
+  await addAuditLog('create','expenses', r.rows[0].id, `${v.category} ${v.amount}`);
   res.redirect('/expenses');
-});
+}));
 
-router.get('/edit/:id', (req, res) => {
-  const expense = db.prepare('SELECT * FROM expenses WHERE id = ?').get(req.params.id);
-  if (!expense) return res.redirect('/expenses');
-  const allCats = db.prepare('SELECT name FROM expense_categories ORDER BY sort_order, name').all().map(r => r.name);
-  res.render('expenses/form', { page: 'expenses', expense, edit: true, allCats });
-});
+router.get('/edit/:id', wrap(async (req, res) => {
+  const r = await pool.query(`SELECT * FROM expenses WHERE id=$1`, [req.params.id]);
+  if (!r.rows[0]) return res.redirect('/expenses');
+  const catsR = (await pool.query(`SELECT name FROM expense_categories ORDER BY sort_order, name`)).rows;
+  const cats = catsR.map(c => c.name);
+  res.render('expenses/form', { page:'expenses', expense: r.rows[0], categories: cats, edit:true });
+}));
 
-router.post('/edit/:id', validate(schemas.expenseCreate), (req, res) => {
-  const { category, description, amount, expense_date, payment_method, reference, paid_to } = req.body;
-  db.prepare(
-    `UPDATE expenses SET category=?, description=?, amount=?, expense_date=?, payment_method=?, reference=?, paid_to=? WHERE id=?`
-  ).run(category, description, parseFloat(amount), expense_date, payment_method, reference, paid_to || '', req.params.id);
+router.post('/edit/:id', validate(schemas.expenseCreate), wrap(async (req, res) => {
+  const v = req.valid;
+  await pool.query(`UPDATE expenses SET category=$1, description=$2, amount=$3, expense_date=$4, payment_method=COALESCE($5,'cash'),
+                    reference=$6, paid_to=$7, account_scope=COALESCE($8,'plastic_markaz') WHERE id=$9`,
+    [v.category, v.description, v.amount, v.expense_date, v.payment_method, req.body.reference, req.body.paid_to, v.account_scope, req.params.id]);
   res.redirect('/expenses');
-});
+}));
 
-router.post('/delete/:id', (req, res) => {
-  db.prepare('DELETE FROM expenses WHERE id = ?').run(req.params.id);
+router.post('/delete/:id', wrap(async (req, res) => {
+  await pool.query(`DELETE FROM expenses WHERE id=$1`, [req.params.id]);
   res.redirect('/expenses');
-});
+}));
 
 module.exports = router;

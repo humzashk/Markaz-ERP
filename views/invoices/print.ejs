@@ -12,7 +12,7 @@ body { font-family: Arial, 'Helvetica', sans-serif; font-size:10px; color:#000; 
 .no-print button, .no-print a { padding:8px 22px; margin:0 5px; border:1px solid #000; background:#fff; color:#000; cursor:pointer; font-size:13px; text-decoration:none; display:inline-block; font-weight:600; }
 
 .header { display:flex; align-items:center; justify-content:flex-start; gap:16px; border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:10px; }
-.header .logo-box { width: var(--logo-w, 150px); height: var(--logo-h, 120px); flex-shrink:0; display:flex; align-items:center; justify-content:center; padding:2px; background:#fff; }
+.header .logo-box { width: var(--logo-w, 240px); height: var(--logo-h, 90px); flex-shrink:0; display:flex; align-items:center; justify-content:center; padding:2px; background:#fff; }
 .header .logo-box img { max-width:100%; max-height:100%; object-fit:contain; display:block; visibility:visible !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 .header .company-block { flex:1; text-align:center; }
 .header .spacer-right { width:70px; flex-shrink:0; }
@@ -66,7 +66,8 @@ table.items tbody tr.total-row td { background:#000; color:#fff; font-weight:800
 <%
   var scope = (invoice && invoice.account_scope) ? invoice.account_scope : 'plastic_markaz';
   var bizName = (typeof accountName === 'function') ? accountName(scope) : 'PLASTIC MARKAZ';
-  var logoPath = '/Logo.png';
+  var logoPath = (typeof getLogoPath === 'function') ? getLogoPath(scope) : '/Logo.png';
+  var logoMeta = (typeof getLogoMeta === 'function') ? getLogoMeta(scope) : { w:240, h:90, align:'center', offsetX:0, offsetY:0 };
   var bizAddr = (settings && settings.business_address) || '';
   var bizCity = (settings && settings.business_city)   || '';
   var bizPhone= (settings && settings.business_phone)  || '';
@@ -104,7 +105,7 @@ table.items tbody tr.total-row td { background:#000; color:#fff; font-weight:800
   <button onclick="window.print()">&#128438; Print Invoice</button>
   <a href="/invoices/view/<%= invoice.id %>">&#8592; Back</a>
   Logo size:
-  <input type="number" id="logoSizer" min="40" max="240" step="5" value="110" oninput="document.documentElement.style.setProperty('--logo-w', this.value+'px'); document.documentElement.style.setProperty('--logo-h', Math.round(this.value*0.85)+'px');" style="width:70px;">
+  <input type="number" id="logoSizer" min="80" max="380" step="10" value="240" oninput="document.documentElement.style.setProperty('--logo-w', this.value+'px'); document.documentElement.style.setProperty('--logo-h', Math.round(this.value*0.38)+'px');" style="width:80px;">
   px
 </div>
 
@@ -112,8 +113,8 @@ table.items tbody tr.total-row td { background:#000; color:#fff; font-weight:800
   <div class="header">
     <% if (logoPath) { %>
       <!-- Logo only, no text -->
-      <div style="width:100%; display:flex; justify-content:center; align-items:center;">
-        <div class="logo-box">
+      <div style="width:100%; display:flex; justify-content:<%= logoMeta.align==='left'?'flex-start':logoMeta.align==='right'?'flex-end':'center' %>; align-items:center;">
+        <div class="logo-box" style="--logo-w:<%= logoMeta.w %>px; --logo-h:<%= logoMeta.h %>px; transform:translate(<%= logoMeta.offsetX %>px, <%= logoMeta.offsetY %>px);">
           <img src="<%= logoPath %>" alt="logo" onerror="this.style.display='none'">
         </div>
       </div>

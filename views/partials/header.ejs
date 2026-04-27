@@ -61,7 +61,6 @@
         <% if (canSee('invoices')) { %><li><a href="/invoices" class="<%= page === 'invoices' ? 'active' : '' %>"><i class="bi bi-receipt"></i><span>Invoices</span></a></li><% } %>
         <% if (canSee('purchases')) { %>
           <li><a href="/purchases" class="<%= page === 'purchases' ? 'active' : '' %>"><i class="bi bi-bag"></i><span>Purchases</span></a></li>
-          <li><a href="/purchases/invoice" class="<%= page === 'purchase-invoice' ? 'active' : '' %>"><i class="bi bi-file-earmark-text"></i><span>Purchase Invoice</span></a></li>
         <% } %>
         <% if (canSee('creditnotes')) { %><li><a href="/creditnotes" class="<%= page === 'creditnotes' ? 'active' : '' %>"><i class="bi bi-file-earmark-minus"></i><span>Returns / Notes</span></a></li><% } %>
         <% if (canSee('bilty')) { %><li><a href="/bilty" class="<%= page === 'bilty' ? 'active' : '' %>"><i class="bi bi-send"></i><span>Bilty</span></a></li><% } %>
@@ -70,11 +69,10 @@
         <% if (canSee('expenses')) { %><li><a href="/expenses" class="<%= page === 'expenses' ? 'active' : '' %>"><i class="bi bi-wallet2"></i><span>Expenses</span></a></li><% } %>
       <% } %>
 
-      <% if (canSee('payments-receive') || canSee('payments-pay') || canSee('bank')) { %>
+      <% if (canSee('payments-receive') || canSee('payments-pay')) { %>
         <li class="sidebar-section">PAYMENTS</li>
         <% if (canSee('payments-receive')) { %><li><a href="/payments/receive" class="<%= page === 'payments-receive' ? 'active' : '' %>"><i class="bi bi-cash-coin"></i><span>Receive Payment</span></a></li><% } %>
         <% if (canSee('payments-pay')) { %><li><a href="/payments/pay" class="<%= page === 'payments-pay' ? 'active' : '' %>"><i class="bi bi-cash-stack"></i><span>Pay Vendor</span></a></li><% } %>
-        <% if (canSee('bank')) { %><li><a href="/bank" class="<%= page === 'bank' ? 'active' : '' %>"><i class="bi bi-bank"></i><span>Bank Accounts</span></a></li><% } %>
       <% } %>
 
       <% if (canSee('daybook') || canSee('journal') || canSee('ledger') || canSee('reports')) { %>
@@ -103,6 +101,11 @@
       <button class="btn btn-link sidebar-toggle" onclick="document.body.classList.toggle('sidebar-collapsed')">
         <i class="bi bi-list fs-4"></i>
       </button>
+      <% if (page !== 'dashboard') { %>
+        <a href="javascript:history.length>1?history.back():location.assign('/')" class="btn btn-sm btn-outline-secondary me-2" title="Back">
+          <i class="bi bi-arrow-left"></i> Back
+        </a>
+      <% } %>
       <div class="topbar-right d-flex align-items-center gap-3">
         <span class="text-muted"><i class="bi bi-calendar3"></i> <%= new Date().toLocaleDateString('en-PK', {weekday:'long', day:'2-digit', month:'short', year:'numeric'}) %></span>
         <% if (typeof currentUser !== 'undefined' && currentUser) { %>

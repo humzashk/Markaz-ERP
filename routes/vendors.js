@@ -1,72 +1,62 @@
+'use strict';
 const express = require('express');
 const router = express.Router();
+const { pool, addAuditLog } = require('../database');
+const { wrap } = require('../middleware/errorHandler');
 const { validate, schemas } = require('../middleware/validate');
-const { db, addAuditLog } = require('../database');
 
-function getCategories() {
-  const regions = db.prepare(`SELECT * FROM party_categories WHERE cat_group='region' AND status='active' ORDER BY sort_order, name`).all();
-  const types = db.prepare(`SELECT * FROM party_categories WHERE cat_group='type' AND applies_to IN ('vendor','both') AND status='active' ORDER BY sort_order, name`).all();
-  return { regions, types };
-}
-
-router.get('/', (req, res) => {
+router.get('/', wrap(async (req, res) => {
   const search = req.query.search || '';
   const region = req.query.region || '';
-  const party_type = req.query.party_type || '';
-  let sql = `SELECT * FROM vendors WHERE 1=1`;
   const params = [];
-  if (search) { sql += ` AND (name LIKE ? OR phone LIKE ? OR city LIKE ?)`; params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
-  if (region) { sql += ` AND region = ?`; params.push(region); }
-  if (party_type) { sql += ` AND party_type = ?`; params.push(party_type); }
-  sql += ` ORDER BY name`;
-  const vendors = db.prepare(sql).all(...params);
-  const { regions, types } = getCategories();
-  res.render('vendors/index', { page: 'vendors', vendors, search, region, party_type, regions, types });
-});
+  let sql = `SELECT * FROM vendors WHERE 1=1`;
+  if (search) { sql += ` AND (name ILIKE $1 OR phone ILIKE $1 OR city ILIKE $1)`; params.push('%'+search+'%'); }
+  if (region) { sql += ` AND region=$${params.length + 1}`; params.push(region); }
+  sql += ` ORDER BY id DESC`;
+  const r = await pool.query(sql, params);
+  const regionsR = await pool.query(`SELECT DISTINCT name, sort_order FROM party_categories WHERE cat_group='region' ORDER BY sort_order`);
+  const typesR = await pool.query(`SELECT DISTINCT name, sort_order FROM party_categories WHERE cat_group='type' AND applies_to='vendor' ORDER BY sort_order`);
+  res.render('vendors/index', { page:'vendors', vendors: r.rows, regions: regionsR.rows, types: typesR.rows, search, region, party_type: req.query.party_type || '' });
+}));
 
-router.get('/add', (req, res) => {
-  const { regions, types } = getCategories();
-  res.render('vendors/form', { page: 'vendors', vendor: null, edit: false, regions, types });
-});
+router.get('/add', (req, res) => res.render('vendors/form', { page:'vendors', vendor:null, edit:false }));
 
-router.post('/add', validate(schemas.vendorCreate), (req, res) => {
-  const { name, phone, email, address, city, opening_balance, region, party_type, notes, commission } = req.body;
-  const bal = parseFloat(opening_balance) || 0;
-  const result = db.prepare(
-    `INSERT INTO vendors (name, phone, email, address, city, opening_balance, balance, region, party_type, notes, commission) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(name, phone||'', email||'', address||'', city||'', bal, bal, region||'', party_type||'', notes||'', parseFloat(commission)||0);
-  addAuditLog('create', 'vendors', result.lastInsertRowid, `Created vendor: ${name}`);
+router.post('/add', validate(schemas.vendorCreate), wrap(async (req, res) => {
+  const v = req.valid;
+  const r = await pool.query(`
+    INSERT INTO vendors(name,phone,email,address,city,ntn,category,region,credit_days,opening_balance,balance,account_scope,status,notes)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,COALESCE($9,60),COALESCE($10,0),COALESCE($10,0),COALESCE($11,'plastic_markaz'),COALESCE($12,'active'),$13)
+    RETURNING id`,
+    [v.name,v.phone,v.email,v.address,v.city,v.ntn,v.category,v.region,v.credit_days,v.opening_balance,v.account_scope,v.status,v.notes]
+  );
+  await addAuditLog('create','vendors', r.rows[0].id, `Created ${v.name}`);
   res.redirect('/vendors');
-});
+}));
 
-router.get('/edit/:id', (req, res) => {
-  const vendor = db.prepare('SELECT * FROM vendors WHERE id = ?').get(req.params.id);
-  if (!vendor) return res.redirect('/vendors');
-  const { regions, types } = getCategories();
-  res.render('vendors/form', { page: 'vendors', vendor, edit: true, regions, types });
-});
+router.get('/edit/:id', wrap(async (req, res) => {
+  const r = await pool.query(`SELECT * FROM vendors WHERE id=$1`, [req.params.id]);
+  if (!r.rows[0]) return res.redirect('/vendors');
+  res.render('vendors/form', { page:'vendors', vendor: r.rows[0], edit:true });
+}));
 
-router.post('/edit/:id', validate(schemas.vendorCreate), (req, res) => {
-  const { name, phone, email, address, city, status, region, party_type, notes, commission } = req.body;
-  db.prepare(
-    `UPDATE vendors SET name=?, phone=?, email=?, address=?, city=?, status=?, region=?, party_type=?, notes=?, commission=? WHERE id=?`
-  ).run(name, phone||'', email||'', address||'', city||'', status||'active', region||'', party_type||'', notes||'', parseFloat(commission)||0, req.params.id);
-  addAuditLog('update', 'vendors', req.params.id, `Updated vendor: ${name}`);
+router.post('/edit/:id', validate(schemas.vendorCreate), wrap(async (req, res) => {
+  const v = req.valid;
+  await pool.query(`
+    UPDATE vendors SET name=$1,phone=$2,email=$3,address=$4,city=$5,ntn=$6,category=$7,region=$8,
+      credit_days=COALESCE($9,60), opening_balance=COALESCE($10,0),
+      account_scope=COALESCE($11,'plastic_markaz'), status=COALESCE($12,'active'), notes=$13
+    WHERE id=$14`,
+    [v.name,v.phone,v.email,v.address,v.city,v.ntn,v.category,v.region,v.credit_days,v.opening_balance,v.account_scope,v.status,v.notes, req.params.id]);
+  await addAuditLog('update','vendors', req.params.id, `Updated ${v.name}`);
   res.redirect('/vendors');
-});
+}));
 
-router.get('/view/:id', (req, res) => {
-  const vendor = db.prepare('SELECT * FROM vendors WHERE id = ?').get(req.params.id);
-  if (!vendor) return res.redirect('/vendors');
-  const purchases = db.prepare('SELECT * FROM purchases WHERE vendor_id = ? ORDER BY id DESC LIMIT 10').all(req.params.id);
-  const ledgerEntries = db.prepare('SELECT * FROM ledger WHERE entity_type = ? AND entity_id = ? ORDER BY id DESC LIMIT 20').all('vendor', req.params.id);
-  res.render('vendors/view', { page: 'vendors', vendor, purchases, ledgerEntries });
-});
-
-router.post('/delete/:id', (req, res) => {
-  db.prepare('UPDATE vendors SET status = ? WHERE id = ?').run('inactive', req.params.id);
-  addAuditLog('delete', 'vendors', req.params.id, 'Deactivated vendor');
+router.post('/delete/:id', wrap(async (req, res) => {
+  await pool.query(`DELETE FROM vendors WHERE id=$1`, [req.params.id]);
+  await addAuditLog('delete','vendors', req.params.id, 'Deleted');
   res.redirect('/vendors');
-});
+}));
+
+router.get('/ledger/:id', (req, res) => res.redirect('/ledger/vendor/' + req.params.id));
 
 module.exports = router;

@@ -3,7 +3,7 @@
   <h2><i class="bi bi-send"></i> <%= edit ? 'Edit' : 'Add' %> Bilty</h2>
   <a href="/bilty" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
 </div>
-<div class="card" style="max-width:700px">
+<div class="card" style="max-width:800px">
   <div class="card-body">
     <form method="post" action="/bilty/<%= edit ? 'edit/'+bilty.id : 'add' %>">
 <%- include("../partials/form-error") %>
@@ -17,36 +17,39 @@
             <option value="cooler"          <%= _bScope === 'cooler'          ? 'selected' : '' %>>Cooler</option>
           </select>
         </div>
+
+        <!-- Source Doc Search (REQUIRED): pick an order or invoice that already has a bilty_no -->
+        <div class="col-md-12">
+          <label class="form-label fw-bold">Source Order / Invoice *</label>
+          <div class="position-relative">
+            <input type="text" id="docSearch" class="form-control" placeholder="Search by order # / invoice # / bilty # / customer..." autocomplete="off" value="<%= bilty?.order_id ? ('ORDER #' + (bilty?.order_no||'')) : (bilty?.invoice_id ? ('INVOICE #' + (bilty?.invoice_no||'')) : '') %>">
+            <div id="searchResults" class="list-group position-absolute w-100 shadow" style="z-index:1000; max-height:280px; overflow-y:auto; display:none;"></div>
+          </div>
+          <input type="hidden" name="order_id"   id="order_id"   value="<%= bilty?.order_id || '' %>">
+          <input type="hidden" name="invoice_id" id="invoice_id" value="<%= bilty?.invoice_id || '' %>">
+          <small class="text-muted">Bilty # will be auto-filled from the selected order/invoice and must match.</small>
+        </div>
+
+        <div class="col-md-6"><label class="form-label fw-bold">Bilty Number * <small class="text-muted">(BLT-0000)</small></label>
+          <input type="text" name="bilty_no" id="bilty_no" class="form-control" required pattern="^BLT-\d{4,}$" placeholder="BLT-0001" value="<%= bilty?.bilty_no || '' %>">
+        </div>
         <div class="col-md-6"><label class="form-label">Transport *</label>
           <div class="input-group">
-            <select name="transport_id" id="transport_id" class="form-select">
-              <option value="">— Select existing —</option>
+            <select name="transport_id" id="transport_id" class="form-select" required>
+              <option value="">— Select transport —</option>
               <% (typeof transports !== 'undefined' ? transports : []).forEach(t => { %>
                 <option value="<%= t.id %>" <%= (bilty && bilty.transport_id==t.id)?'selected':'' %>><%= t.name %></option>
               <% }) %>
             </select>
             <a href="/transports/add" target="_blank" class="btn btn-outline-secondary" title="Create new transport"><i class="bi bi-plus"></i></a>
           </div>
-          <input type="text" name="transport_name" class="form-control mt-1" placeholder="…or type a new transport name" value="<%= bilty?.transport_name || '' %>">
         </div>
-        <div class="col-md-6"><label class="form-label">Bilty Number *</label><input type="text" name="bilty_no" class="form-control" required value="<%= bilty?.bilty_no || '' %>"></div>
+
         <div class="col-md-6"><label class="form-label">From City *</label><input type="text" name="from_city" class="form-control" required value="<%= bilty?.from_city || '' %>"></div>
         <div class="col-md-6"><label class="form-label">To City *</label><input type="text" name="to_city" class="form-control" required value="<%= bilty?.to_city || '' %>"></div>
         <div class="col-md-4"><label class="form-label">Date *</label><input type="date" name="bilty_date" class="form-control" required value="<%= bilty?.bilty_date || new Date().toISOString().split('T')[0] %>"></div>
         <div class="col-md-4"><label class="form-label">Freight (PKR)</label><input type="number" name="freight_charges" class="form-control" step="0.01" value="<%= bilty?.freight_charges || 0 %>"></div>
         <div class="col-md-4"><label class="form-label">Packages Count</label><input type="number" name="packages_count" class="form-control" value="<%= bilty?.packages_count || 0 %>"></div>
-        <div class="col-md-6"><label class="form-label">Link to Order</label>
-          <select name="order_id" class="form-select">
-            <option value="">-- None --</option>
-            <% orders.forEach(o => { %><option value="<%= o.id %>" <%= (bilty && bilty.order_id==o.id)?'selected':'' %>><%= o.order_no %> - <%= o.customer_name %></option><% }) %>
-          </select>
-        </div>
-        <div class="col-md-6"><label class="form-label">Link to Invoice</label>
-          <select name="invoice_id" class="form-select">
-            <option value="">-- None --</option>
-            <% invoices.forEach(inv => { %><option value="<%= inv.id %>" <%= (bilty && bilty.invoice_id==inv.id)?'selected':'' %>><%= inv.invoice_no %> - <%= inv.customer_name %></option><% }) %>
-          </select>
-        </div>
         <div class="col-md-6"><label class="form-label">Weight</label><input type="text" name="weight" class="form-control" value="<%= bilty?.weight || '' %>" placeholder="e.g. 50 kg"></div>
         <% if (edit) { %>
         <div class="col-md-6"><label class="form-label">Status</label>
@@ -61,4 +64,49 @@
     </form>
   </div>
 </div>
+
+<script>
+(function(){
+  const inp = document.getElementById('docSearch');
+  const box = document.getElementById('searchResults');
+  const oid = document.getElementById('order_id');
+  const iid = document.getElementById('invoice_id');
+  const bno = document.getElementById('bilty_no');
+  let debounce;
+  function pick(item){
+    inp.value = (item.type === 'order' ? 'ORDER #' : 'INVOICE #') + item.ref + ' — ' + item.party + ' (Bilty: ' + item.bilty_no + ')';
+    if (item.type === 'order') { oid.value = item.id; iid.value = ''; }
+    else { iid.value = item.id; oid.value = ''; }
+    if (bno && item.bilty_no) bno.value = item.bilty_no;
+    box.style.display = 'none';
+  }
+  function search(q){
+    if (!q || q.length < 1) { box.style.display = 'none'; return; }
+    fetch('/bilty/api/search?q=' + encodeURIComponent(q))
+      .then(r => r.json())
+      .then(rows => {
+        if (!rows || !rows.length) { box.innerHTML = '<div class="list-group-item text-muted small">No matching order/invoice with a Bilty #</div>'; box.style.display = 'block'; return; }
+        box.innerHTML = rows.map(r => `
+          <a href="#" class="list-group-item list-group-item-action" data-id="${r.id}" data-type="${r.type}" data-bilty="${r.bilty_no}" data-ref="${r.ref}" data-party="${r.party.replace(/"/g,'&quot;')}">
+            <strong>${r.type === 'order' ? 'ORDER' : 'INVOICE'} #${r.ref}</strong>
+            <span class="text-muted ms-2">${r.party}</span>
+            <span class="badge bg-info ms-2">Bilty: ${r.bilty_no}</span>
+          </a>`).join('');
+        box.style.display = 'block';
+        Array.from(box.querySelectorAll('a')).forEach(a => {
+          a.addEventListener('click', e => {
+            e.preventDefault();
+            pick({ id: a.dataset.id, type: a.dataset.type, bilty_no: a.dataset.bilty, ref: a.dataset.ref, party: a.dataset.party });
+          });
+        });
+      })
+      .catch(()=>{});
+  }
+  inp.addEventListener('input', () => {
+    oid.value = ''; iid.value = '';
+    clearTimeout(debounce); debounce = setTimeout(() => search(inp.value.trim()), 200);
+  });
+  document.addEventListener('click', e => { if (!box.contains(e.target) && e.target !== inp) box.style.display = 'none'; });
+})();
+</script>
 <%- include('../partials/footer') %>

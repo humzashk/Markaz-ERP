@@ -1,20 +1,85 @@
 <%- include('../partials/header') %>
-<div class="page-header"><h2><i class="bi bi-shield-check"></i> Audit Log</h2></div>
-<div class="filter-bar no-print">
+<div class="page-header">
+  <h2><i class="bi bi-shield-check"></i> Audit Log</h2>
+  <a href="javascript:history.back()" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+</div>
+<div class="filter-bar no-print mb-3">
   <form class="row g-2" method="get">
     <div class="col-md-3">
       <select name="module" class="form-select"><option value="">All Modules</option>
         <% modules.forEach(m => { %><option value="<%= m %>" <%= module===m?'selected':'' %>><%= m %></option><% }) %>
       </select>
     </div>
-    <div class="col-auto"><button class="btn btn-primary"><i class="bi bi-filter"></i></button></div>
+    <div class="col-md-3"><input type="text" name="search" class="form-control" placeholder="Search details / user..." value="<%= typeof search!=='undefined'?search:'' %>"></div>
+    <div class="col-auto"><button class="btn btn-primary"><i class="bi bi-filter"></i> Filter</button></div>
     <% if (module) { %><div class="col-auto"><a href="/reports/audit-log" class="btn btn-outline-secondary">Clear</a></div><% } %>
   </form>
 </div>
+<%
+  // Module → URL prefix for clickable rows
+  var linkMap = {
+    invoices: '/invoices/view/', orders: '/orders/view/', purchases: '/purchases/view/',
+    payments: '/payments/', customers: '/customers/edit/', vendors: '/vendors/edit/',
+    products: '/products/edit/', stock_adjustments: '/stock/', breakage: '/breakage/',
+    bilty: '/bilty/view/', creditnotes: '/creditnotes/view/', expenses: '/expenses/'
+  };
+  function fmtDDMMYY(s){
+    if(!s) return '-';
+    var d = new Date(s); if(isNaN(d.getTime())) return s;
+    var dd = String(d.getDate()).padStart(2,'0');
+    var mm = String(d.getMonth()+1).padStart(2,'0');
+    var yy = String(d.getFullYear()).slice(-2);
+    return dd+'/'+mm+'/'+yy;
+  }
+  function fmtTime(s){
+    if(!s) return '';
+    var d = new Date(s); if(isNaN(d.getTime())) return '';
+    var hh = String(d.getHours()).padStart(2,'0');
+    var mi = String(d.getMinutes()).padStart(2,'0');
+    return hh+':'+mi;
+  }
+%>
+<style>
+  .audit-row.clickable { cursor: pointer; transition: background .15s; }
+  .audit-row.clickable:hover { background: #eff6ff !important; }
+  .a-create { background:#d1fae5; color:#065f46; }
+  .a-update { background:#fef3c7; color:#92400e; }
+  .a-delete { background:#fecaca; color:#991b1b; }
+</style>
 <div class="card"><div class="card-body p-0"><div class="table-responsive">
-  <table class="table table-hover mb-0"><thead><tr><th>#</th><th>Date/Time</th><th>Action</th><th>Module</th><th>Record ID</th><th>Details</th></tr></thead><tbody>
-    <% logs.forEach((l, i) => { %><tr><td><%= i+1 %></td><td><%= formatDate(l.created_at) %></td><td><span class="badge bg-<%= l.action==='create'?'success':l.action==='update'?'info':'danger' %>"><%= l.action %></span></td><td><%= l.module %></td><td><%= l.record_id || '-' %></td><td><%= l.details || '-' %></td></tr><% }) %>
-    <% if (!logs.length) { %><tr><td colspan="6" class="text-center text-muted py-3">No audit logs</td></tr><% } %>
-  </tbody></table>
+  <table class="table table-sm table-hover mb-0">
+    <thead class="table-light"><tr>
+      <th>#</th><th>User</th><th>Action</th><th>Module</th><th>Reference</th><th>Preview</th><th>Date</th><th>Time</th><th>View</th>
+    </tr></thead>
+    <tbody>
+    <% logs.forEach((l, i) => { var link = (linkMap[l.module] && l.record_id) ? (linkMap[l.module]+l.record_id) : null; %>
+      <tr class="audit-row <%= link ? 'clickable' : '' %>" <%= link ? `onclick="window.location.href='${link}'"` : '' %>>
+        <td><%= i+1 %></td>
+        <td onclick="event.stopPropagation()">
+          <% if (l.user_name || l.username) { %>
+            <i class="bi bi-person-circle"></i> <strong><%= l.user_name || l.username %></strong>
+            <% if (l.role) { %><span class="badge bg-<%= l.role==='superadmin'?'danger':l.role==='admin'?'primary':'secondary' %> ms-1" style="font-size:10px"><%= l.role %></span><% } %>
+          <% } else { %>
+            <em class="text-muted">system</em>
+          <% } %>
+        </td>
+        <td><span class="badge a-<%= l.action %>"><%= (l.action||'').toUpperCase() %></span></td>
+        <td><small class="text-muted"><%= l.module %></small></td>
+        <td><span class="fw-bold"><%= l.ref_no || ('#'+(l.record_id||'')) %></span></td>
+        <td><small class="text-muted"><%= (l.details || '').substring(0,80) %><%= (l.details||'').length>80?'…':'' %></small></td>
+        <td class="small"><%= fmtDDMMYY(l.created_at) %></td>
+        <td class="small text-muted"><%= fmtTime(l.created_at) %></td>
+        <td class="text-center" onclick="event.stopPropagation()">
+          <% if (link && l.action !== 'delete') { %>
+            <a href="<%= link %>" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
+          <% } else if (l.action === 'delete') { %>
+            <span class="badge bg-danger" title="Record deleted"><i class="bi bi-trash"></i></span>
+          <% } else { %>—<% } %>
+        </td>
+      </tr>
+    <% }) %>
+    <% if (!logs.length) { %><tr><td colspan="9" class="text-center text-muted py-3">No audit logs</td></tr><% } %>
+    </tbody>
+  </table>
 </div></div></div>
 <%- include('../partials/footer') %>

@@ -19,13 +19,14 @@
           </select>
         </div>
         <div class="col-md-4">
-          <label class="form-label fw-semibold">Against Invoice (optional)</label>
-          <select name="invoice_id" class="form-select">
-            <option value="">— General Return —</option>
+          <label class="form-label fw-semibold">Against Invoice *</label>
+          <select name="invoice_id" id="invoice_search" class="form-select" required>
+            <option value="">— Search by Inv# —</option>
             <% invoices.forEach(inv => { %>
-            <option value="<%= inv.id %>"><%= inv.invoice_no %> — <%= inv.customer_name %></option>
+            <option value="<%= inv.id %>" data-customer="<%= inv.customer_id || '' %>"><%= inv.invoice_no %> — <%= inv.customer_name %></option>
             <% }) %>
           </select>
+          <input type="text" id="invoice_filter" class="form-control form-control-sm mt-1" placeholder="Filter invoices by # or customer..." oninput="filterInvoices()">
         </div>
         <% } else { %>
         <div class="col-md-4">
@@ -38,13 +39,14 @@
           </select>
         </div>
         <div class="col-md-4">
-          <label class="form-label fw-semibold">Against Purchase (optional)</label>
-          <select name="purchase_id" class="form-select">
-            <option value="">— General Return —</option>
+          <label class="form-label fw-semibold">Against Purchase *</label>
+          <select name="purchase_id" id="purchase_search" class="form-select" required>
+            <option value="">— Search by Purchase# —</option>
             <% purchases.forEach(p => { %>
             <option value="<%= p.id %>"><%= p.purchase_no %> — <%= p.vendor_name %></option>
             <% }) %>
           </select>
+          <input type="text" id="purchase_filter" class="form-control form-control-sm mt-1" placeholder="Filter purchases by # or vendor..." oninput="filterPurchases()">
         </div>
         <% } %>
         <div class="col-md-4">
@@ -120,6 +122,24 @@ function calcTotal() {
   let t = 0;
   document.querySelectorAll('input[name="amount[]"]').forEach(i => t += parseFloat(i.value)||0);
   document.getElementById('grandTotal').textContent = 'PKR ' + t.toLocaleString('en-PK', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function filterInvoices() {
+  const q = (document.getElementById('invoice_filter').value || '').toLowerCase();
+  const sel = document.getElementById('invoice_search');
+  if (!sel) return;
+  Array.from(sel.options).forEach(o => {
+    if (!o.value) return;
+    o.hidden = q && !o.text.toLowerCase().includes(q);
+  });
+}
+function filterPurchases() {
+  const q = (document.getElementById('purchase_filter').value || '').toLowerCase();
+  const sel = document.getElementById('purchase_search');
+  if (!sel) return;
+  Array.from(sel.options).forEach(o => {
+    if (!o.value) return;
+    o.hidden = q && !o.text.toLowerCase().includes(q);
+  });
 }
 function addItemRow() {
   const opts = products.map(p => `<option value="${p.id}" data-rate="${p.rate}">${p.name}</option>`).join('');

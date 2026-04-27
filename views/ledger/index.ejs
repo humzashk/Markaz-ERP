@@ -1,6 +1,16 @@
 <%- include('../partials/header') %>
 <div class="page-header">
   <h2><i class="bi bi-journal-text"></i> Ledger</h2>
+  <a href="javascript:history.back()" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+</div>
+<div class="card mb-3">
+  <div class="card-body">
+    <form method="get" class="d-flex gap-2">
+      <input type="text" name="search" class="form-control" placeholder="Search by name, phone, city..." value="<%= typeof search !== 'undefined' ? search : '' %>">
+      <button class="btn btn-primary"><i class="bi bi-search"></i> Search</button>
+      <% if (typeof search !== 'undefined' && search) { %><a href="/ledger" class="btn btn-outline-secondary">Clear</a><% } %>
+    </form>
+  </div>
 </div>
 <div class="row g-4">
   <div class="col-md-6">
