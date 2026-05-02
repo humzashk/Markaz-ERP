@@ -18,17 +18,17 @@
           <label class="form-label">Customer *</label>
           <select name="entity_id" class="form-select" id="customerEntity">
             <option value="">Select Customer</option>
-            <% customers.forEach(c => { %><option value="<%= c.id %>" <%= (type==='customer' && entityId==c.id)?'selected':'' %>><%= c.name %> (Bal: PKR<%= c.balance.toFixed(2) %>)</option><% }) %>
+            <% customers.forEach(c => { %><option value="<%= c.id %>" <%= (type==='customer' && entityId==c.id)?'selected':'' %>><%= c.name %> (Bal: Rs.<%= c.balance.toFixed(2) %>)</option><% }) %>
           </select>
         </div>
         <div class="col-md-6 d-none" id="vendorSelect">
           <label class="form-label">Vendor *</label>
           <select name="entity_id" class="form-select" id="vendorEntity" disabled>
             <option value="">Select Vendor</option>
-            <% vendors.forEach(v => { %><option value="<%= v.id %>" <%= (type==='vendor' && entityId==v.id)?'selected':'' %>><%= v.name %> (Bal: PKR<%= Math.abs(v.balance).toFixed(2) %>)</option><% }) %>
+            <% vendors.forEach(v => { %><option value="<%= v.id %>" <%= (type==='vendor' && entityId==v.id)?'selected':'' %>><%= v.name %> (Bal: Rs.<%= Math.abs(v.balance).toFixed(2) %>)</option><% }) %>
           </select>
         </div>
-        <div class="col-md-6"><label class="form-label">Amount (PKR) *</label><input type="number" name="amount" class="form-control form-control-lg" step="0.01" min="0.01" required></div>
+        <div class="col-md-6"><label class="form-label">Amount (Rs.) *</label><input type="number" name="amount" class="form-control form-control-lg" step="0.01" min="0.01" required></div>
         <div class="col-md-6"><label class="form-label">Date *</label><input type="date" name="payment_date" class="form-control" value="<%= new Date().toISOString().split('T')[0] %>" required></div>
         <div class="col-md-6"><label class="form-label">Payment Method</label>
           <select name="payment_method" class="form-select">

@@ -85,7 +85,7 @@
           <tfoot>
             <tr>
               <td colspan="3" class="text-end fw-bold">Total:</td>
-              <td colspan="2"><strong id="grandTotal">PKR 0.00</strong></td>
+              <td colspan="2"><strong id="grandTotal">Rs. 0.00</strong></td>
             </tr>
           </tfoot>
         </table>
@@ -121,7 +121,7 @@ function calcRow(el) {
 function calcTotal() {
   let t = 0;
   document.querySelectorAll('input[name="amount[]"]').forEach(i => t += parseFloat(i.value)||0);
-  document.getElementById('grandTotal').textContent = 'PKR ' + t.toLocaleString('en-PK', {minimumFractionDigits:2, maximumFractionDigits:2});
+  document.getElementById('grandTotal').textContent = 'Rs. ' + t.toLocaleString('en-PK', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 function filterInvoices() {
   const q = (document.getElementById('invoice_filter').value || '').toLowerCase();

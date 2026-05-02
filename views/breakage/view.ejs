@@ -18,7 +18,7 @@
           <tr><th width="150">Customer</th><td><strong><%= breakage.customer_name %></strong></td></tr>
           <tr><th>Product</th><td><strong><%= breakage.product_name %></strong></td></tr>
           <tr><th>Quantity</th><td><%= breakage.quantity > 0 ? breakage.quantity + ' pcs' : 'Not specified' %></td></tr>
-          <tr><th>Amount Adjusted</th><td><strong class="text-danger fs-5">PKR <%= breakage.adjustment_amount.toFixed(2) %></strong></td></tr>
+          <tr><th>Amount Adjusted</th><td><strong class="text-danger fs-5">Rs. <%= breakage.adjustment_amount.toFixed(2) %></strong></td></tr>
           <tr><th>Date</th><td><%= formatDate(breakage.breakage_date) %></td></tr>
           <tr><th>Notes</th><td><%= breakage.notes || '-' %></td></tr>
         </table>
@@ -32,7 +32,7 @@
         <% if (breakage.credit_note_no) { %>
         <table class="table table-borderless mb-0">
           <tr><th width="130">Credit Note #</th><td><strong class="text-success"><%= breakage.credit_note_no %></strong></td></tr>
-          <tr><th>Amount</th><td><strong>PKR <%= breakage.adjustment_amount.toFixed(2) %></strong></td></tr>
+          <tr><th>Amount</th><td><strong>Rs. <%= breakage.adjustment_amount.toFixed(2) %></strong></td></tr>
           <tr><th>Status</th><td><span class="badge bg-success">Issued</span></td></tr>
         </table>
         <a href="/breakage/credit-note/<%= breakage.id %>" class="btn btn-success mt-2" target="_blank">

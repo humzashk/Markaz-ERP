@@ -1,6 +1,6 @@
-# Plastic Markaz ERP
+# Markaz ERP - Multi-Business Accounting & Inventory System
 
-A lightweight, offline-capable ERP system built for **Plastic Markaz** — a plastic products trading business. Runs entirely on Node.js with a local SQLite database. No internet required.
+A full-featured ERP system for multi-business trading operations. Built with **Node.js + PostgreSQL**, supporting multiple business scopes (Plastic Markaz, Wings Furniture, Cooler) with integrated accounting, inventory, and logistics management.
 
 ---
 
@@ -45,13 +45,16 @@ http://localhost:3000
 
 ## Technology Stack
 
-- **Backend:** Node.js + Express.js
-- **Database:** SQLite via sql.js (no native compilation needed)
-- **Templates:** EJS
+- **Backend:** Node.js 18+ + Express.js
+- **Database:** PostgreSQL 12+ (async-await with pg driver)
+- **Authentication:** Session-based (express-session)
+- **Templating:** EJS
 - **UI:** Bootstrap 5 + Bootstrap Icons
 - **Charts:** Chart.js
 - **PDF:** PDFKit
 - **Excel:** xlsx (SheetJS)
+- **Password Hashing:** bcryptjs (PBKDF2, 10 rounds)
+- **Validation:** Custom schema-based middleware with item-level parsing
 
 ---
 
@@ -75,13 +78,26 @@ This system is built around a **commission-based profit model**:
 
 ---
 
-## Data Location
+## Data Storage
 
-The SQLite database is stored at:
+The system uses **PostgreSQL** running on your local machine:
+
 ```
-markaz_erp.db
+Database: markaz_erp
+Host: localhost
+Port: 5432
+User: postgres (default)
 ```
-Back this file up regularly to preserve all data.
+
+Backup via PostgreSQL tools:
+```bash
+pg_dump -U postgres markaz_erp > backup.sql
+```
+
+Restore from backup:
+```bash
+psql -U postgres -d markaz_erp < backup.sql
+```
 
 ---
 

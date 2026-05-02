@@ -5,15 +5,53 @@ const { pool, tx, addLedgerEntry, removeLedgerForRef, recomputeBalance, addAudit
 const { wrap } = require('../middleware/errorHandler');
 const { validate, schemas } = require('../middleware/validate');
 
-router.get('/', wrap(async (req, res) => {
-  const r = await pool.query(`
-    SELECT p.*, CASE WHEN p.entity_type='customer' THEN c.name ELSE v.name END AS entity_name
+async function fetchPayments(type, from, to) {
+  const params = [];
+  let sql = `SELECT p.*, CASE WHEN p.entity_type='customer' THEN c.name ELSE v.name END AS entity_name
     FROM payments p
     LEFT JOIN customers c ON p.entity_type='customer' AND c.id = p.entity_id
     LEFT JOIN vendors v   ON p.entity_type='vendor'   AND v.id = p.entity_id
-    ORDER BY p.id DESC LIMIT 500`);
-  res.render('payments/index', { page:'payments', payments: r.rows });
+    WHERE 1=1`;
+  if (type) { sql += ` AND p.entity_type=$${params.length+1}`; params.push(type); }
+  if (from) { sql += ` AND p.payment_date>=$${params.length+1}`; params.push(from); }
+  if (to)   { sql += ` AND p.payment_date<=$${params.length+1}`; params.push(to); }
+  sql += ` ORDER BY p.id DESC LIMIT 500`;
+  return (await pool.query(sql, params)).rows;
+}
+
+router.get('/', wrap(async (req, res) => {
+  const type = req.query.type || '';
+  const from = req.query.from || '';
+  const to   = req.query.to   || '';
+  const rows = await fetchPayments(type, from, to);
+  const totalReceived = rows.filter(p => p.entity_type === 'customer').reduce((s, p) => s + Number(p.amount || 0), 0);
+  const totalPaid     = rows.filter(p => p.entity_type === 'vendor').reduce((s, p) => s + Number(p.amount || 0), 0);
+  res.render('payments/index', { page:'payments', payments: rows, type, from, to, totalReceived, totalPaid });
 }));
+
+router.get('/received', wrap(async (req, res) => {
+  const from = req.query.from || '';
+  const to   = req.query.to   || '';
+  const rows = await fetchPayments('customer', from, to);
+  const totalReceived = rows.reduce((s, p) => s + Number(p.amount || 0), 0);
+  res.render('payments/list', { page:'payments', title:'Payments Received', listType:'received', payments: rows, from, to, total: totalReceived });
+}));
+
+router.get('/paid', wrap(async (req, res) => {
+  const from = req.query.from || '';
+  const to   = req.query.to   || '';
+  const rows = await fetchPayments('vendor', from, to);
+  const totalPaid = rows.reduce((s, p) => s + Number(p.amount || 0), 0);
+  res.render('payments/list', { page:'payments', title:'Payments Made', listType:'paid', payments: rows, from, to, total: totalPaid });
+}));
+
+// /payments/add?type=customer|vendor&entity_id=X  → redirect to correct form
+router.get('/add', (req, res) => {
+  const type = req.query.type || '';
+  const id   = req.query.entity_id || '';
+  if (type === 'vendor')   return res.redirect(`/payments/pay${id ? '?vendor_id='+id : ''}`);
+  return res.redirect(`/payments/receive${id ? '?customer_id='+id : ''}`);
+});
 
 router.get('/receive', wrap(async (req, res) => {
   const customerId = toInt(req.query.customer_id) || null;
@@ -53,7 +91,7 @@ async function savePayment(req, res, redirectBack) {
   await tx(async (db) => {
     const ins = await db.run(`
       INSERT INTO payments(entity_type,entity_id,amount,payment_date,payment_method,reference,notes,account_scope)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8,'plastic_markaz')) RETURNING id`,
+      VALUES ($1,$2,$3,$4,$5::payment_method_t,$6,$7,COALESCE($8,'plastic_markaz')::account_scope_t) RETURNING id`,
       [v.entity_type, v.entity_id, v.amount, v.payment_date, v.payment_method, v.reference, v.notes, req.body.account_scope]);
     const pid = ins.id;
     if (v.entity_type === 'customer') {
@@ -71,7 +109,7 @@ router.post('/save', validate(schemas.paymentCreate), wrap(async (req, res) => {
   await tx(async (db) => {
     const ins = await db.run(`
       INSERT INTO payments(entity_type,entity_id,amount,payment_date,payment_method,reference,notes,account_scope)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8,'plastic_markaz')) RETURNING id`,
+      VALUES ($1,$2,$3,$4,$5::payment_method_t,$6,$7,COALESCE($8,'plastic_markaz')::account_scope_t) RETURNING id`,
       [v.entity_type, v.entity_id, v.amount, v.payment_date, v.payment_method, v.reference, v.notes, req.body.account_scope]);
     const pid = ins.id;
 

@@ -1,0 +1,102 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-<%= listType === 'received' ? 'cash-coin' : 'cash-stack' %>"></i> <%= title %></h2>
+  <div class="d-flex gap-2">
+    <a href="/payments" class="btn btn-outline-secondary btn-sm"><i class="bi bi-list"></i> All Payments</a>
+    <% if (listType === 'received') { %>
+      <a href="/payments/paid" class="btn btn-outline-primary btn-sm"><i class="bi bi-cash-stack"></i> Payments Made</a>
+      <a href="/payments/receive" class="btn btn-success btn-sm"><i class="bi bi-plus"></i> New Receipt</a>
+    <% } else { %>
+      <a href="/payments/received" class="btn btn-outline-success btn-sm"><i class="bi bi-cash-coin"></i> Payments Received</a>
+      <a href="/payments/pay" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New Payment</a>
+    <% } %>
+  </div>
+</div>
+
+<!-- Summary Card -->
+<div class="row mb-3">
+  <div class="col-md-4">
+    <div class="stat-card <%= listType === 'received' ? 'stat-green' : 'stat-red' %>">
+      <div class="stat-value"><%= formatCurrency(total) %></div>
+      <div class="stat-label"><%= title %></div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="stat-card stat-blue">
+      <div class="stat-value"><%= payments.length %></div>
+      <div class="stat-label">Transactions</div>
+    </div>
+  </div>
+</div>
+
+<!-- Date Filter -->
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <form method="GET" class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label mb-1 small">From</label>
+        <input type="date" name="from" class="form-control form-control-sm" value="<%= from %>">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label mb-1 small">To</label>
+        <input type="date" name="to" class="form-control form-control-sm" value="<%= to %>">
+      </div>
+      <div class="col-md-4">
+        <button class="btn btn-sm btn-secondary w-100">Filter</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Payments Table -->
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Date</th>
+            <th><%= listType === 'received' ? 'Customer' : 'Vendor' %></th>
+            <th class="text-end">Amount</th>
+            <th>Method</th>
+            <th>Reference</th>
+            <th>Notes</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% payments.forEach((p, i) => { %>
+          <tr>
+            <td class="text-muted small"><%= i + 1 %></td>
+            <td><%= formatDate(p.payment_date) %></td>
+            <td><strong><%= p.entity_name || '-' %></strong></td>
+            <td class="text-end fw-bold <%= listType === 'received' ? 'text-success' : 'text-primary' %>"><%= formatCurrency(p.amount) %></td>
+            <td><span class="badge bg-light text-dark border"><%= (p.payment_method || 'cash').replace('_',' ') %></span></td>
+            <td><%= p.reference || '-' %></td>
+            <td class="text-muted small"><%= p.notes || '' %></td>
+            <td>
+              <form method="POST" action="/payments/delete/<%= p.id %>" onsubmit="return confirm('Delete this payment?')">
+                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+              </form>
+            </td>
+          </tr>
+          <% }) %>
+          <% if (!payments.length) { %>
+          <tr><td colspan="8" class="text-center text-muted py-4">No <%= title.toLowerCase() %> found</td></tr>
+          <% } %>
+        </tbody>
+        <% if (payments.length) { %>
+        <tfoot class="table-light">
+          <tr>
+            <td colspan="3" class="text-end fw-bold">Total:</td>
+            <td class="text-end fw-bold fs-5 <%= listType === 'received' ? 'text-success' : 'text-primary' %>"><%= formatCurrency(total) %></td>
+            <td colspan="4"></td>
+          </tr>
+        </tfoot>
+        <% } %>
+      </table>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

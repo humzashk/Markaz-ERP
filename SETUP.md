@@ -2,8 +2,9 @@
 
 ## Requirements
 
-- **Node.js** v16 or later — [Download](https://nodejs.org)
+- **Node.js** v18 or later — [Download](https://nodejs.org)
 - **npm** (comes with Node.js)
+- **PostgreSQL** 12 or later — [Download](https://www.postgresql.org/download/)
 - Windows / macOS / Linux
 
 ---
@@ -19,15 +20,77 @@ This installs all dependencies listed in `package.json`.
 
 ---
 
-## First Run
+## PostgreSQL Setup
+
+### Windows
+
+1. Download and run PostgreSQL installer from [postgresql.org](https://www.postgresql.org/download/windows/)
+2. During installation:
+   - Set **postgres** user password (remember this for connection)
+   - Port: **5432** (default)
+   - Locale: Select your region
+3. After installation, open **pgAdmin** or **psql** to verify connection:
+   ```bash
+   psql -U postgres
+   ```
+4. Create the database:
+   ```sql
+   CREATE DATABASE markaz_erp;
+   ```
+
+### macOS / Linux
 
 ```bash
-node index.js
+# Install PostgreSQL
+brew install postgresql  # macOS
+sudo apt-get install postgresql postgresql-contrib  # Ubuntu/Debian
+
+# Start PostgreSQL service
+brew services start postgresql  # macOS
+sudo systemctl start postgresql  # Linux
+
+# Create database
+createdb markaz_erp
+
+# Verify connection
+psql -d markaz_erp
 ```
 
-Then open: **http://localhost:3000**
+### Environment Configuration
 
-The database (`markaz_erp.db`) is created automatically on first run with all tables and seed data.
+Create a `.env` file in the project root:
+
+```env
+DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/markaz_erp
+SESSION_SECRET=your-random-secret-key-here
+PORT=3000
+```
+
+Replace `YOUR_PASSWORD` with the postgres user password set during installation.
+
+---
+
+## First Run
+
+1. **Create database schema** (one-time setup):
+   ```bash
+   npm run db:reset
+   ```
+   This drops/recreates all tables and seed data in PostgreSQL.
+
+2. **Start the server**:
+   ```bash
+   node index.js
+   ```
+
+3. **Open in browser**:
+   http://localhost:3000
+
+4. **Default login**:
+   - Username: `admin`
+   - Password: `changeme`
+   
+   ⚠️ **Change this password immediately in Settings > Users**
 
 ---
 
@@ -47,13 +110,31 @@ Go to **Settings** in the sidebar to configure:
 
 ---
 
-## Database Backup
+## Database Backup & Restore
 
-The entire database is a single file: `markaz_erp.db`
+### Backup
 
-**To back up:** Copy this file to a safe location (USB, Google Drive, etc.)
+```bash
+# Full database backup (includes all data and schema)
+pg_dump -U postgres -d markaz_erp -F c -f markaz_erp.backup
 
-**To restore:** Replace the file with your backup copy and restart the server.
+# SQL text format (human-readable)
+pg_dump -U postgres -d markaz_erp > markaz_erp.sql
+```
+
+Store the backup file on an external drive or cloud storage.
+
+### Restore
+
+```bash
+# From custom format backup
+pg_restore -U postgres -d markaz_erp markaz_erp.backup
+
+# From SQL text format
+psql -U postgres -d markaz_erp < markaz_erp.sql
+```
+
+**Important:** Stop the server before restoring to avoid connection conflicts.
 
 ---
 

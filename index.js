@@ -23,7 +23,7 @@ app.use(session({
 }));
 
 // Locals helpers (currency / dates / logo / scope name)
-app.locals.formatCurrency = (n) => 'PKR ' + Number(n||0).toLocaleString('en-PK', { minimumFractionDigits:2, maximumFractionDigits:2 });
+app.locals.formatCurrency = (n) => 'Rs. ' + Number(n||0).toLocaleString('en-PK', { minimumFractionDigits:2, maximumFractionDigits:2 });
 app.locals.formatDate = (d) => {
   if (!d) return '-';
   try { return new Date(d).toLocaleDateString('en-PK', { day:'2-digit', month:'short', year:'numeric' }); } catch(_){ return String(d); }
@@ -56,6 +56,27 @@ app.use(async (req, res, next) => {
   try { res.locals.appSettings = await getSettings(); } catch(_) { res.locals.appSettings = {}; }
   res.locals.query = req.query || {};
   res.locals.req = req;
+  // Global safe defaults — prevent EJS "is not defined" crashes
+  res.locals.err           = req.query.err   || null;
+  res.locals.saved         = req.query.saved || null;
+  res.locals.ok            = req.query.ok    || null;
+  res.locals.search        = req.query.search || '';
+  res.locals.from          = req.query.from  || '';
+  res.locals.to            = req.query.to    || '';
+  res.locals.regions       = [];
+  res.locals.types         = [];
+  res.locals.categories    = [];
+  res.locals.rateHistory   = [];
+  res.locals.creditNotes   = [];
+  res.locals.warehouses    = [];
+  res.locals.position      = [];
+  res.locals.allEntries    = [];
+  res.locals.customerTypes = [];
+  res.locals.vendorTypes   = [];
+  res.locals.regionCats    = [];
+  res.locals.error         = null;
+  res.locals.result        = null;
+  res.locals.exportable    = {};
   next();
 });
 
@@ -128,6 +149,7 @@ app.use('/settings',    require('./routes/settings'));
 app.use('/categories',  require('./routes/categories'));
 app.use('/journal',     require('./routes/journal'));
 app.use('/importexport',require('./routes/importexport'));
+app.use('/stockinit',   require('./routes/stockinit'));
 // /bank removed (Bank Account module retired)
 app.use('/bank', (req, res) => res.status(410).render('error', { page:'error', message:'Bank Account module has been removed.', back:'/' }));
 

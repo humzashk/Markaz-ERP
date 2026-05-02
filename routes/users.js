@@ -12,10 +12,14 @@ router.use(requireRole('superadmin','admin'));
 
 router.get('/', wrap(async (req, res) => {
   const r = await pool.query(`SELECT id, username, name, email, role, status, created_at, last_login FROM users ORDER BY id`);
-  res.render('users/index', { page:'users', users: r.rows });
+  res.render('users/index', { page:'users', users: r.rows, err: req.query.err || null, saved: req.query.saved || null });
 }));
 
-router.get('/add', (req, res) => res.render('users/form', { page:'users', editUser:null, edit:false, ALL_MODULES, DASH_WIDGETS, perms: [] }));
+router.get('/new', (req, res) => res.redirect('/users/add'));
+router.get('/add', (req, res) => {
+  const blank = { id:null, name:'', email:'', role:'employee', status:'active', username:'' };
+  res.render('users/form', { page:'users', editUser:null, user:blank, edit:false, isNew:true, ALL_MODULES, DASH_WIDGETS, perms: [] });
+});
 
 router.post('/add', validate(schemas.userCreate), wrap(async (req, res) => {
   const v = req.valid;
@@ -39,7 +43,7 @@ router.get('/edit/:id', wrap(async (req, res) => {
   const u = (await pool.query(`SELECT id, username, name, email, role, status FROM users WHERE id=$1`, [id])).rows[0];
   if (!u) return res.redirect('/users');
   const perms = (await pool.query(`SELECT module FROM user_permissions WHERE user_id=$1`, [id])).rows.map(r => r.module);
-  res.render('users/form', { page:'users', editUser: u, edit:true, ALL_MODULES, DASH_WIDGETS, perms });
+  res.render('users/form', { page:'users', editUser: u, user: u, edit:true, isNew:false, ALL_MODULES, DASH_WIDGETS, perms });
 }));
 
 router.post('/edit/:id', validate(schemas.userCreate), wrap(async (req, res) => {

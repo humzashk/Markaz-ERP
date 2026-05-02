@@ -24,7 +24,7 @@ router.get('/', wrap(async (req, res) => {
 router.get('/add', wrap(async (req, res) => {
   const products = (await pool.query(`SELECT id, name, unit, stock FROM products WHERE status='active' ORDER BY name`)).rows;
   const warehouses = (await pool.query(`SELECT id, name FROM warehouses WHERE status='active' ORDER BY name`)).rows;
-  res.render('stock/form', { page:'stock', products, warehouses, edit:false, adj:null });
+  res.render('stock/form', { page:'stock', products, warehouses, edit:false, adj:null, adjType: req.query.type || '' });
 }));
 
 router.post('/add', validate(schemas.stockAdjust), wrap(async (req, res) => {

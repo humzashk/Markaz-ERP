@@ -21,7 +21,7 @@ router.post('/add', validate(schemas.transportCreate), wrap(async (req, res) => 
   const v = req.valid;
   const r = await pool.query(`
     INSERT INTO transports(name,contact,phone,city,vehicle_no,driver_name,status)
-    VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7,'active')) RETURNING id`,
+    VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7,'active')::active_status_t) RETURNING id`,
     [v.name, v.contact, v.phone, v.city, v.vehicle_no, v.driver_name, v.status]);
   await addAuditLog('create','transports', r.rows[0].id, `Created ${v.name}`);
   res.redirect('/transports');
@@ -35,7 +35,7 @@ router.get('/edit/:id', wrap(async (req, res) => {
 
 router.post('/edit/:id', validate(schemas.transportCreate), wrap(async (req, res) => {
   const v = req.valid;
-  await pool.query(`UPDATE transports SET name=$1,contact=$2,phone=$3,city=$4,vehicle_no=$5,driver_name=$6,status=COALESCE($7,'active') WHERE id=$8`,
+  await pool.query(`UPDATE transports SET name=$1,contact=$2,phone=$3,city=$4,vehicle_no=$5,driver_name=$6,status=COALESCE($7,'active')::active_status_t WHERE id=$8`,
     [v.name, v.contact, v.phone, v.city, v.vehicle_no, v.driver_name, v.status, req.params.id]);
   res.redirect('/transports');
 }));

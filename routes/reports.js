@@ -140,7 +140,7 @@ router.get('/sale-performance', wrap(async (req, res) => {
   const trendPct = priorSum > 0 ? ((totalSales - priorSum) / priorSum) * 100 : 0;
   const sorted = daily.slice().sort((a,b)=>b.total-a.total);
   const bestDay = sorted[0] || null, worstDay = sorted[sorted.length-1] || null;
-  const fmtPKR = n => 'PKR ' + Number(n||0).toLocaleString('en-PK',{maximumFractionDigits:0});
+  const fmtPKR = n => 'Rs. ' + Number(n||0).toLocaleString('en-PK',{maximumFractionDigits:0});
   const insights = [];
   if (trendPct > 0) insights.push({ icon:'arrow-up-circle', color:'success', text:`Sales up ${trendPct.toFixed(1)}% vs prior ${periodDays}-day window (${fmtPKR(priorSum)} → ${fmtPKR(totalSales)})` });
   else if (trendPct < 0) insights.push({ icon:'arrow-down-circle', color:'danger', text:`Sales down ${Math.abs(trendPct).toFixed(1)}% vs prior period` });

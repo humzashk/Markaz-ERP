@@ -1,8 +1,10 @@
 <%- include('../partials/header') %>
 <div class="page-header">
   <h2><i class="bi bi-list-check"></i> All Payments</h2>
-  <div class="d-flex gap-2">
-    <a href="/payments/receive" class="btn btn-success"><i class="bi bi-cash-coin"></i> Receive Payment</a>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="/payments/received" class="btn btn-outline-success btn-sm"><i class="bi bi-list-check"></i> Received List</a>
+    <a href="/payments/paid" class="btn btn-outline-primary btn-sm"><i class="bi bi-list-ul"></i> Paid List</a>
+    <a href="/payments/receive" class="btn btn-success"><i class="bi bi-cash-coin"></i> Receive</a>
     <a href="/payments/pay" class="btn btn-primary"><i class="bi bi-cash-stack"></i> Pay Vendor</a>
   </div>
 </div>

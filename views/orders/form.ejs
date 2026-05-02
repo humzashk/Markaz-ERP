@@ -35,7 +35,7 @@
               <% warehouses?.forEach(w => { %><option value="<%= w.id %>" <%= (order && w.id==order.warehouse_id)?'selected':'' %>><%= w.name %></option><% }) %>
             </select>
           </div>
-          <div class="mb-3"><label class="form-label">Bilty # <small class="text-muted">(format: BLT-0000)</small></label><input type="text" name="bilty_no" id="bilty_no" class="form-control" value="<%= order?.bilty_no || '' %>" pattern="^(BLT-\d{4,})?$" placeholder="BLT-0001"></div>
+          <div class="mb-3"><label class="form-label">Bilty #</label><input type="text" name="bilty_no" id="bilty_no" class="form-control" value="<%= order?.bilty_no || '' %>" placeholder="e.g., BLT-0001"></div>
           <div class="mb-3"><label class="form-label">Transport <span id="transportRequired" class="text-danger d-none">*</span></label>
             <div class="input-group">
               <select name="transport_id" id="transport_id" class="form-select">

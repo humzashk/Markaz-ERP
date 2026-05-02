@@ -48,6 +48,13 @@ router.get('/api/stock/:product_id', wrap(async (req, res) => {
   const rl = await pool.query(`SELECT rate FROM rate_list WHERE product_id=$1 AND customer_type=$2 AND effective_date <= CURRENT_DATE ORDER BY effective_date DESC, id DESC LIMIT 1`, [pid, customerType]);
   if (rl.rows[0] && rl.rows[0].rate != null) rate = Number(rl.rows[0].rate);
   const qpp = prod.qty_per_pack || 1;
+  const unit = (prod.unit || '').toUpperCase().trim();
+  const pcsUnits = new Set(['PCS','PIECE','PIECES','EA','EACH','NOS','NO']);
+  const isPcsUnit = !unit || pcsUnits.has(unit);
+  let qpp_warning = null;
+  if (!qpp || qpp < 1)             qpp_warning = 'qty_per_pack is zero or missing — check product master';
+  else if (qpp === 1 && !isPcsUnit) qpp_warning = 'Pcs/Ctn = 1 for non-piece unit — verify with product master';
+  else if (qpp > 500)              qpp_warning = `Pcs/Ctn = ${qpp} is unusually high — verify with product master`;
   res.json({
     stock: stockPcs,
     stock_ctn: qpp > 0 ? Math.floor(stockPcs/qpp) : 0,
@@ -55,7 +62,8 @@ router.get('/api/stock/:product_id', wrap(async (req, res) => {
     qty_per_pack: qpp,
     name: prod.name,
     commission: Number(prod.default_commission_rate) || 0,
-    rate
+    rate,
+    qpp_warning
   });
 }));
 

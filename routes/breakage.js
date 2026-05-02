@@ -27,16 +27,31 @@ router.get('/add', wrap(async (req, res) => {
 
 router.post('/add', validate(schemas.breakageCreate), wrap(async (req, res) => {
   const v = req.valid;
+  const adjAmount = parseFloat(req.body.amount) || 0;
   await tx(async (db) => {
     const ins = await db.run(`
-      INSERT INTO breakage(customer_id, vendor_id, product_id, quantity, breakage_date, claim_status, notes)
-      VALUES ($1,$2,$3,$4,$5,'pending',$6) RETURNING id`,
-      [v.customer_id, v.vendor_id, v.product_id, v.quantity, v.breakage_date, v.notes]);
-    // Breakage = stock OUT
-    await applyStockMovement(db, v.product_id, null, -v.quantity, 'breakage', ins.id, 'breakage', v.notes);
+      INSERT INTO breakage(customer_id, vendor_id, product_id, quantity, adjustment_amount, breakage_date, claim_status, notes)
+      VALUES ($1,$2,$3,$4,$5,$6,'pending',$7) RETURNING id`,
+      [v.customer_id, v.vendor_id, v.product_id, v.quantity, adjAmount, v.breakage_date, v.notes]);
+    if (v.quantity > 0) await applyStockMovement(db, v.product_id, null, -v.quantity, 'breakage', ins.id, 'breakage', v.notes);
     await addAuditLog('create','breakage', ins.id, `Breakage ${v.quantity}`);
   });
   res.redirect('/breakage');
+}));
+
+router.get('/view/:id', wrap(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const r = await pool.query(`
+    SELECT br.*, p.name AS product_name,
+      COALESCE(c.name, '') AS customer_name,
+      COALESCE(v.name, '') AS vendor_name
+    FROM breakage br
+    JOIN products p ON p.id = br.product_id
+    LEFT JOIN customers c ON c.id = br.customer_id
+    LEFT JOIN vendors v   ON v.id = br.vendor_id
+    WHERE br.id=$1`, [id]);
+  if (!r.rows[0]) return res.redirect('/breakage');
+  res.render('breakage/view', { page:'breakage', breakage: r.rows[0] });
 }));
 
 module.exports = router;

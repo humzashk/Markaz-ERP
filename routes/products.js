@@ -68,4 +68,8 @@ router.post('/delete/:id', wrap(async (req, res) => {
   res.redirect('/products');
 }));
 
+router.get('/bulk', wrap(async (req, res) => {
+  res.render('products/bulk', { page: 'products' });
+}));
+
 module.exports = router;

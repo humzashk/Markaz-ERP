@@ -30,8 +30,8 @@
           <small class="text-muted">Bilty # will be auto-filled from the selected order/invoice and must match.</small>
         </div>
 
-        <div class="col-md-6"><label class="form-label fw-bold">Bilty Number * <small class="text-muted">(BLT-0000)</small></label>
-          <input type="text" name="bilty_no" id="bilty_no" class="form-control" required pattern="^BLT-\d{4,}$" placeholder="BLT-0001" value="<%= bilty?.bilty_no || '' %>">
+        <div class="col-md-6"><label class="form-label fw-bold">Bilty Number <small class="text-muted">(auto-filled from source)</small></label>
+          <input type="text" name="bilty_no" id="bilty_no" class="form-control bg-light" placeholder="Select source document above..." value="<%= bilty?.bilty_no || '' %>" readonly>
         </div>
         <div class="col-md-6"><label class="form-label">Transport *</label>
           <div class="input-group">
@@ -48,7 +48,7 @@
         <div class="col-md-6"><label class="form-label">From City *</label><input type="text" name="from_city" class="form-control" required value="<%= bilty?.from_city || '' %>"></div>
         <div class="col-md-6"><label class="form-label">To City *</label><input type="text" name="to_city" class="form-control" required value="<%= bilty?.to_city || '' %>"></div>
         <div class="col-md-4"><label class="form-label">Date *</label><input type="date" name="bilty_date" class="form-control" required value="<%= bilty?.bilty_date || new Date().toISOString().split('T')[0] %>"></div>
-        <div class="col-md-4"><label class="form-label">Freight (PKR)</label><input type="number" name="freight_charges" class="form-control" step="0.01" value="<%= bilty?.freight_charges || 0 %>"></div>
+        <div class="col-md-4"><label class="form-label">Freight (Rs.)</label><input type="number" name="freight_charges" class="form-control" step="0.01" value="<%= bilty?.freight_charges || 0 %>"></div>
         <div class="col-md-4"><label class="form-label">Packages Count</label><input type="number" name="packages_count" class="form-control" value="<%= bilty?.packages_count || 0 %>"></div>
         <div class="col-md-6"><label class="form-label">Weight</label><input type="text" name="weight" class="form-control" value="<%= bilty?.weight || '' %>" placeholder="e.g. 50 kg"></div>
         <% if (edit) { %>
@@ -104,6 +104,7 @@
   }
   inp.addEventListener('input', () => {
     oid.value = ''; iid.value = '';
+    if (bno) { bno.value = ''; }
     clearTimeout(debounce); debounce = setTimeout(() => search(inp.value.trim()), 200);
   });
   document.addEventListener('click', e => { if (!box.contains(e.target) && e.target !== inp) box.style.display = 'none'; });

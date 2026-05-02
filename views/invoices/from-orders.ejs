@@ -52,7 +52,7 @@
                 <td><strong><%= o.order_no %></strong></td>
                 <td><%= o.order_date %></td>
                 <td class="text-end"><%= o.item_count %></td>
-                <td class="text-end fw-bold">PKR <%= Number(o.total||0).toLocaleString('en-PK',{minimumFractionDigits:2}) %></td>
+                <td class="text-end fw-bold">Rs. <%= Number(o.total||0).toLocaleString('en-PK',{minimumFractionDigits:2}) %></td>
               </tr>
             <% }); %>
           </tbody>

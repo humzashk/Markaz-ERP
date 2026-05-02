@@ -5,10 +5,13 @@ const { pool } = require('../database');
 const { wrap } = require('../middleware/errorHandler');
 
 router.get('/', wrap(async (req, res) => {
-  const productCats = (await pool.query(`SELECT * FROM product_categories ORDER BY sort_order, name`)).rows;
-  const expenseCats = (await pool.query(`SELECT * FROM expense_categories ORDER BY sort_order, name`)).rows;
-  const partyCats   = (await pool.query(`SELECT * FROM party_categories ORDER BY cat_group, sort_order, name`)).rows;
-  res.render('categories/index', { page:'categories', productCats, expenseCats, partyCats });
+  const productCats   = (await pool.query(`SELECT * FROM product_categories ORDER BY sort_order, name`)).rows;
+  const expenseCats   = (await pool.query(`SELECT * FROM expense_categories ORDER BY sort_order, name`)).rows;
+  const partyCats     = (await pool.query(`SELECT * FROM party_categories ORDER BY cat_group, sort_order, name`)).rows;
+  const customerTypes = partyCats.filter(c => c.cat_group === 'type' && (c.applies_to === 'customer' || c.applies_to === 'both'));
+  const vendorTypes   = partyCats.filter(c => c.cat_group === 'type' && (c.applies_to === 'vendor'   || c.applies_to === 'both'));
+  const regionCats    = partyCats.filter(c => c.cat_group === 'region');
+  res.render('categories/index', { page:'categories', productCats, expenseCats, partyCats, customerTypes, vendorTypes, regionCats });
 }));
 
 router.post('/product/add', wrap(async (req, res) => {

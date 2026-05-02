@@ -7,7 +7,11 @@
     "start": "node index.js",
     "dev": "nodemon index.js",
     "db:init": "node db/init.js",
-    "db:reset": "node db/init.js --reset"
+    "db:reset": "node db/init.js --reset",
+    "audit:qty": "node db/audit-qty.js",
+    "audit:qty:json": "node db/audit-qty.js --json",
+    "fix:qty": "node db/fix-qty-per-pack.js --dry-run",
+    "fix:qty:apply": "node db/fix-qty-per-pack.js --apply"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -18,6 +22,7 @@
     "multer": "^1.4.5-lts.1",
     "pdfkit": "^0.15.1",
     "pdfkit-table": "^0.1.99",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "xlsx": "^0.18.5"
   }
 }

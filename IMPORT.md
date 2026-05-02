@@ -1,8 +1,43 @@
-# Excel Import Guide
+# Data Import Guide
 
-## How to Import Data
+## Import Methods
+
+### Method 1: Web UI Import/Export
 
 Go to **Import/Export** in the sidebar → Upload your Excel file → Select data type.
+
+### Method 2: Legacy Product Migration (TechnoCom)
+
+For migrating from TechnoCom Power Suite, use the dedicated migration script:
+
+```bash
+node db/migrate-legacy-items.js [OPTIONS]
+```
+
+**Options:**
+- `--dry-run` - Preview import without saving (recommended first run)
+- `--delete-test` - Clear all products and re-import
+- `--skip-cooler` - Skip COOLER sheet (import ITEMS sheet only)
+- `--parties` - Also import customers from PARTIES sheet
+
+**Example:**
+```bash
+# Preview what will be imported
+node db/migrate-legacy-items.js --dry-run
+
+# Perform actual import
+node db/migrate-legacy-items.js
+
+# Import only main products, skip COOLER
+node db/migrate-legacy-items.js --skip-cooler
+```
+
+**Features:**
+- Auto-categorizes products based on name keywords
+- Generates smart item IDs: PM-001 to PM-999 (Plastic Markaz), CL-001 to CL-999 (Cooler)
+- Handles unit normalization (PCS., DOX → PCS, OCS)
+- Detects duplicates by normalized name (case-insensitive)
+- Skips test/dummy products automatically
 
 ---
 

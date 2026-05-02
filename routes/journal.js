@@ -16,7 +16,11 @@ router.get('/', wrap(async (req, res) => {
   res.render('journal/index', { page:'journal', entries: r.rows, from, to });
 }));
 
-router.get('/add', (req, res) => res.render('journal/form', { page:'journal', entry:null, lines:[], edit:false }));
+router.get('/add', wrap(async (req, res) => {
+  const accsR = await pool.query(`SELECT DISTINCT account FROM journal_lines ORDER BY account`);
+  const accounts = accsR.rows.map(r => r.account);
+  res.render('journal/form', { page:'journal', entry:null, lines:[], edit:false, today: new Date().toISOString().split('T')[0], accounts });
+}));
 
 router.post('/add', wrap(async (req, res) => {
   const { entry_date, description, reference, account, line_description, debit, credit } = req.body;

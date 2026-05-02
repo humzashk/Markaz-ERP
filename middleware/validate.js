@@ -1,6 +1,25 @@
 'use strict';
 const { pool, logError } = require('../database');
 
+// Shared helper: validate qty_per_pack from product master for each line item.
+// Returns an error string if any item is blocked, otherwise null.
+const _QPP_PCS_UNITS = new Set(['PCS','PIECE','PIECES','EA','EACH','NOS','NO']);
+async function _checkQpp(items) {
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    if (!it.product_id) continue;
+    const { rows } = await pool.query(`SELECT qty_per_pack, unit FROM products WHERE id=$1`, [it.product_id]);
+    if (!rows[0]) continue;
+    const qpp  = Number(rows[0].qty_per_pack);
+    const unit = (rows[0].unit || '').toUpperCase().trim();
+    const isPcs = !unit || _QPP_PCS_UNITS.has(unit);
+    if (!qpp || qpp < 1)            return `Line ${i+1}: Invalid Pcs/Ctn for this product. Fix before proceeding.`;
+    if (qpp > 500)                  return `Line ${i+1}: Invalid Pcs/Ctn for this product. Fix before proceeding.`;
+    if (qpp === 1 && !isPcs)        return `Line ${i+1}: Invalid Pcs/Ctn for this product. Fix before proceeding.`;
+  }
+  return null;
+}
+
 function _num(v) { if (v === null || v === undefined || v === '') return NaN; const n = typeof v === 'number' ? v : Number(String(v).replace(/,/g, '').trim()); return Number.isFinite(n) ? n : NaN; }
 function _int(v) { const n = _num(v); return Number.isFinite(n) ? Math.trunc(n) : NaN; }
 function _date(v){ if (!v) return null; const s = String(v).trim(); if (!/^\d{4}-\d{2}-\d{2}/.test(s)) return null; const d = new Date(s.length===10?s+'T00:00:00':s); return isNaN(d.getTime()) ? null : s.substring(0,10); }
@@ -47,6 +66,15 @@ async function applySchema(schema, body) {
     const ids = Array.isArray(body[cfg.parentField]) ? body[cfg.parentField] : (body[cfg.parentField]!==undefined ? [body[cfg.parentField]] : []);
     const lines = [];
     for (let i = 0; i < ids.length; i++) {
+      // Check skipIf on raw body values BEFORE validating — prevents errors on blank rows
+      if (cfg.skipIf) {
+        const rawLine = {};
+        for (const f of Object.keys(cfg.fields)) {
+          const arr = Array.isArray(body[f]) ? body[f] : [body[f]];
+          rawLine[f] = arr[i];
+        }
+        if (cfg.skipIf(rawLine)) continue;
+      }
       const line = {}; let bad = false;
       for (const f of Object.keys(cfg.fields)) {
         const [rule, opt] = cfg.fields[f];
@@ -57,7 +85,6 @@ async function applySchema(schema, body) {
         if (r.err) { errs[`item_${i}_${f}`] = `Line ${i+1} '${f}' ${r.err}`; bad = true; }
         else line[f] = r.ok;
       }
-      if (cfg.skipIf && cfg.skipIf(line)) continue;
       if (!bad) lines.push(line);
     }
     if (cfg.minRequired && lines.length < cfg.minRequired) errs._items = `At least ${cfg.minRequired} valid line item required`;
@@ -133,10 +160,21 @@ const schemas = {
         discount_per_pack: ['nonNegNum', { max:1e9 }]
       }
     },
-    validate: (v) => {
+    validate: async (v) => {
       if (v.invoice_date && v.due_date && v.due_date < v.invoice_date) return 'Due date cannot be before invoice date';
       if (v.invoice_date && v.delivery_date && v.delivery_date < v.invoice_date) return 'Delivery date cannot be before invoice date';
       if (v.bilty_no && !v.transport_id) return 'Transport is required when Bilty # is filled';
+      const items = v._items || [];
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        const pkg = Number(it.packages || 0);
+        const pkging = Number(it.packaging || 1);
+        const qty = Number(it.quantity || 0);
+        if (pkging < 1) return `Line ${i+1}: Pcs/Ctn must be ≥ 1`;
+        if (pkg > 0 && pkging > 0 && qty > 0 && pkg * pkging !== qty)
+          return `Line ${i+1}: ${pkg} CTN × ${pkging} Pcs/Ctn = ${pkg*pkging} but Quantity entered is ${qty} — they must match`;
+      }
+      return _checkQpp(items);
     }
   },
   orderCreate: {
@@ -163,9 +201,20 @@ const schemas = {
         commission_pct:['num', { min:0, max:50 }]
       }
     },
-    validate: (v) => {
+    validate: async (v) => {
       if (v.order_date && v.delivery_date && v.delivery_date < v.order_date) return 'Delivery date cannot be before order date';
       if (v.bilty_no && !v.transport_id) return 'Transport is required when Bilty # is filled';
+      const items = v._items || [];
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        const pkg = Number(it.packages || 0);
+        const pkging = Number(it.packaging || 1);
+        const qty = Number(it.quantity || 0);
+        if (pkging < 1) return `Line ${i+1}: Pcs/Ctn must be ≥ 1`;
+        if (pkg > 0 && pkging > 0 && qty > 0 && pkg * pkging !== qty)
+          return `Line ${i+1}: ${pkg} CTN × ${pkging} Pcs/Ctn = ${pkg*pkging} but Quantity entered is ${qty} — they must match`;
+      }
+      return _checkQpp(items);
     }
   },
   purchaseCreate: {
@@ -191,6 +240,18 @@ const schemas = {
         rate:['nonNegNum', { max:1e9 }],
         packages:['nonNegInt', { max:1e7 }],
         packaging:['posInt', { max:1e6 }]
+      }
+    },
+    validate: (v) => {
+      const items = v._items || [];
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        const pkg = Number(it.packages || 0);
+        const pkging = Number(it.packaging || 1);
+        const qty = Number(it.quantity || 0);
+        if (pkging < 1) return `Line ${i+1}: Pcs/Ctn must be ≥ 1`;
+        if (pkg > 0 && pkging > 0 && qty > 0 && pkg * pkging !== qty)
+          return `Line ${i+1}: ${pkg} CTN × ${pkging} Pcs/Ctn = ${pkg*pkging} but Quantity entered is ${qty} — they must match`;
       }
     }
   },
@@ -308,7 +369,6 @@ const schemas = {
     validate: async (v) => {
       if (!v.order_id && !v.invoice_id) return 'Link bilty to an order or invoice';
       if (!v.transport_id && !v.transport_name) return 'Select an existing transport or enter a transport name';
-      if (v.bilty_no && !/^BLT-\d{4,}$/.test(v.bilty_no)) return 'Bilty # must be in format BLT-0000';
       if (v.order_id) {
         const r = await pool.query(`SELECT bilty_no FROM orders WHERE id=$1`, [v.order_id]);
         const ob = r.rows[0] && r.rows[0].bilty_no;
@@ -333,7 +393,7 @@ const schemas = {
   stockAdjust: {
     required: {
       product_id:['exists',{table:'products', label:'product'}],
-      adjustment_type:['oneOf',{choices:['add','remove','damage','return','transfer_in','transfer_out']}],
+      adjustment_type:['oneOf',{choices:['add','reduce','damage','return','transfer_in','transfer_out']}],
       quantity:['posInt',{max:1e7}], adj_date:['date']
     },
     optional: { warehouse_id:['existsOpt',{table:'warehouses', label:'warehouse'}], reason:['str',{max:500}], reference:['str',{max:100}], notes:['str',{max:1000}] }

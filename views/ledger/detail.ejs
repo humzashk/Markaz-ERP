@@ -107,9 +107,9 @@ function showTxnDetail(idx) {
   const d = row.dataset;
   document.getElementById('td_date').textContent = d.date;
   document.getElementById('td_desc').textContent = d.desc;
-  document.getElementById('td_debit').textContent = parseFloat(d.debit) > 0 ? 'PKR ' + fmt(d.debit) : '-';
-  document.getElementById('td_credit').textContent = parseFloat(d.credit) > 0 ? 'PKR ' + fmt(d.credit) : '-';
-  document.getElementById('td_balance').textContent = 'PKR ' + fmt(d.balance);
+  document.getElementById('td_debit').textContent = parseFloat(d.debit) > 0 ? 'Rs. ' + fmt(d.debit) : '-';
+  document.getElementById('td_credit').textContent = parseFloat(d.credit) > 0 ? 'Rs. ' + fmt(d.credit) : '-';
+  document.getElementById('td_balance').textContent = 'Rs. ' + fmt(d.balance);
   document.getElementById('td_type').textContent = d.reftype ? d.reftype.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()) : 'General';
 
   let linkHtml = '';

@@ -25,7 +25,7 @@ async function run() {
   const defaults = [
     ['business_name', 'PLASTIC MARKAZ'],
     ['business_tagline', 'Plastic Products & Trading'],
-    ['currency_symbol', 'PKR'],
+    ['currency_symbol', 'Rs.'],
     ['session_timeout_minutes', '15'],
     ['invoice_terms', 'Payment due within 30 days.'],
     ['invoice_footer', 'Thank you for your business!'],

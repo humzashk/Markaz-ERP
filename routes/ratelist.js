@@ -12,7 +12,12 @@ router.get('/', wrap(async (req, res) => {
     ORDER BY rl.id DESC LIMIT 500
   `);
   const products = await pool.query(`SELECT id, name, unit, selling_price AS rate, qty_per_pack FROM products WHERE status='active' ORDER BY name`);
-  res.render('ratelist/index', { page:'ratelist', rates: r.rows, products: products.rows });
+  const histR = await pool.query(`
+    SELECT rl.*, p.name AS product_name FROM rate_list rl
+    JOIN products p ON p.id = rl.product_id
+    ORDER BY rl.product_id, rl.effective_date DESC
+  `);
+  res.render('ratelist/index', { page:'ratelist', rates: r.rows, products: products.rows, rateHistory: histR.rows });
 }));
 
 router.get('/add', wrap(async (req, res) => {

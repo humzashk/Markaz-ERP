@@ -45,7 +45,7 @@
       </select>
     </div>
     <div class="col-md-2">
-      <label class="form-label small fw-semibold">Rate/Pc (PKR) *</label>
+      <label class="form-label small fw-semibold">Rate/Pc (Rs.) *</label>
       <input type="number" name="rate" class="form-control fw-bold" step="0.01" min="0" required tabindex="3" placeholder="0.00">
     </div>
     <div class="col-md-3">
@@ -97,7 +97,7 @@
     <div class="rate-entry type-entry" data-type="<%= r.customer_type %>">
       <div class="rate-type"><%= r.customer_type %></div>
       <div class="d-flex align-items-center gap-2">
-        <span class="rate-value">PKR <span class="rate-val-display"><%= r.rate.toFixed(2) %></span></span>
+        <span class="rate-value">Rs. <span class="rate-val-display"><%= r.rate.toFixed(2) %></span></span>
         <button class="btn btn-xs btn-outline-secondary py-0 px-1" style="font-size:10px;" onclick="inlineEditRate(<%= r.id %>, this)" title="Edit Rate"><i class="bi bi-pencil"></i></button>
       </div>
       <div class="rate-meta"><i class="bi bi-calendar3"></i> <%= formatDate(r.effective_date) %></div>
@@ -124,7 +124,7 @@
       <form method="post" id="editRateForm">
         <div class="modal-header py-2"><h6 class="modal-title">Edit Rate</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
-          <div class="mb-2"><label class="form-label small fw-semibold">Rate/Pc (PKR) *</label>
+          <div class="mb-2"><label class="form-label small fw-semibold">Rate/Pc (Rs.) *</label>
             <input type="number" name="rate" id="editRateVal" class="form-control fw-bold" step="0.01" min="0" required></div>
           <div class="mb-2"><label class="form-label small fw-semibold">Effective Date</label>
             <input type="date" name="effective_date" id="editEffDate" class="form-control"></div>

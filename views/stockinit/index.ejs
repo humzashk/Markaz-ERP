@@ -1,0 +1,332 @@
+<%- include('../partials/header') %>
+
+<style>
+.si-table th, .si-table td { padding: 4px 6px; vertical-align: middle; font-size: .82rem; }
+.si-table input[type=number] { width: 72px; padding: 2px 4px; font-size: .82rem; text-align: right; }
+.si-table select { font-size: .82rem; padding: 2px 4px; }
+.si-table tr.has-val td { background: #f0fff4; }
+.si-table tr.row-error td { background: #fff3cd !important; outline: 2px solid #ffc107; }
+.si-table tr.row-invalid td { background: #fdecea !important; outline: 2px solid #dc3545; }
+.qty-total { font-weight: 600; color: #198754; font-size: .82rem; }
+.page-title { font-size: 1.1rem; font-weight: 700; }
+</style>
+
+<div class="d-flex align-items-center justify-content-between mb-2">
+  <h5 class="page-title mb-0"><i class="bi bi-database-add"></i> Opening Stock Initialization</h5>
+  <div class="d-flex gap-2 align-items-center">
+    <form method="get" class="d-flex gap-1" id="searchForm">
+      <input name="search" value="<%= search %>" placeholder="Search product…" class="form-control form-control-sm" style="width:200px">
+      <button class="btn btn-sm btn-outline-secondary">Go</button>
+      <% if (search) { %><a href="/stockinit" class="btn btn-sm btn-outline-danger">✕</a><% } %>
+    </form>
+    <span class="text-muted small"><%= total %> products</span>
+  </div>
+</div>
+
+<!-- Success banner -->
+<% if (saved) { %>
+<div class="alert alert-success alert-dismissible py-2 mb-2" id="successBanner">
+  <i class="bi bi-check-circle-fill"></i>
+  <strong>Stock initialized successfully</strong> — <strong><%= saved %></strong> product(s) saved.
+  <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert"></button>
+</div>
+<% } %>
+
+<!-- Simple error (redirect-based) -->
+<% if (err) { %>
+<div class="alert alert-danger py-2 mb-2">
+  <i class="bi bi-exclamation-circle"></i>
+  <%= err === 'invalid_warehouse' ? 'Invalid or inactive warehouse selected.' :
+      err === 'no_rows'           ? 'No rows with quantity entered. Nothing was saved.' : err %>
+</div>
+<% } %>
+
+<!-- Row-level validation errors (server re-render) -->
+<% if (rowErrors && rowErrors.length) { %>
+<div class="alert alert-warning mb-2">
+  <strong><i class="bi bi-exclamation-triangle"></i> <%= rowErrors.length %> validation error(s) — nothing was saved. Fix and resubmit.</strong>
+  <ul class="mb-0 mt-1 small">
+    <% rowErrors.forEach(e => { %><li><strong><%= e.name %></strong>: <%= e.reason %></li><% }) %>
+  </ul>
+</div>
+<% } %>
+
+<div class="alert alert-info py-2 mb-2 small">
+  <i class="bi bi-info-circle"></i>
+  Enter <strong>CTN</strong> (cartons) and/or <strong>PCS</strong> (loose pieces). Total = PCS + (CTN × Qty/Pack).
+  Tab between cells for fast entry. Only rows with quantity &gt; 0 are saved.
+</div>
+
+<form method="post" action="/stockinit/save" id="siForm">
+  <!-- Pass current search/page back so server can re-render correctly on validation error -->
+  <input type="hidden" name="_search" value="<%= search %>">
+  <input type="hidden" name="_page"   value="<%= currentPage %>">
+
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <div>
+    <strong>Default Warehouse:</strong>
+    <select id="defaultWarehouse" class="form-select form-select-sm d-inline-block ms-1" style="width:auto">
+      <option value="">— per row —</option>
+      <% warehouses.forEach(w => { %>
+      <option value="<%= w.id %>"><%= w.name %></option>
+      <% }) %>
+    </select>
+    <button type="button" class="btn btn-sm btn-outline-secondary ms-1" onclick="applyDefaultWarehouse()">Apply to All</button>
+  </div>
+  <button type="button" class="btn btn-success btn-sm px-4" onclick="confirmSubmit()">
+    <i class="bi bi-save"></i> Save All Stock
+  </button>
+</div>
+
+<div class="table-responsive">
+<table class="table table-bordered table-hover si-table mb-1" id="siTable">
+  <thead class="table-dark">
+    <tr>
+      <th style="width:30px">#</th>
+      <th>Item ID</th>
+      <th>Product Name</th>
+      <th>Unit</th>
+      <th style="width:55px">Qty/Pk</th>
+      <th style="width:130px">Warehouse</th>
+      <th style="width:75px">CTN</th>
+      <th style="width:75px">PCS</th>
+      <th style="width:80px">Total Qty</th>
+      <th style="width:80px">Current</th>
+    </tr>
+  </thead>
+  <tbody>
+  <% products.forEach(function(p, i) { %>
+    <tr class="si-row" data-product-id="<%= p.id %>" data-qpp="<%= p.qty_per_pack %>">
+      <td class="text-muted"><%= i + 1 %></td>
+      <td><small class="text-muted"><%= p.item_id || '' %></small></td>
+      <td><%= p.name %></td>
+      <td><small><%= p.unit %></small></td>
+      <td class="text-center">
+        <input type="hidden" name="rows[<%= i %>][product_id]"    value="<%= p.id %>">
+        <input type="hidden" name="rows[<%= i %>][product_name]"  value="<%= p.name %>">
+        <input type="number" name="rows[<%= i %>][qty_per_pack]"
+               class="form-control form-control-sm qpp-inp text-center"
+               value="<%= p.qty_per_pack %>" min="1" style="width:55px"
+               oninput="calcTotal(this.closest('tr'))">
+      </td>
+      <td>
+        <select name="rows[<%= i %>][warehouse_id]" class="form-select form-select-sm wh-sel"
+                onchange="checkDuplicate(this.closest('tr'))">
+          <option value="">No WH</option>
+          <% warehouses.forEach(w => { %>
+          <option value="<%= w.id %>"><%= w.name %></option>
+          <% }) %>
+        </select>
+      </td>
+      <td>
+        <input type="number" name="rows[<%= i %>][ctn]" min="0" value=""
+               class="form-control form-control-sm ctn-inp" placeholder="0"
+               onkeydown="rowNav(event,this)"
+               oninput="calcTotal(this.closest('tr')); validateRow(this.closest('tr'))">
+      </td>
+      <td>
+        <input type="number" name="rows[<%= i %>][pcs]" min="0" value=""
+               class="form-control form-control-sm pcs-inp" placeholder="0"
+               onkeydown="rowNav(event,this)"
+               oninput="calcTotal(this.closest('tr')); validateRow(this.closest('tr'))">
+      </td>
+      <td class="qty-total">—</td>
+      <td class="text-muted text-center"><%= Number(p.stock) || 0 %></td>
+    </tr>
+  <% }) %>
+  </tbody>
+</table>
+</div>
+
+<!-- Pagination -->
+<% if (pages > 1) { %>
+<nav class="d-flex align-items-center gap-2 mt-2">
+  <% if (currentPage > 1) { %>
+  <a href="/stockinit?page=<%= currentPage-1 %>&search=<%= encodeURIComponent(search) %>"
+     class="btn btn-sm btn-outline-secondary page-link-nav">‹ Prev</a>
+  <% } %>
+  <span class="text-muted small">Page <%= currentPage %> of <%= pages %></span>
+  <% if (currentPage < pages) { %>
+  <a href="/stockinit?page=<%= currentPage+1 %>&search=<%= encodeURIComponent(search) %>"
+     class="btn btn-sm btn-primary page-link-nav">Next ›</a>
+  <% } %>
+</nav>
+<% } %>
+
+<div class="d-flex justify-content-end mt-2">
+  <button type="button" class="btn btn-success px-5" onclick="confirmSubmit()">
+    <i class="bi bi-save"></i> Save All Stock
+  </button>
+</div>
+</form>
+
+<!-- Confirmation Modal -->
+<div class="modal fade" id="confirmModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white py-2">
+        <h6 class="modal-title mb-0"><i class="bi bi-shield-check"></i> Confirm Stock Initialization</h6>
+        <button type="button" class="btn-close btn-close-white btn-close-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="confirmBody">
+        You are about to initialize stock for <strong id="confirmCount">0</strong> product(s).<br>
+        <small class="text-muted">This will add opening quantities to each product. Existing stock is not overwritten.</small>
+        <div id="confirmList" class="mt-2 small" style="max-height:180px;overflow-y:auto"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success btn-sm" id="confirmOkBtn">
+          <i class="bi bi-check-circle"></i> Yes, Save Stock
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Calc total qty for a row ──────────────────────────────────────────────────
+function calcTotal(tr) {
+  const qpp   = parseInt(tr.querySelector('.qpp-inp').value, 10) || 1;
+  const ctn   = parseInt(tr.querySelector('.ctn-inp').value, 10) || 0;
+  const pcs   = parseInt(tr.querySelector('.pcs-inp').value, 10) || 0;
+  const total = pcs + (ctn * qpp);
+  const cell  = tr.querySelector('.qty-total');
+  cell.textContent = total > 0 ? total : '—';
+  tr.classList.toggle('has-val', total > 0);
+}
+
+// ── Per-row inline validation (negative / zero qpp) ──────────────────────────
+function validateRow(tr) {
+  const ctn = parseInt(tr.querySelector('.ctn-inp').value, 10) || 0;
+  const pcs = parseInt(tr.querySelector('.pcs-inp').value, 10) || 0;
+  const qpp = parseInt(tr.querySelector('.qpp-inp').value, 10) || 1;
+  const invalid = ctn < 0 || pcs < 0 || (ctn > 0 && qpp < 1);
+  tr.classList.toggle('row-invalid', invalid);
+}
+
+// ── Duplicate product+warehouse detection ─────────────────────────────────────
+function checkDuplicate(changedTr) {
+  const seen = new Map();
+  document.querySelectorAll('.si-row').forEach(tr => {
+    tr.classList.remove('row-error');
+    const pid = tr.dataset.productId;
+    const wid = tr.querySelector('.wh-sel').value || 'null';
+    const key = `${pid}|${wid}`;
+    const ctn = parseInt(tr.querySelector('.ctn-inp').value, 10) || 0;
+    const pcs = parseInt(tr.querySelector('.pcs-inp').value, 10) || 0;
+    if (ctn === 0 && pcs === 0) return; // blank rows don't count
+    if (seen.has(key)) {
+      seen.get(key).classList.add('row-error');
+      tr.classList.add('row-error');
+    } else {
+      seen.set(key, tr);
+    }
+  });
+}
+
+// Recheck duplicates whenever warehouse changes
+document.querySelectorAll('.wh-sel').forEach(sel => {
+  sel.addEventListener('change', () => checkDuplicate(sel.closest('tr')));
+});
+document.querySelectorAll('.ctn-inp, .pcs-inp').forEach(inp => {
+  inp.addEventListener('input', () => checkDuplicate(inp.closest('tr')));
+});
+
+// ── Keyboard navigation ───────────────────────────────────────────────────────
+function rowNav(e, el) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    el.closest('tr').querySelector('.pcs-inp').focus();
+    return;
+  }
+  if (e.key !== 'Tab') return;
+  if (el.classList.contains('ctn-inp')) return; // natural Tab to PCS
+  const nextTr = el.closest('tr').nextElementSibling;
+  if (nextTr) { e.preventDefault(); nextTr.querySelector('.ctn-inp').focus(); }
+}
+
+// ── Apply default warehouse to all rows ───────────────────────────────────────
+function applyDefaultWarehouse() {
+  const wid = document.getElementById('defaultWarehouse').value;
+  if (!wid) return;
+  document.querySelectorAll('.wh-sel').forEach(sel => { sel.value = wid; });
+  checkDuplicate(null);
+}
+
+// ── Confirmation step ─────────────────────────────────────────────────────────
+function confirmSubmit() {
+  // 1. Check for inline errors first
+  const invalids   = document.querySelectorAll('.row-invalid');
+  const duplicates = document.querySelectorAll('.row-error');
+
+  if (invalids.length) {
+    alert(`Fix ${invalids.length} row(s) with negative or invalid values (highlighted red) before saving.`);
+    invalids[0].querySelector('.ctn-inp').scrollIntoView({ block: 'center' });
+    return;
+  }
+  if (duplicates.length) {
+    alert(`Fix ${duplicates.length} duplicate product + warehouse row(s) (highlighted yellow) before saving.`);
+    duplicates[0].scrollIntoView({ block: 'center' });
+    return;
+  }
+
+  // 2. Collect filled rows for confirmation summary
+  const filled = [];
+  document.querySelectorAll('.si-row').forEach(tr => {
+    const ctn = parseInt(tr.querySelector('.ctn-inp').value, 10) || 0;
+    const pcs = parseInt(tr.querySelector('.pcs-inp').value, 10) || 0;
+    if (ctn === 0 && pcs === 0) return;
+    const qpp   = parseInt(tr.querySelector('.qpp-inp').value, 10) || 1;
+    const total = pcs + (ctn * qpp);
+    const name  = tr.querySelector('td:nth-child(3)').textContent.trim();
+    const whTxt = tr.querySelector('.wh-sel').selectedOptions[0].text;
+    filled.push({ name, ctn, pcs, total, wh: whTxt });
+  });
+
+  if (!filled.length) {
+    alert('No quantities entered. Fill in at least one row before saving.');
+    return;
+  }
+
+  // 3. Populate modal
+  document.getElementById('confirmCount').textContent = filled.length;
+  const list = document.getElementById('confirmList');
+  list.innerHTML = '<table class="table table-sm table-bordered mb-0">' +
+    '<thead><tr><th>Product</th><th>WH</th><th>CTN</th><th>PCS</th><th>Total</th></tr></thead><tbody>' +
+    filled.map(r =>
+      `<tr><td>${r.name}</td><td>${r.wh}</td><td>${r.ctn||''}</td><td>${r.pcs||''}</td><td><strong>${r.total}</strong></td></tr>`
+    ).join('') +
+    '</tbody></table>';
+
+  // 4. Show modal
+  const modal = new bootstrap.Modal(document.getElementById('confirmModal'));
+  modal.show();
+
+  // 5. On confirm → submit form
+  document.getElementById('confirmOkBtn').onclick = function () {
+    dirty = false;
+    modal.hide();
+    document.getElementById('siForm').submit();
+  };
+}
+
+// ── Unsaved-changes guard ─────────────────────────────────────────────────────
+let dirty = false;
+document.querySelectorAll('.ctn-inp, .pcs-inp').forEach(inp => {
+  inp.addEventListener('input', () => { dirty = true; });
+});
+window.addEventListener('beforeunload', e => {
+  if (dirty) { e.preventDefault(); e.returnValue = ''; }
+});
+// Allow search/pagination links without warning
+document.querySelectorAll('.page-link-nav').forEach(a => {
+  a.addEventListener('click', () => { dirty = false; });
+});
+document.getElementById('searchForm').addEventListener('submit', () => { dirty = false; });
+
+// ── Auto-scroll to success banner ─────────────────────────────────────────────
+const banner = document.getElementById('successBanner');
+if (banner) banner.scrollIntoView({ block: 'nearest' });
+</script>
+
+<%- include('../partials/footer') %>

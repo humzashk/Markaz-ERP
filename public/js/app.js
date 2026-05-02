@@ -60,6 +60,10 @@ function onProductChange(sel) {
   }
   const stockInfo = sel.parentElement.querySelector('.stock-hint');
   if (stockInfo) stockInfo.remove();
+  // Clear any previous qpp-warning immediately on product change
+  _setQppWarning(row, null);
+  const pkgInput = row.querySelector('.packaging-input');
+  if (pkgInput) pkgInput.classList.remove('border-warning', 'is-invalid');
   if (!opt.value) return calcRow(sel);
 
   // Async: fetch warehouse-scoped stock + best sell rate from /api/stock
@@ -88,6 +92,8 @@ function onProductChange(sel) {
         // Stash stock on row for over-stock warning
         row.dataset.stockPcs = d.stock || 0;
         row.dataset.qtyPerPack = qpp;
+        // Show qty_per_pack warning if API flagged it
+        _setQppWarning(row, d.qpp_warning || null);
         calcRow(sel);
       })
       .catch(() => { /* fall back silently */ });
@@ -98,9 +104,73 @@ function onProductChange(sel) {
     hint.innerHTML = `Stock: <strong>${stock}</strong> pcs`;
     sel.parentElement.appendChild(hint);
     row.dataset.stockPcs = stock;
+    // Check packaging from data attribute for non-API path (purchases)
+    const qpp = parseInt(opt.dataset.packaging, 10) || 1;
+    row.dataset.qtyPerPack = qpp;
+    if (qpp < 1) {
+      _setQppWarning(row, 'Pcs/Ctn is missing or zero — check product master');
+    } else if (qpp > QPP_SUSPICIOUS_HIGH) {
+      _setQppWarning(row, `Pcs/Ctn = ${qpp} is unusually high — verify with product master`);
+    }
     calcRow(sel);
   }
 }
+
+// ─── qty_per_pack warning badge ────────────────────────────────────────────
+// Shows an orange warning on the row when Pcs/Ctn looks suspicious.
+// Also fires when the user manually edits the packaging-input field.
+const QPP_SUSPICIOUS_HIGH = 500;
+
+function _setQppWarning(row, message) {
+  // Remove any existing warning
+  const old = row.querySelector('.qpp-warn');
+  if (old) old.remove();
+  if (!message) return;
+
+  const pkgCell = row.querySelector('.packaging-input')?.closest('td');
+  if (!pkgCell) return;
+
+  const badge = document.createElement('small');
+  badge.className = 'qpp-warn text-warning d-block mt-1 fw-semibold';
+  badge.style.fontSize = '0.72em';
+  badge.innerHTML = `<i class="bi bi-exclamation-triangle-fill"></i> ${message}`;
+  pkgCell.appendChild(badge);
+
+  // Also visually tint the packaging input
+  const pkgInput = row.querySelector('.packaging-input');
+  if (pkgInput) pkgInput.classList.add('border-warning');
+}
+
+function _checkPackagingInput(pkgInput) {
+  const row = pkgInput.closest('tr');
+  if (!row) return;
+  const val = parseInt(pkgInput.value, 10);
+  if (!val || val < 1) {
+    _setQppWarning(row, 'Pcs/Ctn must be ≥ 1');
+    pkgInput.classList.add('is-invalid');
+    return;
+  }
+  pkgInput.classList.remove('is-invalid');
+  if (val > QPP_SUSPICIOUS_HIGH) {
+    _setQppWarning(row, `Pcs/Ctn = ${val} is unusually high — check with product master`);
+    return;
+  }
+  // Clear warning only if it was set by packaging-input (not by server)
+  const masterQpp = parseInt(row.dataset.qtyPerPack, 10) || 0;
+  if (masterQpp > 0 && val !== masterQpp) {
+    _setQppWarning(row, `Pcs/Ctn changed to ${val} (product master: ${masterQpp}) — verify`);
+    return;
+  }
+  _setQppWarning(row, null);
+}
+
+// Listen for manual packaging-input edits on the whole form
+document.addEventListener('input', e => {
+  if (e.target && e.target.classList && e.target.classList.contains('packaging-input')) {
+    _checkPackagingInput(e.target);
+    calcRow(e.target);
+  }
+});
 
 // Mark rate input as user-edited so async API doesn't overwrite manual entry
 document.addEventListener('input', e => {

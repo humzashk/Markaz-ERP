@@ -50,6 +50,7 @@
         <% if (canSee('ratelist')) { %><li><a href="/ratelist" class="<%= page === 'ratelist' ? 'active' : '' %>"><i class="bi bi-tags"></i><span>Rate List</span></a></li><% } %>
         <% if (canSee('warehouses')) { %><li><a href="/warehouses" class="<%= page === 'warehouses' ? 'active' : '' %>"><i class="bi bi-building"></i><span>Warehouses</span></a></li><% } %>
         <% if (canSee('stock')) { %>
+          <li><a href="/stockinit" class="<%= page === 'stockinit' ? 'active' : '' %>"><i class="bi bi-database-add"></i><span>Opening Stock</span></a></li>
           <li><a href="/stock" class="<%= page === 'stock' ? 'active' : '' %>"><i class="bi bi-boxes"></i><span>Stock Adjust</span></a></li>
           <li><a href="/stock/position" class="<%= page === 'stock-position' ? 'active' : '' %>"><i class="bi bi-pie-chart"></i><span>Stock Position</span></a></li>
         <% } %>
@@ -71,8 +72,15 @@
 
       <% if (canSee('payments-receive') || canSee('payments-pay')) { %>
         <li class="sidebar-section">PAYMENTS</li>
-        <% if (canSee('payments-receive')) { %><li><a href="/payments/receive" class="<%= page === 'payments-receive' ? 'active' : '' %>"><i class="bi bi-cash-coin"></i><span>Receive Payment</span></a></li><% } %>
-        <% if (canSee('payments-pay')) { %><li><a href="/payments/pay" class="<%= page === 'payments-pay' ? 'active' : '' %>"><i class="bi bi-cash-stack"></i><span>Pay Vendor</span></a></li><% } %>
+        <% if (canSee('payments-receive')) { %>
+          <li><a href="/payments/receive" class="<%= page === 'payments-receive' ? 'active' : '' %>"><i class="bi bi-cash-coin"></i><span>Receive Payment</span></a></li>
+          <li><a href="/payments/received" class="<%= page === 'payments-received' ? 'active' : '' %>"><i class="bi bi-list-check"></i><span>Received List</span></a></li>
+        <% } %>
+        <% if (canSee('payments-pay')) { %>
+          <li><a href="/payments/pay" class="<%= page === 'payments-pay' ? 'active' : '' %>"><i class="bi bi-cash-stack"></i><span>Pay Vendor</span></a></li>
+          <li><a href="/payments/paid" class="<%= page === 'payments-paid' ? 'active' : '' %>"><i class="bi bi-list-ul"></i><span>Paid List</span></a></li>
+        <% } %>
+        <li><a href="/payments" class="<%= page === 'payments' ? 'active' : '' %>"><i class="bi bi-journal-check"></i><span>All Payments</span></a></li>
       <% } %>
 
       <% if (canSee('daybook') || canSee('journal') || canSee('ledger') || canSee('reports')) { %>

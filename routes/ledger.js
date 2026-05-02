@@ -24,7 +24,9 @@ router.get('/customer/:id', wrap(async (req, res) => {
   const params = [id]; const parts = [`entity_type='customer'`, `entity_id=$1`]; let i=2;
   if (from) { parts.push(`txn_date >= $${i}`); params.push(from); i++; }
   if (to)   { parts.push(`txn_date <= $${i}`); params.push(to);   i++; }
-  const entries = (await pool.query(`SELECT * FROM ledger WHERE ${parts.join(' AND ')} ORDER BY id ASC`, params)).rows;
+  const entries = (await pool.query(
+    `SELECT *, SUM(debit - credit) OVER (ORDER BY id ROWS UNBOUNDED PRECEDING) AS balance
+     FROM ledger WHERE ${parts.join(' AND ')} ORDER BY id ASC`, params)).rows;
   res.render('ledger/detail', { page:'ledger', entity: customer, entityType:'customer', entries, from, to });
 }));
 
@@ -37,7 +39,9 @@ router.get('/vendor/:id', wrap(async (req, res) => {
   const params = [id]; const parts = [`entity_type='vendor'`, `entity_id=$1`]; let i=2;
   if (from) { parts.push(`txn_date >= $${i}`); params.push(from); i++; }
   if (to)   { parts.push(`txn_date <= $${i}`); params.push(to);   i++; }
-  const entries = (await pool.query(`SELECT * FROM ledger WHERE ${parts.join(' AND ')} ORDER BY id ASC`, params)).rows;
+  const entries = (await pool.query(
+    `SELECT *, SUM(debit - credit) OVER (ORDER BY id ROWS UNBOUNDED PRECEDING) AS balance
+     FROM ledger WHERE ${parts.join(' AND ')} ORDER BY id ASC`, params)).rows;
   res.render('ledger/detail', { page:'ledger', entity: vendor, entityType:'vendor', entries, from, to });
 }));
 
@@ -50,7 +54,9 @@ router.get('/print/:type/:id', wrap(async (req, res) => {
   const params = [type, id]; const parts = [`entity_type=$1`, `entity_id=$2`]; let i=3;
   if (from) { parts.push(`txn_date >= $${i}`); params.push(from); i++; }
   if (to)   { parts.push(`txn_date <= $${i}`); params.push(to);   i++; }
-  const entries = (await pool.query(`SELECT * FROM ledger WHERE ${parts.join(' AND ')} ORDER BY id ASC`, params)).rows;
+  const entries = (await pool.query(
+    `SELECT *, SUM(debit - credit) OVER (ORDER BY id ROWS UNBOUNDED PRECEDING) AS balance
+     FROM ledger WHERE ${parts.join(' AND ')} ORDER BY id ASC`, params)).rows;
   res.render('ledger/print', { page:'ledger', entity, entityType: type, entries, from, to, layout:false });
 }));
 

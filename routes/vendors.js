@@ -19,13 +19,17 @@ router.get('/', wrap(async (req, res) => {
   res.render('vendors/index', { page:'vendors', vendors: r.rows, regions: regionsR.rows, types: typesR.rows, search, region, party_type: req.query.party_type || '' });
 }));
 
-router.get('/add', (req, res) => res.render('vendors/form', { page:'vendors', vendor:null, edit:false }));
+router.get('/add', wrap(async (req, res) => {
+  const regionsR = (await pool.query(`SELECT name FROM party_categories WHERE cat_group='region' ORDER BY sort_order`)).rows;
+  const typesR   = (await pool.query(`SELECT name FROM party_categories WHERE cat_group='type' AND applies_to='vendor' ORDER BY sort_order`)).rows;
+  res.render('vendors/form', { page:'vendors', vendor:null, edit:false, regions: regionsR, types: typesR });
+}));
 
 router.post('/add', validate(schemas.vendorCreate), wrap(async (req, res) => {
   const v = req.valid;
   const r = await pool.query(`
     INSERT INTO vendors(name,phone,email,address,city,ntn,category,region,credit_days,opening_balance,balance,account_scope,status,notes)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,COALESCE($9,60),COALESCE($10,0),COALESCE($10,0),COALESCE($11,'plastic_markaz'),COALESCE($12,'active'),$13)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,COALESCE($9,60),COALESCE($10,0),COALESCE($10,0),COALESCE($11,'plastic_markaz')::account_scope_t,COALESCE($12,'active')::active_status_t,$13)
     RETURNING id`,
     [v.name,v.phone,v.email,v.address,v.city,v.ntn,v.category,v.region,v.credit_days,v.opening_balance,v.account_scope,v.status,v.notes]
   );
@@ -36,7 +40,9 @@ router.post('/add', validate(schemas.vendorCreate), wrap(async (req, res) => {
 router.get('/edit/:id', wrap(async (req, res) => {
   const r = await pool.query(`SELECT * FROM vendors WHERE id=$1`, [req.params.id]);
   if (!r.rows[0]) return res.redirect('/vendors');
-  res.render('vendors/form', { page:'vendors', vendor: r.rows[0], edit:true });
+  const regionsR = (await pool.query(`SELECT name FROM party_categories WHERE cat_group='region' ORDER BY sort_order`)).rows;
+  const typesR   = (await pool.query(`SELECT name FROM party_categories WHERE cat_group='type' AND applies_to='vendor' ORDER BY sort_order`)).rows;
+  res.render('vendors/form', { page:'vendors', vendor: r.rows[0], edit:true, regions: regionsR, types: typesR });
 }));
 
 router.post('/edit/:id', validate(schemas.vendorCreate), wrap(async (req, res) => {
@@ -44,7 +50,7 @@ router.post('/edit/:id', validate(schemas.vendorCreate), wrap(async (req, res) =
   await pool.query(`
     UPDATE vendors SET name=$1,phone=$2,email=$3,address=$4,city=$5,ntn=$6,category=$7,region=$8,
       credit_days=COALESCE($9,60), opening_balance=COALESCE($10,0),
-      account_scope=COALESCE($11,'plastic_markaz'), status=COALESCE($12,'active'), notes=$13
+      account_scope=COALESCE($11,'plastic_markaz')::account_scope_t, status=COALESCE($12,'active')::active_status_t, notes=$13
     WHERE id=$14`,
     [v.name,v.phone,v.email,v.address,v.city,v.ntn,v.category,v.region,v.credit_days,v.opening_balance,v.account_scope,v.status,v.notes, req.params.id]);
   await addAuditLog('update','vendors', req.params.id, `Updated ${v.name}`);

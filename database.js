@@ -74,7 +74,7 @@ async function nextDocNo(client, prefix, table, col) {
      FROM ${table} WHERE ${col} LIKE $1`, [prefix + '-%']
   );
   const next = (Number(r && r.m) || 0) + 1;
-  return `${prefix}-${String(next).padStart(5, '0')}`;
+  return `${prefix}-${String(next).padStart(4, '0')}`;
 }
 
 // ===== STOCK LEDGER =====

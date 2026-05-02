@@ -19,13 +19,17 @@ router.get('/', wrap(async (req, res) => {
   res.render('customers/index', { page:'customers', customers: r.rows, regions: regionsR.rows, types: typesR.rows, search, region, party_type: req.query.party_type || '' });
 }));
 
-router.get('/add', (req, res) => res.render('customers/form', { page:'customers', customer:null, edit:false }));
+router.get('/add', wrap(async (req, res) => {
+  const regionsR = (await pool.query(`SELECT name FROM party_categories WHERE cat_group='region' ORDER BY sort_order`)).rows;
+  const typesR   = (await pool.query(`SELECT name FROM party_categories WHERE cat_group='type' AND applies_to='customer' ORDER BY sort_order`)).rows;
+  res.render('customers/form', { page:'customers', customer:null, edit:false, regions: regionsR, types: typesR });
+}));
 
 router.post('/add', validate(schemas.customerCreate), wrap(async (req, res) => {
   const v = req.valid;
   const r = await pool.query(`
     INSERT INTO customers(name,phone,email,address,city,ntn,category,region,credit_days,opening_balance,balance,default_commission_rate,account_scope,status,notes)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,COALESCE($9,30),COALESCE($10,0),COALESCE($10,0),COALESCE($11,0),COALESCE($12,'plastic_markaz'),COALESCE($13,'active'),$14)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,COALESCE($9,30),COALESCE($10,0),COALESCE($10,0),COALESCE($11,0),COALESCE($12,'plastic_markaz')::account_scope_t,COALESCE($13,'active')::active_status_t,$14)
     RETURNING id`,
     [v.name,v.phone,v.email,v.address,v.city,v.ntn,v.category,v.region,v.credit_days,v.opening_balance,v.default_commission_rate,v.account_scope,v.status,v.notes]
   );
@@ -36,7 +40,9 @@ router.post('/add', validate(schemas.customerCreate), wrap(async (req, res) => {
 router.get('/edit/:id', wrap(async (req, res) => {
   const r = await pool.query(`SELECT * FROM customers WHERE id=$1`, [req.params.id]);
   if (!r.rows[0]) return res.redirect('/customers');
-  res.render('customers/form', { page:'customers', customer: r.rows[0], edit:true });
+  const regionsR = (await pool.query(`SELECT name FROM party_categories WHERE cat_group='region' ORDER BY sort_order`)).rows;
+  const typesR   = (await pool.query(`SELECT name FROM party_categories WHERE cat_group='type' AND applies_to='customer' ORDER BY sort_order`)).rows;
+  res.render('customers/form', { page:'customers', customer: r.rows[0], edit:true, regions: regionsR, types: typesR });
 }));
 
 router.post('/edit/:id', validate(schemas.customerCreate), wrap(async (req, res) => {
@@ -44,8 +50,8 @@ router.post('/edit/:id', validate(schemas.customerCreate), wrap(async (req, res)
   await pool.query(`
     UPDATE customers SET name=$1,phone=$2,email=$3,address=$4,city=$5,ntn=$6,category=$7,region=$8,
       credit_days=COALESCE($9,30), opening_balance=COALESCE($10,0),
-      default_commission_rate=COALESCE($11,0), account_scope=COALESCE($12,'plastic_markaz'),
-      status=COALESCE($13,'active'), notes=$14
+      default_commission_rate=COALESCE($11,0), account_scope=COALESCE($12,'plastic_markaz')::account_scope_t,
+      status=COALESCE($13,'active')::active_status_t, notes=$14
     WHERE id=$15`,
     [v.name,v.phone,v.email,v.address,v.city,v.ntn,v.category,v.region,v.credit_days,v.opening_balance,v.default_commission_rate,v.account_scope,v.status,v.notes, req.params.id]);
   await addAuditLog('update','customers', req.params.id, `Updated ${v.name}`);
