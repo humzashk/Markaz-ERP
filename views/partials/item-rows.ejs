@@ -24,8 +24,8 @@
         <td>
           <select name="product_id" class="form-select product-select" required onchange="onProductChange(this)">
             <option value="">— Select Product —</option>
-            <% products.forEach(p => { %>
-            <option value="<%= p.id %>" data-packaging="<%= p.packaging || p.qty_per_pack || 1 %>" data-rate="<%= p.rate || p.selling_price || 0 %>" data-stock="<%= p.stock || 0 %>" data-commission="<%= p.default_commission_rate || 0 %>" <%= p.id == item.product_id ? 'selected' : '' %>><%= p.name %> &nbsp;·&nbsp; Stock: <%= p.stock %></option>
+            <% (products||[]).forEach(p => { %>
+            <option value="<%= p.id %>" data-packaging="<%= p.packaging || p.qty_per_pack || 1 %>" data-rate="<%= p.rate || p.selling_price || 0 %>" data-stock="<%= p.stock || 0 %>" data-commission="<%= p.default_commission_rate || 0 %>" <%= p.id == item.product_id ? 'selected' : '' %>><%= p.name %> &nbsp;·&nbsp; Stock: <%= p.stock||0 %></option>
             <% }) %>
           </select>
         </td>
@@ -46,7 +46,7 @@
         <% } else { %><input type="hidden" name="discount_per_pack" value="0"><% } %>
         <td><input type="number" name="commission_pct" class="form-control commission-input text-center" min="0" step="0.01" max="50" value="<%= item.commission_pct || 0 %>" oninput="calcTotal()"></td>
         <td class="text-center">
-          <span class="row-amount fw-bold text-success"><%= item.amount.toFixed(2) %></span>
+          <span class="row-amount fw-bold text-success"><%= (Number(item.amount) || 0).toFixed(2) %></span>
         </td>
         <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="removeRow(this)"><i class="bi bi-x"></i></button></td>
       </tr>
@@ -57,8 +57,8 @@
         <td>
           <select name="product_id" class="form-select product-select" required onchange="onProductChange(this)">
             <option value="">— Select Product —</option>
-            <% products.forEach(p => { %>
-            <option value="<%= p.id %>" data-packaging="<%= p.packaging || p.qty_per_pack || 1 %>" data-rate="<%= p.rate || p.selling_price || 0 %>" data-stock="<%= p.stock || 0 %>" data-commission="<%= p.default_commission_rate || 0 %>"><%= p.name %> &nbsp;·&nbsp; Stock: <%= p.stock %></option>
+            <% (products||[]).forEach(p => { %>
+            <option value="<%= p.id %>" data-packaging="<%= p.packaging || p.qty_per_pack || 1 %>" data-rate="<%= p.rate || p.selling_price || 0 %>" data-stock="<%= p.stock || 0 %>" data-commission="<%= p.default_commission_rate || 0 %>"><%= p.name %> &nbsp;·&nbsp; Stock: <%= p.stock||0 %></option>
             <% }) %>
           </select>
         </td>
@@ -80,4 +80,4 @@
 <button type="button" class="btn btn-sm btn-outline-primary mb-3" onclick="addItemRow()">
   <i class="bi bi-plus-circle"></i> Add Item
 </button>
-<script>window.productsData = <%- JSON.stringify(products) %>;</script>
+<script>window.productsData = <%- JSON.stringify(products||[]) %>;</script>

@@ -3,6 +3,7 @@
   <h2><i class="bi bi-bag"></i> Purchase: <%= purchase.purchase_no %></h2>
   <div class="d-flex gap-2">
     <a href="/purchases/edit/<%= purchase.id %>" class="btn btn-warning"><i class="bi bi-pencil"></i> Edit</a>
+    <a href="/purchases/print/<%= purchase.id %>" target="_blank" class="btn btn-outline-dark"><i class="bi bi-printer"></i> Print</a>
     <a href="/payments/add?type=vendor&entity_id=<%= purchase.vendor_id %>" class="btn btn-success"><i class="bi bi-cash"></i> Make Payment</a>
     <a href="/purchases" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
   </div>

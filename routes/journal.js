@@ -62,4 +62,14 @@ router.get('/view/:id', wrap(async (req, res) => {
   res.render('journal/view', { page:'journal', entry, lines });
 }));
 
+router.post('/delete/:id', wrap(async (req, res) => {
+  const id = toInt(req.params.id);
+  await tx(async (db) => {
+    await db.run(`DELETE FROM journal_lines WHERE entry_id=$1`, [id]);
+    await db.run(`DELETE FROM journal_entries WHERE id=$1`, [id]);
+  });
+  await addAuditLog('delete','journal', id, 'Deleted journal entry');
+  res.redirect('/journal');
+}));
+
 module.exports = router;

@@ -65,18 +65,18 @@
               <% if(c.notes){ %><br><small class="text-muted"><i class="bi bi-chat-left-text"></i> <%= c.notes %></small><% } %>
             </td>
             <td>
-              <% const regionCat = regions.find(r => r.name === c.region); %>
-              <% const typeCat = types.find(t => t.name === c.party_type); %>
-              <% if(regionCat){ %><span class="badge bg-<%= regionCat.color %>"><%= c.region %></span><% } %>
-              <% if(typeCat){ %> <span class="badge bg-<%= typeCat.color %>"><%= c.party_type %></span><% } %>
-              <% if(!c.region && !c.party_type){ %><span class="text-muted small">—</span><% } %>
+              <% const regionCat = (regions||[]).find(r => r.name === c.region); %>
+              <% const typeCat   = (types||[]).find(t => t.name === (c.party_type || c.category)); %>
+              <% if(regionCat){ %><span class="badge bg-<%= regionCat.color || 'secondary' %>"><%= c.region %></span><% } %>
+              <% if(typeCat)  { %> <span class="badge bg-<%= typeCat.color || 'info' %>"><%= typeCat.name %></span><% } %>
+              <% if(!c.region && !(c.party_type||c.category)){ %><span class="text-muted small">—</span><% } %>
             </td>
             <td><%= c.phone || '-' %></td>
             <td><%= c.city || '-' %></td>
-            <td class="<%= c.balance > 0 ? 'text-danger fw-bold' : c.balance < 0 ? 'text-success' : '' %>">
-              <%= formatCurrency(Math.abs(c.balance)) %>
-              <% if (c.balance > 0) { %><small class="d-block text-danger">Due</small><% } %>
-              <% if (c.balance < 0) { %><small class="d-block text-success">Advance</small><% } %>
+            <td class="<%= (c.balance||0) > 0 ? 'text-danger fw-bold' : (c.balance||0) < 0 ? 'text-success' : '' %>">
+              <%= formatCurrency(Math.abs(c.balance||0)) %>
+              <% if ((c.balance||0) > 0) { %><small class="d-block text-danger">Due</small><% } %>
+              <% if ((c.balance||0) < 0) { %><small class="d-block text-success">Advance</small><% } %>
             </td>
             <td><span class="badge bg-<%= statusBadge(c.status) %>"><%= c.status %></span></td>
             <td>

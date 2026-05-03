@@ -63,20 +63,56 @@ app.use(async (req, res, next) => {
   res.locals.search        = req.query.search || '';
   res.locals.from          = req.query.from  || '';
   res.locals.to            = req.query.to    || '';
+
+  // Lists — always arrays
   res.locals.regions       = [];
   res.locals.types         = [];
   res.locals.categories    = [];
   res.locals.rateHistory   = [];
   res.locals.creditNotes   = [];
   res.locals.warehouses    = [];
+  res.locals.transports    = [];
   res.locals.position      = [];
   res.locals.allEntries    = [];
   res.locals.customerTypes = [];
   res.locals.vendorTypes   = [];
   res.locals.regionCats    = [];
+  res.locals.customers     = [];
+  res.locals.vendors       = [];
+  res.locals.products      = [];
+  res.locals.orders        = [];
+  res.locals.invoices      = [];
+  res.locals.purchases     = [];
+  res.locals.items         = [];
+  res.locals.movements     = [];
+  res.locals.adjustments   = [];
+  res.locals.payments      = [];
+  res.locals.notes         = [];
+
+  // Single-record defaults — null
+  res.locals.invoice       = null;
+  res.locals.purchase      = null;
+  res.locals.order         = null;
+  res.locals.customer      = null;
+  res.locals.vendor        = null;
+  res.locals.product       = null;
+  res.locals.note          = null;
+  res.locals.bilty         = null;
+  res.locals.dc            = null;
+
+  // Flags / scalars
+  res.locals.edit          = false;
   res.locals.error         = null;
   res.locals.result        = null;
   res.locals.exportable    = {};
+  res.locals.noteType      = 'credit';
+  res.locals.warehouseId   = null;
+  res.locals.productId     = null;
+  res.locals.status        = req.query.status || '';
+  res.locals.type          = req.query.type   || '';
+  res.locals.region        = req.query.region || '';
+  res.locals.party_type    = req.query.party_type || '';
+  res.locals.linkedOrderIds = [];
   next();
 });
 
@@ -165,6 +201,23 @@ app.get('/api/products', async (req, res, next) => {
 });
 app.get('/api/products/:id', async (req, res, next) => {
   try { const r = await pool.query(`SELECT * FROM products WHERE id=$1`, [req.params.id]); res.json(r.rows[0] || {}); } catch(e){ next(e); }
+});
+
+// Next available BLT-XXXX bilty number (across orders + invoices)
+app.get('/api/next-bilty-no', async (req, res, next) => {
+  try {
+    const r = await pool.query(`
+      SELECT COALESCE(MAX(
+        CAST(REGEXP_REPLACE(bilty_no, '^BLT-0*', '') AS INTEGER)
+      ), 0) AS max_no
+      FROM (
+        SELECT bilty_no FROM orders   WHERE bilty_no ~ '^BLT-\\d+'
+        UNION ALL
+        SELECT bilty_no FROM invoices WHERE bilty_no ~ '^BLT-\\d+'
+      ) t`);
+    const maxNo = parseInt(r.rows[0].max_no, 10) || 0;
+    res.json({ next: 'BLT-' + String(maxNo + 1).padStart(4, '0') });
+  } catch(e) { next(e); }
 });
 
 // Error handlers

@@ -109,9 +109,17 @@ router.get('/api/stock/:product_id', wrap(async (req, res) => {
   res.json({ stock: stockPcs, stock_ctn: qpp>0?Math.floor(stockPcs/qpp):0, stock_loose: qpp>0?stockPcs%qpp:stockPcs, qty_per_pack: qpp, name: prod.name, commission: Number(prod.default_commission_rate)||0, rate, qpp_warning });
 }));
 
+// Helper: normalise bilty_no ("42" or "BLT42" → "BLT-0042")
+function _normBilty(s) {
+  if (!s) return s;
+  const m = s.match(/^(?:BLT-?)?(\d+)$/i);
+  return m ? 'BLT-' + String(parseInt(m[1], 10)).padStart(4, '0') : s.toUpperCase();
+}
+
 // CREATE: atomic — invoice + items + stock OUT + customer DR (sale)
 router.post('/add', validate(schemas.invoiceCreate), wrap(async (req, res) => {
   const v = req.valid;
+  if (v.bilty_no) v.bilty_no = _normBilty(v.bilty_no);
   const items = v._items || [];
   if (!items.length) return res.redirect('/invoices/add?err=no_items');
 
@@ -192,7 +200,9 @@ router.get('/edit/:id', wrap(async (req, res) => {
 
 router.post('/edit/:id', validate(schemas.invoiceCreate), wrap(async (req, res) => {
   const id = toInt(req.params.id);
-  const v = req.valid; const items = v._items || [];
+  const v = req.valid;
+  if (v.bilty_no) v.bilty_no = _normBilty(v.bilty_no);
+  const items = v._items || [];
   if (!items.length) return res.redirect('/invoices/edit/' + id + '?err=no_items');
   const transportCharges = toNum(req.body.transport_charges, 0);
 
@@ -276,6 +286,94 @@ router.get('/view/:id', wrap(async (req, res) => {
   const items = (await pool.query(`SELECT ii.*, p.name AS product_name FROM invoice_items ii JOIN products p ON p.id=ii.product_id WHERE ii.invoice_id=$1`, [id])).rows;
   const bilty = (await pool.query(`SELECT * FROM bilty WHERE invoice_id=$1`, [id])).rows[0] || null;
   res.render('invoices/view', { page:'invoices', invoice: inv, items, bilty });
+}));
+
+// Bulk operations: status update, mark paid, etc.
+router.get('/bulk', wrap(async (req, res) => {
+  const customers = (await pool.query(`SELECT id, name FROM customers WHERE status='active' ORDER BY name`)).rows;
+  res.render('invoices/bulk', {
+    page: 'invoices',
+    customers,
+    result: null
+  });
+}));
+
+router.post('/bulk', wrap(async (req, res) => {
+  const ids = (req.body.ids || '').split(',')
+    .map(s => parseInt(s.trim(), 10))
+    .filter(n => Number.isFinite(n) && n > 0);
+  if (!ids.length) return res.redirect('/invoices/bulk?err=' + encodeURIComponent('No invoices selected'));
+
+  const action = req.body.action || '';
+  let updated = 0;
+
+  if (action === 'mark_paid') {
+    await tx(async (db) => {
+      // Fetch invoices to be marked paid (only unpaid ones)
+      const invs = await db.many(
+        `SELECT id, customer_id, total, invoice_date, invoice_no, account_scope FROM invoices WHERE id = ANY($1::int[]) AND status != 'paid'`,
+        [ids]
+      );
+
+      // For each invoice, create a payment ledger entry
+      for (const inv of invs) {
+        await addLedgerEntry(db, 'customer', inv.customer_id, inv.invoice_date,
+          `Payment for invoice ${inv.invoice_no}`, 0, inv.total, 'invoice', inv.id, inv.account_scope || 'plastic_markaz');
+      }
+
+      // Now mark all invoices as paid
+      const r = await db.run(
+        `UPDATE invoices SET status='paid', paid=total WHERE id = ANY($1::int[]) AND status != 'paid'`,
+        [ids]
+      );
+      updated = r.rowCount;
+    });
+    await addAuditLog('update', 'invoices', null, `Bulk marked paid: ${ids.join(',')}`);
+  } else if (action === 'mark_unpaid') {
+    await tx(async (db) => {
+      // Fetch invoices that will be marked unpaid (currently paid ones)
+      const invs = await db.many(
+        `SELECT id, customer_id, status FROM invoices WHERE id = ANY($1::int[]) AND status = 'paid'`,
+        [ids]
+      );
+
+      // Remove payment ledger entries for these invoices
+      for (const inv of invs) {
+        await removeLedgerForRef(db, 'customer', inv.customer_id, 'invoice', inv.id);
+      }
+
+      // Now mark all invoices as unpaid, reset paid to 0
+      const r = await db.run(
+        `UPDATE invoices SET status='unpaid', paid=0 WHERE id = ANY($1::int[])`,
+        [ids]
+      );
+      updated = r.rowCount;
+    });
+    await addAuditLog('update', 'invoices', null, `Bulk marked unpaid: ${ids.join(',')}`);
+  } else if (action === 'mark_cancelled') {
+    await tx(async (db) => {
+      // Fetch invoices being cancelled to remove any ledger entries
+      const invs = await db.many(
+        `SELECT id, customer_id FROM invoices WHERE id = ANY($1::int[])`,
+        [ids]
+      );
+
+      // Remove invoice and payment ledger entries
+      for (const inv of invs) {
+        await removeLedgerForRef(db, 'customer', inv.customer_id, 'invoice', inv.id);
+      }
+
+      // Mark all invoices as cancelled
+      const r = await db.run(
+        `UPDATE invoices SET status='cancelled' WHERE id = ANY($1::int[])`,
+        [ids]
+      );
+      updated = r.rowCount;
+    });
+    await addAuditLog('update', 'invoices', null, `Bulk cancelled: ${ids.join(',')}`);
+  }
+
+  res.redirect('/invoices/bulk?ok=' + encodeURIComponent(`${updated} invoice(s) updated`));
 }));
 
 router.get('/print/:id', wrap(async (req, res) => {

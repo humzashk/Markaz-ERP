@@ -21,13 +21,29 @@ router.get('/customer/:id', wrap(async (req, res) => {
   const customer = (await pool.query(`SELECT * FROM customers WHERE id=$1`, [id])).rows[0];
   if (!customer) return res.redirect('/ledger');
   const from = req.query.from || '', to = req.query.to || '';
-  const params = [id]; const parts = [`entity_type='customer'`, `entity_id=$1`]; let i=2;
-  if (from) { parts.push(`txn_date >= $${i}`); params.push(from); i++; }
-  if (to)   { parts.push(`txn_date <= $${i}`); params.push(to);   i++; }
-  const entries = (await pool.query(
-    `SELECT *, SUM(debit - credit) OVER (ORDER BY id ROWS UNBOUNDED PRECEDING) AS balance
-     FROM ledger WHERE ${parts.join(' AND ')} ORDER BY id ASC`, params)).rows;
-  res.render('ledger/detail', { page:'ledger', entity: customer, entityType:'customer', entries, from, to });
+
+  // Build the WHERE clause for date range filter
+  const params = [id]; const whereParts = [`entity_type='customer'`, `entity_id=$1`]; let i=2;
+  if (from) { whereParts.push(`txn_date >= $${i}`); params.push(from); i++; }
+  if (to)   { whereParts.push(`txn_date <= $${i}`); params.push(to);   i++; }
+
+  // Use subquery to calculate running balance including all prior entries
+  const entries = (await pool.query(`
+    SELECT *,
+      SUM(debit - credit) OVER (ORDER BY id ROWS UNBOUNDED PRECEDING) AS balance
+    FROM ledger
+    WHERE entity_type='customer' AND entity_id=$1
+    ORDER BY id ASC
+  `, [id])).rows;
+
+  // Filter to the requested date range in application layer to preserve running balance calculation
+  const filteredEntries = entries.filter(e => {
+    if (from && e.txn_date < from) return false;
+    if (to && e.txn_date > to) return false;
+    return true;
+  });
+
+  res.render('ledger/detail', { page:'ledger', entity: customer, entityType:'customer', entries: filteredEntries, from, to });
 }));
 
 router.get('/vendor/:id', wrap(async (req, res) => {
@@ -36,13 +52,24 @@ router.get('/vendor/:id', wrap(async (req, res) => {
   const vendor = (await pool.query(`SELECT * FROM vendors WHERE id=$1`, [id])).rows[0];
   if (!vendor) return res.redirect('/ledger');
   const from = req.query.from || '', to = req.query.to || '';
-  const params = [id]; const parts = [`entity_type='vendor'`, `entity_id=$1`]; let i=2;
-  if (from) { parts.push(`txn_date >= $${i}`); params.push(from); i++; }
-  if (to)   { parts.push(`txn_date <= $${i}`); params.push(to);   i++; }
-  const entries = (await pool.query(
-    `SELECT *, SUM(debit - credit) OVER (ORDER BY id ROWS UNBOUNDED PRECEDING) AS balance
-     FROM ledger WHERE ${parts.join(' AND ')} ORDER BY id ASC`, params)).rows;
-  res.render('ledger/detail', { page:'ledger', entity: vendor, entityType:'vendor', entries, from, to });
+
+  // Use subquery to calculate running balance including all prior entries
+  const entries = (await pool.query(`
+    SELECT *,
+      SUM(debit - credit) OVER (ORDER BY id ROWS UNBOUNDED PRECEDING) AS balance
+    FROM ledger
+    WHERE entity_type='vendor' AND entity_id=$1
+    ORDER BY id ASC
+  `, [id])).rows;
+
+  // Filter to the requested date range in application layer to preserve running balance calculation
+  const filteredEntries = entries.filter(e => {
+    if (from && e.txn_date < from) return false;
+    if (to && e.txn_date > to) return false;
+    return true;
+  });
+
+  res.render('ledger/detail', { page:'ledger', entity: vendor, entityType:'vendor', entries: filteredEntries, from, to });
 }));
 
 router.get('/print/:type/:id', wrap(async (req, res) => {
@@ -51,13 +78,24 @@ router.get('/print/:type/:id', wrap(async (req, res) => {
   const entity = (await pool.query(`SELECT * FROM ${tbl} WHERE id=$1`, [id])).rows[0];
   if (!entity) return res.redirect('/ledger');
   const from = req.query.from || '', to = req.query.to || '';
-  const params = [type, id]; const parts = [`entity_type=$1`, `entity_id=$2`]; let i=3;
-  if (from) { parts.push(`txn_date >= $${i}`); params.push(from); i++; }
-  if (to)   { parts.push(`txn_date <= $${i}`); params.push(to);   i++; }
-  const entries = (await pool.query(
-    `SELECT *, SUM(debit - credit) OVER (ORDER BY id ROWS UNBOUNDED PRECEDING) AS balance
-     FROM ledger WHERE ${parts.join(' AND ')} ORDER BY id ASC`, params)).rows;
-  res.render('ledger/print', { page:'ledger', entity, entityType: type, entries, from, to, layout:false });
+
+  // Use subquery to calculate running balance including all prior entries
+  const entries = (await pool.query(`
+    SELECT *,
+      SUM(debit - credit) OVER (ORDER BY id ROWS UNBOUNDED PRECEDING) AS balance
+    FROM ledger
+    WHERE entity_type=$1 AND entity_id=$2
+    ORDER BY id ASC
+  `, [type, id])).rows;
+
+  // Filter to the requested date range in application layer to preserve running balance calculation
+  const filteredEntries = entries.filter(e => {
+    if (from && e.txn_date < from) return false;
+    if (to && e.txn_date > to) return false;
+    return true;
+  });
+
+  res.render('ledger/print', { page:'ledger', entity, entityType: type, entries: filteredEntries, from, to, layout:false });
 }));
 
 module.exports = router;

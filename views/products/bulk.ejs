@@ -1,6 +1,122 @@
 <%- include('../partials/header') %>
 <div class="page-header">
-  <h2><i class="bi bi-grid"></i> Bulk Products</h2>
+  <h2><i class="bi bi-grid"></i> Bulk Product Operations</h2>
+  <a href="/products" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back to Products</a>
 </div>
-<div class="alert alert-info">Bulk product page — coming soon.</div>
+
+<%- include('../partials/form-error') %>
+
+<div class="row g-3">
+
+  <!-- Bulk Price Update -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-tag"></i> Bulk Price Update</div>
+      <div class="card-body">
+        <form method="POST" action="/products/bulk-price">
+          <div class="mb-3">
+            <label class="form-label fw-bold">Apply To</label>
+            <select name="scope" class="form-select" required>
+              <option value="all">All Active Products</option>
+              <option value="category">Specific Category</option>
+            </select>
+          </div>
+          <div class="mb-3" id="categoryRow" style="display:none;">
+            <label class="form-label">Category</label>
+            <input type="text" name="category" class="form-control" placeholder="e.g. Pipes">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-bold">Price Field</label>
+            <select name="field" class="form-select" required>
+              <option value="selling_price">Selling Price</option>
+              <option value="cost_price">Cost Price</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-bold">Adjustment</label>
+            <div class="input-group">
+              <select name="adj_type" class="form-select" style="max-width:140px;">
+                <option value="pct_increase">% Increase</option>
+                <option value="pct_decrease">% Decrease</option>
+                <option value="fixed_set">Set Fixed Value</option>
+              </select>
+              <input type="number" name="adj_value" class="form-control" step="0.01" min="0" placeholder="0" required>
+            </div>
+          </div>
+          <div class="alert alert-warning small py-2"><i class="bi bi-exclamation-triangle"></i> This updates prices immediately. Cannot be undone without manual correction.</div>
+          <button type="submit" class="btn btn-warning" onclick="return confirm('Update prices for all matching products?')"><i class="bi bi-tag-fill"></i> Apply Price Update</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bulk Status / Category Change -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-pencil-square"></i> Bulk Status / Category</div>
+      <div class="card-body">
+        <form method="POST" action="/products/bulk-update">
+          <div class="mb-3">
+            <label class="form-label fw-bold">Product IDs <span class="text-danger">*</span></label>
+            <input type="text" name="ids" class="form-control" placeholder="e.g. 1,2,3,15" required>
+            <div class="form-text">Comma-separated product IDs from the products list.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Set Status</label>
+            <select name="status" class="form-select">
+              <option value="">— No change —</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Set Category</label>
+            <input type="text" name="category" class="form-control" placeholder="e.g. Pipes, Fittings...">
+          </div>
+          <button type="submit" class="btn btn-primary" onclick="return confirm('Apply changes to selected products?')"><i class="bi bi-check2"></i> Apply Updates</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Qty Per Pack Fix -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-box"></i> Fix Pcs/Ctn (qty_per_pack)</div>
+      <div class="card-body">
+        <p class="text-muted small">Set <code>qty_per_pack = 1</code> for all products where it is NULL or zero.</p>
+        <form method="POST" action="/products/bulk-fix-qpp" onsubmit="return confirm('Set qty_per_pack=1 for all NULL/zero entries?')">
+          <button type="submit" class="btn btn-outline-warning"><i class="bi bi-wrench"></i> Run Safe Fix</button>
+        </form>
+        <hr>
+        <p class="text-muted small">Or set a specific value for listed product IDs:</p>
+        <form method="POST" action="/products/bulk-set-qpp">
+          <div class="input-group">
+            <input type="text" name="ids"         class="form-control" placeholder="IDs: 1,2,3">
+            <input type="number" name="qty_per_pack" class="form-control" style="max-width:100px;" placeholder="Pcs/Ctn" min="1">
+            <button type="submit" class="btn btn-outline-primary">Set</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import note -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-cloud-upload"></i> Bulk Import</div>
+      <div class="card-body">
+        <p class="text-muted small">To import products from Excel/CSV, use the dedicated Import page.</p>
+        <a href="/importexport" class="btn btn-outline-info"><i class="bi bi-file-earmark-spreadsheet"></i> Go to Import/Export</a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+document.querySelector('select[name="scope"]').addEventListener('change', function() {
+  document.getElementById('categoryRow').style.display = this.value === 'category' ? '' : 'none';
+});
+</script>
 <%- include('../partials/footer') %>

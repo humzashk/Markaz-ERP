@@ -82,6 +82,31 @@ router.post('/apply/:id', wrap(async (req, res) => {
   res.redirect('/creditnotes');
 }));
 
+// API: return items for a given invoice or purchase (for credit/debit note filtering)
+router.get('/api/items', wrap(async (req, res) => {
+  const invoiceId  = toInt(req.query.invoice_id);
+  const purchaseId = toInt(req.query.purchase_id);
+  if (invoiceId) {
+    const rows = (await pool.query(`
+      SELECT ii.product_id, p.name, ii.rate, ii.quantity AS max_qty
+      FROM invoice_items ii
+      JOIN products p ON p.id = ii.product_id
+      WHERE ii.invoice_id = $1
+      ORDER BY p.name`, [invoiceId])).rows;
+    return res.json(rows);
+  }
+  if (purchaseId) {
+    const rows = (await pool.query(`
+      SELECT pi.product_id, p.name, pi.rate, pi.quantity AS max_qty
+      FROM purchase_items pi
+      JOIN products p ON p.id = pi.product_id
+      WHERE pi.purchase_id = $1
+      ORDER BY p.name`, [purchaseId])).rows;
+    return res.json(rows);
+  }
+  res.json([]);
+}));
+
 router.get('/view/:id', wrap(async (req, res) => {
   const id = toInt(req.params.id);
   const note = (await pool.query(`

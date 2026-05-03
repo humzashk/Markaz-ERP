@@ -4,7 +4,7 @@ const router  = express.Router();
 const multer  = require('multer');
 const path    = require('path');
 const fs      = require('fs');
-const { pool } = require('../database');
+const { pool, tx, applyStockMovement } = require('../database');
 const { wrap }  = require('../middleware/errorHandler');
 
 const upload = multer({ dest: 'uploads/tmp/', limits: { fileSize: 10 * 1024 * 1024 } });
@@ -154,11 +154,25 @@ router.post('/import', upload.single('file'), wrap(async (req, res) => {
         const stock     = parseInt(row.stock || row.qty || 0, 10) || 0;
         const qtyPack   = parseInt(row.qty_per_pack || row.packaging || 1, 10) || 1;
         const itemId    = (row.item_id || row.code || '').trim() || null;
-        await pool.query(
-          `INSERT INTO products(item_id,name,category,unit,qty_per_pack,cost_price,selling_price,stock,status)
-           VALUES($1,$2,$3,COALESCE($4,'PCS'),$5,$6,$7,$8,'active')`,
-          [itemId, name, row.category||null, row.unit||null, qtyPack, costPrice, sellPrice, stock]
-        );
+
+        // Use transaction to ensure product insert and stock ledger entry are atomic
+        await tx(async (db) => {
+          const result = await db.one(
+            `INSERT INTO products(item_id,name,category,unit,qty_per_pack,cost_price,selling_price,stock,status)
+             VALUES($1,$2,$3,COALESCE($4,'PCS'),$5,$6,$7,$8,'active') RETURNING id`,
+            [itemId, name, row.category||null, row.unit||null, qtyPack, costPrice, sellPrice, stock]
+          );
+          const productId = result.id;
+
+          // Record stock in ledger if initial stock > 0
+          if (stock > 0) {
+            // Use default warehouse ID 1 (or first available)
+            const wh = await db.one(`SELECT id FROM warehouses WHERE status='active' ORDER BY id LIMIT 1`);
+            if (wh) {
+              await applyStockMovement(db, productId, wh.id, stock, 'import', productId, 'opening', 'Product import');
+            }
+          }
+        });
         imported++;
       } catch (e) { errors.push(`Row "${name}": ${e.message}`); }
     }

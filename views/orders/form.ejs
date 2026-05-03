@@ -35,7 +35,14 @@
               <% warehouses?.forEach(w => { %><option value="<%= w.id %>" <%= (order && w.id==order.warehouse_id)?'selected':'' %>><%= w.name %></option><% }) %>
             </select>
           </div>
-          <div class="mb-3"><label class="form-label">Bilty #</label><input type="text" name="bilty_no" id="bilty_no" class="form-control" value="<%= order?.bilty_no || '' %>" placeholder="e.g., BLT-0001"></div>
+          <div class="mb-3">
+            <label class="form-label">Bilty #</label>
+            <div class="input-group">
+              <input type="text" name="bilty_no" id="bilty_no" class="form-control" value="<%= order?.bilty_no || '' %>" placeholder="e.g. 1234 → BLT-0001">
+              <button type="button" id="biltyNextBtn" class="btn btn-outline-secondary" title="Auto-fill next Bilty #"><i class="bi bi-hash"></i> Next</button>
+            </div>
+            <div class="form-text">Enter digits (e.g. 42) — auto-formats to BLT-0042 on save.</div>
+          </div>
           <div class="mb-3"><label class="form-label">Transport <span id="transportRequired" class="text-danger d-none">*</span></label>
             <div class="input-group">
               <select name="transport_id" id="transport_id" class="form-select">
@@ -170,6 +177,14 @@ function calcTotal() {
   document.getElementById('grossAmount').textContent = gross.toFixed(2);
 }
 
+// ── Bilty # auto-format ───────────────────────────────────────────────────────
+function fmtBiltyNo(v) {
+  if (!v) return '';
+  v = v.trim();
+  const m = v.match(/^(?:BLT-?)?(\d+)$/i);
+  return m ? 'BLT-' + String(parseInt(m[1], 10)).padStart(4, '0') : v.toUpperCase();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   calcTotal();
   // Bilty → Transport required toggle
@@ -182,8 +197,23 @@ document.addEventListener('DOMContentLoaded', () => {
     trans.required = has;
     if (star) star.classList.toggle('d-none', !has);
   }
-  if (bilty) bilty.addEventListener('input', syncTransportReq);
+  if (bilty) {
+    bilty.addEventListener('input', syncTransportReq);
+    bilty.addEventListener('blur', function() { if (this.value) this.value = fmtBiltyNo(this.value); });
+  }
   syncTransportReq();
+  // Next bilty # button
+  const nextBtn = document.getElementById('biltyNextBtn');
+  if (nextBtn) {
+    nextBtn.addEventListener('click', function() {
+      this.disabled = true;
+      fetch('/api/next-bilty-no')
+        .then(r => r.json())
+        .then(d => { if (bilty && d.next) { bilty.value = d.next; syncTransportReq(); } })
+        .catch(() => {})
+        .finally(() => { this.disabled = false; });
+    });
+  }
 });
 </script>
 <%- include('../partials/footer') %>

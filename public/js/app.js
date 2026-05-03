@@ -50,9 +50,14 @@ function onProductChange(sel) {
   const opt = sel.options[sel.selectedIndex];
   // Optimistic fill from <option> dataset (instant)
   if (opt.dataset.packaging) row.querySelector('.packaging-input').value = opt.dataset.packaging;
-  if (opt.dataset.rate) {
+  if (opt.value && opt.dataset.rate !== undefined) {
     const rateInput = row.querySelector('.rate-input');
-    if (rateInput) rateInput.value = parseFloat(opt.dataset.rate).toFixed(2);
+    const curRate   = parseFloat(rateInput && rateInput.value) || 0;
+    const newRate   = parseFloat(opt.dataset.rate) || 0;
+    // Only auto-fill rate when: no user edit AND (field is empty or 0) AND new rate > 0
+    if (rateInput && !rateInput.dataset._userEdited && curRate === 0 && newRate > 0) {
+      rateInput.value = newRate.toFixed(2);
+    }
   }
   if (opt.dataset.commission) {
     const commInput = row.querySelector('.commission-input');

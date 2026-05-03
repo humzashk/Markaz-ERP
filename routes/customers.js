@@ -66,4 +66,36 @@ router.post('/delete/:id', wrap(async (req, res) => {
 
 router.get('/ledger/:id', (req, res) => res.redirect('/ledger/customer/' + req.params.id));
 
+// Bulk update: region, category (party_type), status
+router.post('/bulk', wrap(async (req, res) => {
+  const ids = (req.body.ids || '').split(',')
+    .map(s => parseInt(s.trim(), 10))
+    .filter(n => Number.isFinite(n) && n > 0);
+  if (!ids.length) return res.redirect('/customers?err=' + encodeURIComponent('No customers selected'));
+
+  const sets = [], params = [];
+  if (req.body.region && req.body.region.trim()) {
+    params.push(req.body.region.trim());
+    sets.push(`region=$${params.length}`);
+  }
+  // party_type from form → category column in DB
+  if (req.body.party_type && req.body.party_type.trim()) {
+    params.push(req.body.party_type.trim());
+    sets.push(`category=$${params.length}`);
+  }
+  if (req.body.status && ['active','inactive'].includes(req.body.status)) {
+    params.push(req.body.status);
+    sets.push(`status=$${params.length}::active_status_t`);
+  }
+  if (sets.length) {
+    params.push(ids);
+    await pool.query(
+      `UPDATE customers SET ${sets.join(', ')} WHERE id = ANY($${params.length}::int[])`,
+      params
+    );
+    await addAuditLog('update', 'customers', null, `Bulk updated ${ids.length} customer(s)`);
+  }
+  res.redirect('/customers?ok=' + encodeURIComponent(`${ids.length} customer(s) updated`));
+}));
+
 module.exports = router;

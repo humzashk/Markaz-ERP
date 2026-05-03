@@ -72,4 +72,61 @@ router.get('/bulk', wrap(async (req, res) => {
   res.render('products/bulk', { page: 'products' });
 }));
 
+// Bulk price update (all active or by category)
+router.post('/bulk-price', wrap(async (req, res) => {
+  const { scope, category, field, adj_type, adj_value } = req.body;
+  const val = parseFloat(adj_value);
+  if (!Number.isFinite(val) || val < 0) return res.redirect('/products/bulk?err=' + encodeURIComponent('Invalid adjustment value'));
+  const col = field === 'cost_price' ? 'cost_price' : 'selling_price';
+  let expr;
+  if      (adj_type === 'pct_increase') expr = `${col} * (1 + ${val}/100)`;
+  else if (adj_type === 'pct_decrease') expr = `${col} * (1 - ${val}/100)`;
+  else                                  expr = `${val}`;
+  let sql = `UPDATE products SET ${col} = GREATEST(0, ${expr}) WHERE status='active'`;
+  const params = [];
+  if (scope === 'category' && category && category.trim()) {
+    sql += ` AND category ILIKE $1`;
+    params.push('%' + category.trim() + '%');
+  }
+  const r = await pool.query(sql, params);
+  await addAuditLog('update', 'products', null, `Bulk price ${adj_type} ${val} on ${col}: ${r.rowCount} products`);
+  res.redirect('/products?ok=' + encodeURIComponent(`${r.rowCount} product price(s) updated`));
+}));
+
+// Bulk status / category update
+router.post('/bulk-update', wrap(async (req, res) => {
+  const ids = (req.body.ids || '').split(',').map(s => parseInt(s.trim(), 10)).filter(n => Number.isFinite(n) && n > 0);
+  if (!ids.length) return res.redirect('/products/bulk?err=' + encodeURIComponent('No product IDs provided'));
+  const sets = [], params = [];
+  if (req.body.status && ['active','inactive'].includes(req.body.status)) {
+    params.push(req.body.status); sets.push(`status=$${params.length}`);
+  }
+  if (req.body.category && req.body.category.trim()) {
+    params.push(req.body.category.trim()); sets.push(`category=$${params.length}`);
+  }
+  if (!sets.length) return res.redirect('/products/bulk?err=' + encodeURIComponent('No changes selected'));
+  params.push(ids);
+  const r = await pool.query(`UPDATE products SET ${sets.join(',')} WHERE id=ANY($${params.length}::int[])`, params);
+  await addAuditLog('update', 'products', null, `Bulk updated ${r.rowCount} products`);
+  res.redirect('/products?ok=' + encodeURIComponent(`${r.rowCount} product(s) updated`));
+}));
+
+// Fix NULL / 0 qty_per_pack → 1
+router.post('/bulk-fix-qpp', wrap(async (req, res) => {
+  const r = await pool.query(`UPDATE products SET qty_per_pack=1 WHERE qty_per_pack IS NULL OR qty_per_pack < 1`);
+  await addAuditLog('update', 'products', null, `Bulk fix qty_per_pack: ${r.rowCount} products set to 1`);
+  res.redirect('/products?ok=' + encodeURIComponent(`${r.rowCount} product(s) fixed (qty_per_pack = 1)`));
+}));
+
+// Set specific qty_per_pack for listed IDs
+router.post('/bulk-set-qpp', wrap(async (req, res) => {
+  const ids = (req.body.ids || '').split(',').map(s => parseInt(s.trim(), 10)).filter(n => Number.isFinite(n) && n > 0);
+  const qpp = parseInt(req.body.qty_per_pack, 10);
+  if (!ids.length || !Number.isFinite(qpp) || qpp < 1)
+    return res.redirect('/products/bulk?err=' + encodeURIComponent('Invalid IDs or Pcs/Ctn value'));
+  const r = await pool.query(`UPDATE products SET qty_per_pack=$1 WHERE id=ANY($2::int[])`, [qpp, ids]);
+  await addAuditLog('update', 'products', null, `Bulk set qty_per_pack=${qpp} for ${r.rowCount} products`);
+  res.redirect('/products?ok=' + encodeURIComponent(`${r.rowCount} product(s) updated (Pcs/Ctn = ${qpp})`));
+}));
+
 module.exports = router;

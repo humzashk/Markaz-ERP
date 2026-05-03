@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Purchase Voucher <%= purchase.purchase_no %></title>
+<style>
+@page { size: A5; margin: 6mm; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: Arial, 'Helvetica', sans-serif; font-size:10px; color:#000; background:#fff; line-height:1.35; }
+.page { width:148mm; min-height:0; margin:0 auto; padding:4mm 5mm; display:flex; flex-direction:column; }
+.no-print { text-align:center; padding:10px 0 14px; }
+.no-print button, .no-print a { padding:8px 22px; margin:0 5px; border:1px solid #000; background:#fff; color:#000; cursor:pointer; font-size:13px; text-decoration:none; display:inline-block; font-weight:600; }
+
+.header { display:flex; align-items:center; justify-content:flex-start; gap:16px; border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:10px; }
+.logo-box { width:var(--logo-w,240px); height:var(--logo-h,90px); flex-shrink:0; display:flex; align-items:center; justify-content:center; background:#fff; }
+.logo-box img { max-width:100%; max-height:100%; object-fit:contain; display:block; }
+.company-block { flex:1; text-align:center; }
+.company-name { font-size:24px; font-weight:900; letter-spacing:2px; text-transform:uppercase; }
+.company-tagline { font-size:11px; margin-top:2px; }
+
+.meta-row { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; border:1px solid #000; padding:8px 10px; margin-bottom:8px; gap:12px; }
+.meta-title { text-align:center; font-size:16px; font-weight:800; letter-spacing:2.5px; text-transform:uppercase; white-space:nowrap; }
+.meta-label { font-weight:700; }
+
+.party-row { display:flex; justify-content:space-between; align-items:flex-start; border:1px solid #000; padding:8px 10px; margin-bottom:10px; font-size:12px; }
+.party-name { font-size:14px; font-weight:800; text-transform:uppercase; margin-top:2px; }
+
+table.items { width:100%; border-collapse:collapse; border:1px solid #000; }
+table.items th, table.items td { border:1px solid #000; padding:6px 7px; font-size:11px; }
+table.items th { background:#000; color:#fff; font-weight:700; text-transform:uppercase; letter-spacing:1px; text-align:center; }
+table.items th.desc { text-align:left; }
+.tc { text-align:center; }
+.tr { text-align:right; }
+.fw { font-weight:700; }
+table.items tbody tr.total-row td { background:#000; color:#fff; font-weight:800; font-size:12px; }
+
+.summary { display:flex; justify-content:space-between; align-items:flex-start; margin-top:10px; }
+.summary-left { font-size:12px; line-height:1.8; }
+.summary-tbl { border-collapse:collapse; font-size:12px; border:1px solid #000; min-width:240px; }
+.summary-tbl td { padding:5px 10px; border:1px solid #000; text-align:right; }
+.summary-tbl .label { font-weight:700; text-align:right; }
+.summary-tbl .grand td { background:#000; color:#fff; font-weight:800; font-size:13px; }
+
+.in-words { border:1px solid #000; padding:8px 10px; margin-top:10px; font-size:12px; }
+.in-words .label { font-weight:700; }
+
+.spacer { flex:1; min-height:18mm; }
+.footer { border-top:1px solid #000; padding-top:10px; margin-top:8px; }
+.footer-note { text-align:center; font-size:10px; margin-bottom:20px; font-style:italic; }
+.sig-row { display:flex; justify-content:space-between; align-items:flex-end; }
+.sig-line { border-top:1px solid #000; min-width:160px; padding-top:6px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1px; margin-top:32px; }
+.for-company { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px; }
+
+@media print {
+  html, body { background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; width:148mm; }
+  .no-print { display:none !important; }
+  .page { margin:0; padding:4mm 5mm; width:148mm !important; }
+  .logo-box img { display:block !important; visibility:visible !important; }
+}
+</style>
+</head>
+<body>
+<%
+  var scope    = (purchase && purchase.account_scope) ? purchase.account_scope : 'plastic_markaz';
+  var bizName  = (typeof accountName  === 'function') ? accountName(scope)  : 'PLASTIC MARKAZ';
+  var logoPath = (typeof getLogoPath  === 'function') ? getLogoPath(scope)  : '/Logo.png';
+  var logoMeta = (typeof getLogoMeta  === 'function') ? getLogoMeta(scope)  : { w:240, h:90, align:'center', offsetX:0, offsetY:0 };
+  var bizAddr  = (settings && settings.business_address) || '';
+  var bizCity  = (settings && settings.business_city)    || '';
+  var bizPhone = (settings && settings.business_phone)   || '';
+
+  var fmt    = function(v){ return (v||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); };
+  var fmtQty = function(v){ return (v||0).toLocaleString('en-US'); };
+
+  var grossTotal = items.reduce(function(s,i){ return s + Number(i.amount||0); }, 0);
+  var discount   = Number(purchase.discount || 0);
+  var delivery   = Number(purchase.delivery_charges || 0);
+  var netTotal   = grossTotal - discount + delivery;
+  var totalPkg   = items.reduce(function(s,i){ return s + Number(i.packages||0); }, 0);
+  var purDate    = purchase.purchase_date
+    ? new Date(purchase.purchase_date).toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'})
+    : '';
+
+  function n2w(num) {
+    var ones=['','ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE','TEN','ELEVEN','TWELVE','THIRTEEN','FOURTEEN','FIFTEEN','SIXTEEN','SEVENTEEN','EIGHTEEN','NINETEEN'];
+    var tens=['','','TWENTY','THIRTY','FORTY','FIFTY','SIXTY','SEVENTY','EIGHTY','NINETY'];
+    function w(n){
+      if(n===0)return '';
+      if(n<20)return ones[n]+' ';
+      if(n<100)return tens[Math.floor(n/10)]+(n%10?'-'+ones[n%10]:'')+' ';
+      if(n<1000)return ones[Math.floor(n/100)]+' HUNDRED '+w(n%100);
+      if(n<100000)return w(Math.floor(n/1000))+'THOUSAND '+w(n%1000);
+      if(n<10000000)return w(Math.floor(n/100000))+'LAKH '+w(n%100000);
+      return w(Math.floor(n/10000000))+'CRORE '+w(n%10000000);
+    }
+    var amt=Math.round(num);
+    return amt===0?'ZERO ONLY':w(amt).trim()+' ONLY';
+  }
+%>
+
+<div class="no-print">
+  <button onclick="window.print()">&#128438; Print Purchase</button>
+  <a href="/purchases/view/<%= purchase.id %>">&#8592; Back</a>
+</div>
+
+<div class="page">
+  <div class="header">
+    <% if (logoPath) { %>
+      <div style="width:100%;display:flex;justify-content:<%= logoMeta.align==='left'?'flex-start':logoMeta.align==='right'?'flex-end':'center' %>;align-items:center;">
+        <div class="logo-box" style="--logo-w:<%= logoMeta.w %>px;--logo-h:<%= logoMeta.h %>px;transform:translate(<%= logoMeta.offsetX %>px,<%= logoMeta.offsetY %>px);">
+          <img src="<%= logoPath %>" alt="logo" onerror="this.style.display='none'">
+        </div>
+      </div>
+    <% } else { %>
+      <div class="company-block">
+        <div class="company-name"><%= bizName %></div>
+        <% if (bizAddr || bizPhone) { %>
+        <div class="company-tagline"><%= bizAddr %><% if(bizCity){ %>, <%= bizCity %><% } %><% if(bizPhone){ %> | Tel: <%= bizPhone %><% } %></div>
+        <% } %>
+      </div>
+    <% } %>
+  </div>
+
+  <div class="meta-row">
+    <div><span class="meta-label">Purchase #:</span> <strong><%= purchase.purchase_no %></strong></div>
+    <div class="meta-title">Purchase Voucher</div>
+    <div style="text-align:right;"><span class="meta-label">Date:</span> <strong><%= purDate %></strong></div>
+  </div>
+
+  <div class="party-row">
+    <div>
+      <span style="font-size:11px;">Vendor:</span>
+      <div class="party-name"><%= purchase.vendor_name %></div>
+      <% if (purchase.vendor_phone) { %><div style="font-size:11px;">Tel: <%= purchase.vendor_phone %></div><% } %>
+      <% if (purchase.vendor_address) { %><div style="font-size:11px;">Addr: <%= purchase.vendor_address %></div><% } %>
+      <% if (purchase.vendor_ntn) { %><div style="font-size:11px;">NTN: <%= purchase.vendor_ntn %></div><% } %>
+    </div>
+    <div style="text-align:right;">
+      <% if (purchase.bilty_no) { %><div><strong>Bilty:</strong> <%= purchase.bilty_no %></div><% } %>
+      <div><strong>Status:</strong> <%= purchase.status || '-' %></div>
+    </div>
+  </div>
+
+  <table class="items">
+    <thead>
+      <tr>
+        <th style="width:4%">#</th>
+        <th class="desc" style="width:36%">Item Name</th>
+        <th style="width:8%">Pkg</th>
+        <th style="width:9%">Pcs/Ctn</th>
+        <th style="width:11%">Qty</th>
+        <th style="width:9%">Rate</th>
+        <th style="width:23%">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% items.forEach(function(item, i) { %>
+      <tr>
+        <td class="tc"><%= i+1 %></td>
+        <td class="fw"><%= item.product_name %></td>
+        <td class="tc"><%= item.packages || 0 %></td>
+        <td class="tc"><%= item.packaging || 1 %></td>
+        <td class="tc fw"><%= fmtQty(item.quantity) %> <span style="font-size:9px;font-weight:normal;"><%= item.unit || 'PCS' %></span></td>
+        <td class="tr"><%= fmt(item.rate) %></td>
+        <td class="tr fw"><%= fmt(Number(item.amount)||0) %></td>
+      </tr>
+      <% }); %>
+      <% for(var r = items.length; r < 5; r++) { %>
+      <tr style="height:22px;"><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+      <% } %>
+      <tr class="total-row">
+        <td colspan="2" class="tr" style="padding-right:14px;">TOTAL</td>
+        <td class="tc"><%= fmtQty(totalPkg) %></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="tr"><%= fmt(grossTotal) %></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="summary">
+    <div class="summary-left">
+      <strong>Total Items:</strong> <%= items.length %><br>
+      <strong>Total Packages:</strong> <%= fmtQty(totalPkg) %>
+    </div>
+    <table class="summary-tbl">
+      <tr><td class="label">Gross Total:</td><td class="fw"><%= fmt(grossTotal) %></td></tr>
+      <% if (discount > 0) { %><tr><td class="label">Less: Discount:</td><td>(<%= fmt(discount) %>)</td></tr><% } %>
+      <% if (delivery > 0) { %><tr><td class="label">Add: Delivery:</td><td><%= fmt(delivery) %></td></tr><% } %>
+      <tr class="grand"><td class="label">Net Total (Rs.):</td><td><%= fmt(netTotal) %></td></tr>
+    </table>
+  </div>
+
+  <div class="in-words">
+    <span class="label">In Words:</span> <strong><%= n2w(netTotal) %></strong>
+  </div>
+
+  <div class="spacer"></div>
+
+  <div class="footer">
+    <div class="footer-note">Subject to verification of goods | This is a system-generated voucher</div>
+    <div class="sig-row">
+      <div><div class="sig-line">Received By</div></div>
+      <div style="text-align:right;">
+        <div class="for-company">For: <%= bizName %></div>
+        <div class="sig-line" style="margin-left:auto;">Authorized Signature</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>window.onload = function(){ if(!window.location.search.includes('noprint')) window.print(); };</script>
+</body>
+</html>

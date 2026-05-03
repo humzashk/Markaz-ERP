@@ -20,7 +20,7 @@ router.get('/', wrap(async (req, res) => {
 router.get('/add', wrap(async (req, res) => {
   const [vendors, products, warehouses, transports] = await Promise.all([
     pool.query(`SELECT id, name FROM vendors WHERE status='active' ORDER BY name`),
-    pool.query(`SELECT id, name, qty_per_pack, cost_price, stock FROM products WHERE status='active' ORDER BY name`),
+    pool.query(`SELECT id, name, qty_per_pack, cost_price AS rate, cost_price AS selling_price, stock, default_commission_rate FROM products WHERE status='active' ORDER BY name`),
     pool.query(`SELECT id, name FROM warehouses WHERE status='active' ORDER BY name`),
     pool.query(`SELECT id, name FROM transports WHERE status='active' ORDER BY name`)
   ]);
@@ -74,7 +74,7 @@ router.get('/edit/:id', wrap(async (req, res) => {
   const [items, vendors, products, warehouses, transports] = await Promise.all([
     pool.query(`SELECT pi.*, pr.name AS product_name FROM purchase_items pi JOIN products pr ON pr.id=pi.product_id WHERE pi.purchase_id=$1`, [id]),
     pool.query(`SELECT id, name FROM vendors WHERE status='active' ORDER BY name`),
-    pool.query(`SELECT id, name, qty_per_pack, cost_price, stock FROM products WHERE status='active' ORDER BY name`),
+    pool.query(`SELECT id, name, qty_per_pack, cost_price AS rate, cost_price AS selling_price, stock, default_commission_rate FROM products WHERE status='active' ORDER BY name`),
     pool.query(`SELECT id, name FROM warehouses WHERE status='active' ORDER BY name`),
     pool.query(`SELECT id, name FROM transports WHERE status='active' ORDER BY name`)
   ]);
@@ -142,6 +142,20 @@ router.get('/view/:id', wrap(async (req, res) => {
   if (!purchase) return res.redirect('/purchases');
   const items = (await pool.query(`SELECT pi.*, pr.name AS product_name FROM purchase_items pi JOIN products pr ON pr.id=pi.product_id WHERE pi.purchase_id=$1`, [id])).rows;
   res.render('purchases/view', { page:'purchases', purchase, items });
+}));
+
+router.get('/print/:id', wrap(async (req, res) => {
+  const id = toInt(req.params.id);
+  const purchase = (await pool.query(`
+    SELECT p.*, v.name AS vendor_name, v.phone AS vendor_phone,
+           v.address AS vendor_address, v.city AS vendor_city, v.ntn AS vendor_ntn
+    FROM purchases p JOIN vendors v ON v.id=p.vendor_id WHERE p.id=$1`, [id])).rows[0];
+  if (!purchase) return res.status(404).send('Purchase not found');
+  const items = (await pool.query(`SELECT pi.*, pr.name AS product_name, pr.unit FROM purchase_items pi JOIN products pr ON pr.id=pi.product_id WHERE pi.purchase_id=$1`, [id])).rows;
+  res.render('purchases/print', {
+    page:'purchases', purchase, items,
+    settings: res.locals.appSettings || {}, layout: false
+  });
 }));
 
 module.exports = router;

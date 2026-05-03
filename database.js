@@ -102,10 +102,31 @@ async function applyStockMovement(client, productId, warehouseId, qtyDelta, refT
   }
 }
 async function reverseStockForRef(client, refType, refId) {
-  const rows = await client.many(`SELECT product_id, warehouse_id, qty_delta FROM stock_ledger WHERE ref_type=$1 AND ref_id=$2`, [refType, refId]);
+  // Get all stock movements for this reference to reverse them
+  const rows = await client.many(`SELECT product_id, warehouse_id, qty_delta FROM stock_ledger WHERE ref_type=$1 AND ref_id=$2 AND reason != 'reverse'`, [refType, refId]);
+
+  // Reverse the stock impacts (inverse the deltas)
   for (const r of rows) {
-    await applyStockMovement(client, r.product_id, r.warehouse_id, -r.qty_delta, refType, refId, 'reverse', 'auto-reverse');
+    const delta = -r.qty_delta;  // Negate to reverse
+    const pid = toInt(r.product_id);
+    const wid = toInt(r.warehouse_id, null);
+
+    // Update products stock
+    await client.run(`UPDATE products SET stock = stock + $1 WHERE id = $2`, [delta, pid]);
+
+    // Update warehouse stock if applicable
+    if (wid) {
+      await client.run(`
+        INSERT INTO warehouse_stock(warehouse_id, product_id, quantity)
+        VALUES ($1,$2,$3)
+        ON CONFLICT (warehouse_id, product_id)
+          DO UPDATE SET quantity = warehouse_stock.quantity + EXCLUDED.quantity
+      `, [wid, pid, delta]);
+    }
   }
+
+  // Delete the original entries instead of creating counter-entries to prevent ledger bloat
+  await client.run(`DELETE FROM stock_ledger WHERE ref_type=$1 AND ref_id=$2 AND reason != 'reverse'`, [refType, refId]);
 }
 // Sum current stock from ledger (single source of truth)
 async function stockOnHand(client, productId, warehouseId) {

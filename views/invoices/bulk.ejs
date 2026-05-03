@@ -1,0 +1,83 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+  <h2><i class="bi bi-file-earmark-check"></i> Bulk Invoice Actions</h2>
+  <a href="/invoices" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back to Invoices</a>
+</div>
+
+<%- include('../partials/form-error') %>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">Bulk Status Update</div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">Enter comma-separated Invoice IDs, or use the filter below to find invoices and paste their IDs.</p>
+        <form method="POST" action="/invoices/bulk">
+          <div class="mb-3">
+            <label class="form-label fw-bold">Invoice IDs <span class="text-danger">*</span></label>
+            <input type="text" name="ids" class="form-control" placeholder="e.g. 1,2,3,15,22" required>
+            <div class="form-text">Comma-separated invoice IDs from the invoices list.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-bold">Action <span class="text-danger">*</span></label>
+            <select name="action" class="form-select" required>
+              <option value="">— Select Action —</option>
+              <option value="mark_paid">Mark as Paid (sets paid = total)</option>
+              <option value="mark_unpaid">Mark as Unpaid</option>
+              <option value="mark_cancelled">Mark as Cancelled</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-check2-all"></i> Apply to Selected</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">Quick Lookup</div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">Search invoices to find their IDs, then paste into the form above.</p>
+        <div class="mb-3">
+          <input type="text" id="quickSearch" class="form-control" placeholder="Customer name or invoice #...">
+        </div>
+        <div id="quickResults" class="list-group" style="max-height:300px;overflow-y:auto;"></div>
+        <div class="mt-2">
+          <strong>Collected IDs:</strong>
+          <span id="collectedIds" class="text-primary">—</span>
+          <button type="button" class="btn btn-sm btn-outline-secondary ms-2" onclick="copyIds()">Copy</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const selected = new Set();
+let debounce;
+document.getElementById('quickSearch').addEventListener('input', function() {
+  clearTimeout(debounce);
+  const q = this.value.trim();
+  if (q.length < 2) { document.getElementById('quickResults').innerHTML = ''; return; }
+  debounce = setTimeout(() => {
+    fetch('/invoices?search=' + encodeURIComponent(q) + '&_json=1')
+      .catch(() => null);
+    // fallback: just show message to use the invoices page
+    document.getElementById('quickResults').innerHTML =
+      '<div class="list-group-item text-muted small">Use <a href="/invoices?search=' + encodeURIComponent(q) + '" target="_blank">Invoices page</a> to find IDs, then paste above.</div>';
+  }, 400);
+});
+function toggleId(id) {
+  if (selected.has(id)) selected.delete(id);
+  else selected.add(id);
+  document.getElementById('collectedIds').textContent = selected.size ? [...selected].join(', ') : '—';
+}
+function copyIds() {
+  const txt = [...selected].join(', ');
+  if (!txt) return;
+  navigator.clipboard.writeText(txt).then(() => alert('IDs copied: ' + txt)).catch(() => {
+    document.querySelector('input[name="ids"]') && (document.querySelector('input[name="ids"]').value = txt);
+  });
+}
+</script>
+<%- include('../partials/footer') %>

@@ -11,7 +11,7 @@
         <% if (noteType === 'credit') { %>
         <div class="col-md-4">
           <label class="form-label fw-semibold">Customer *</label>
-          <select name="customer_id" class="form-select" required>
+          <select name="customer_id" id="customer_sel" class="form-select" required onchange="onCustomerChange(this.value)">
             <option value="">— Select Customer —</option>
             <% customers.forEach(c => { %>
             <option value="<%= c.id %>"><%= c.name %></option>
@@ -20,18 +20,18 @@
         </div>
         <div class="col-md-4">
           <label class="form-label fw-semibold">Against Invoice *</label>
-          <select name="invoice_id" id="invoice_search" class="form-select" required>
-            <option value="">— Search by Inv# —</option>
+          <select name="invoice_id" id="invoice_search" class="form-select" required onchange="loadReferenceItems('invoice', this.value)">
+            <option value="">— Select customer first —</option>
             <% invoices.forEach(inv => { %>
             <option value="<%= inv.id %>" data-customer="<%= inv.customer_id || '' %>"><%= inv.invoice_no %> — <%= inv.customer_name %></option>
             <% }) %>
           </select>
-          <input type="text" id="invoice_filter" class="form-control form-control-sm mt-1" placeholder="Filter invoices by # or customer..." oninput="filterInvoices()">
+          <small class="text-muted">Select a customer to filter invoices.</small>
         </div>
         <% } else { %>
         <div class="col-md-4">
           <label class="form-label fw-semibold">Vendor *</label>
-          <select name="vendor_id" class="form-select" required>
+          <select name="vendor_id" id="vendor_sel" class="form-select" required onchange="onVendorChange(this.value)">
             <option value="">— Select Vendor —</option>
             <% vendors.forEach(v => { %>
             <option value="<%= v.id %>"><%= v.name %></option>
@@ -40,13 +40,13 @@
         </div>
         <div class="col-md-4">
           <label class="form-label fw-semibold">Against Purchase *</label>
-          <select name="purchase_id" id="purchase_search" class="form-select" required>
-            <option value="">— Search by Purchase# —</option>
+          <select name="purchase_id" id="purchase_search" class="form-select" required onchange="loadReferenceItems('purchase', this.value)">
+            <option value="">— Select vendor first —</option>
             <% purchases.forEach(p => { %>
-            <option value="<%= p.id %>"><%= p.purchase_no %> — <%= p.vendor_name %></option>
+            <option value="<%= p.id %>" data-vendor="<%= p.vendor_id || '' %>"><%= p.purchase_no %> — <%= p.vendor_name %></option>
             <% }) %>
           </select>
-          <input type="text" id="purchase_filter" class="form-control form-control-sm mt-1" placeholder="Filter purchases by # or vendor..." oninput="filterPurchases()">
+          <small class="text-muted">Select a vendor to filter purchases.</small>
         </div>
         <% } %>
         <div class="col-md-4">
@@ -102,52 +102,133 @@
 </div>
 
 <script>
-const products = <%- JSON.stringify(products) %>;
+// All products (fallback when no invoice/purchase selected)
+// Note: Using JSON.stringify(JSON.stringify(...)) to safely output JSON in script context
+const _allProducts = JSON.parse(<%= JSON.stringify(JSON.stringify(products)) %>);
+// Currently filtered products (from selected invoice or purchase)
+let _activeProducts = _allProducts;
+
+function _buildOpts(prods) {
+  return '<option value="">— Select —</option>' +
+    prods.map(p => `<option value="${p.product_id || p.id}" data-rate="${p.rate||0}" data-max="${p.max_qty||''}">${p.name}${p.max_qty ? ' (max: '+p.max_qty+')' : ''}</option>`).join('');
+}
+
+function _refreshAllSelects() {
+  const opts = _buildOpts(_activeProducts);
+  document.querySelectorAll('select[name="product_id[]"]').forEach(sel => {
+    const prev = sel.value;
+    sel.innerHTML = opts;
+    sel.value = prev; // try to restore selection
+  });
+}
+
+// Fetch items for a reference document and restrict product dropdown
+function loadReferenceItems(docType, docId) {
+  if (!docId) { _activeProducts = _allProducts; _refreshAllSelects(); return; }
+  const qs = docType === 'invoice'
+    ? `invoice_id=${docId}`
+    : `purchase_id=${docId}`;
+  fetch(`/creditnotes/api/items?${qs}`)
+    .then(r => r.json())
+    .then(items => {
+      if (!items || !items.length) {
+        // No items found — fall back to all products but warn
+        _activeProducts = _allProducts;
+        console.warn('No items found for this document; showing all products.');
+      } else {
+        _activeProducts = items;
+      }
+      _refreshAllSelects();
+    })
+    .catch(() => { _activeProducts = _allProducts; _refreshAllSelects(); });
+}
+
+// ── Customer → Invoice filtering ─────────────────────────────────────────────
+function onCustomerChange(customerId) {
+  const invSel = document.getElementById('invoice_search');
+  if (!invSel) return;
+  Array.from(invSel.options).forEach(o => {
+    if (!o.value) return; // keep placeholder
+    o.hidden = customerId ? (o.dataset.customer !== String(customerId)) : false;
+  });
+  // Reset if current selection is now hidden
+  const cur = invSel.options[invSel.selectedIndex];
+  if (cur && cur.hidden) {
+    invSel.value = '';
+    loadReferenceItems('invoice', '');
+  }
+}
+
+// ── Vendor → Purchase filtering ───────────────────────────────────────────────
+function onVendorChange(vendorId) {
+  const purSel = document.getElementById('purchase_search');
+  if (!purSel) return;
+  Array.from(purSel.options).forEach(o => {
+    if (!o.value) return;
+    o.hidden = vendorId ? (o.dataset.vendor !== String(vendorId)) : false;
+  });
+  const cur = purSel.options[purSel.selectedIndex];
+  if (cur && cur.hidden) {
+    purSel.value = '';
+    loadReferenceItems('purchase', '');
+  }
+}
+
+// ── Wire up on page load ──────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const custSel = document.getElementById('customer_sel');
+  const vendSel = document.getElementById('vendor_sel');
+  const invSel  = document.getElementById('invoice_search');
+  const purSel  = document.getElementById('purchase_search');
+
+  // Apply initial filters if values already set (e.g. form re-render after error)
+  if (custSel && custSel.value) onCustomerChange(custSel.value);
+  if (vendSel && vendSel.value) onVendorChange(vendSel.value);
+  if (invSel  && invSel.value)  loadReferenceItems('invoice',  invSel.value);
+  if (purSel  && purSel.value)  loadReferenceItems('purchase', purSel.value);
+});
+
 function calcRow(el) {
   const row = el.closest('tr');
   const sel = row.querySelector('select[name="product_id[]"]');
   const rateInput = row.querySelector('input[name="rate[]"]');
-  const qty = parseFloat(row.querySelector('input[name="quantity[]"]').value) || 0;
-  // Auto-populate sell rate when product changes (or rate empty). User can override.
+  const qtyInput  = row.querySelector('input[name="quantity[]"]');
+  const qty = parseFloat(qtyInput.value) || 0;
+  // Auto-populate rate when product changes (or rate empty). User can override.
   if (el === sel || !rateInput.value) {
     const opt = sel.options[sel.selectedIndex];
     const autoRate = opt ? (parseFloat(opt.dataset.rate) || 0) : 0;
     if (autoRate > 0) rateInput.value = autoRate;
   }
+  // Warn if quantity exceeds max from reference doc
+  const opt = sel.options[sel.selectedIndex];
+  const maxQty = opt ? parseInt(opt.dataset.max || '', 10) : NaN;
+  if (!isNaN(maxQty) && qty > maxQty) {
+    qtyInput.classList.add('is-invalid');
+    qtyInput.title = `Max returnable: ${maxQty}`;
+  } else {
+    qtyInput.classList.remove('is-invalid');
+    qtyInput.title = '';
+  }
   const rate = parseFloat(rateInput.value) || 0;
   row.querySelector('input[name="amount[]"]').value = (qty * rate).toFixed(2);
   calcTotal();
 }
+
 function calcTotal() {
   let t = 0;
   document.querySelectorAll('input[name="amount[]"]').forEach(i => t += parseFloat(i.value)||0);
   document.getElementById('grandTotal').textContent = 'Rs. ' + t.toLocaleString('en-PK', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
-function filterInvoices() {
-  const q = (document.getElementById('invoice_filter').value || '').toLowerCase();
-  const sel = document.getElementById('invoice_search');
-  if (!sel) return;
-  Array.from(sel.options).forEach(o => {
-    if (!o.value) return;
-    o.hidden = q && !o.text.toLowerCase().includes(q);
-  });
-}
-function filterPurchases() {
-  const q = (document.getElementById('purchase_filter').value || '').toLowerCase();
-  const sel = document.getElementById('purchase_search');
-  if (!sel) return;
-  Array.from(sel.options).forEach(o => {
-    if (!o.value) return;
-    o.hidden = q && !o.text.toLowerCase().includes(q);
-  });
-}
+
+
 function addItemRow() {
-  const opts = products.map(p => `<option value="${p.id}" data-rate="${p.rate}">${p.name}</option>`).join('');
+  const opts = _buildOpts(_activeProducts);
   const row = document.createElement('tr');
   row.innerHTML = `
-    <td><select name="product_id[]" class="form-select form-select-sm" onchange="calcRow(this)"><option value="">— Select —</option>${opts}</select></td>
-    <td><input type="number" name="quantity[]" class="form-control form-control-sm" min="1" onchange="calcRow(this)"></td>
-    <td><input type="number" name="rate[]" class="form-control form-control-sm" step="0.01" onchange="calcRow(this)"></td>
+    <td><select name="product_id[]" class="form-select form-select-sm" onchange="calcRow(this)">${opts}</select></td>
+    <td><input type="number" name="quantity[]" class="form-control form-control-sm" min="1" oninput="calcRow(this)"></td>
+    <td><input type="number" name="rate[]" class="form-control form-control-sm" step="0.01" oninput="calcRow(this)"></td>
     <td><input type="number" name="amount[]" class="form-control form-control-sm" readonly></td>
     <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove();calcTotal()"><i class="bi bi-trash"></i></button></td>
   `;

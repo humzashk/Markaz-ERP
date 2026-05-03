@@ -63,7 +63,7 @@ router.post('/save', wrap(async (req, res) => {
     const qtyPerPack  = Math.max(1, parseInt(row.qty_per_pack, 10) || 1);
     const productName = (row.product_name || '').trim();
 
-    if (!productId || (ctn === 0 && pcs === 0)) continue;
+    if (!productId || row._sel !== '1' || (ctn === 0 && pcs === 0)) continue;
     active.push({ productId, warehouseId, ctn, pcs, qtyPerPack, productName });
   }
 

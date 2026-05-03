@@ -53,16 +53,22 @@
                 <span class="badge bg-success">Inbound</span>
               <% } %>
             </td>
-            <td class="text-end fw-bold"><%= m.quantity.toLocaleString() %></td>
+            <td class="text-end fw-bold"><%= (Number(m.quantity)||0).toLocaleString() %></td>
             <td>
-              <% if (m.doc_type === 'Order') { %>
+              <% if (m.doc_type === 'Invoice' && m.invoice_id) { %>
+                <a href="/invoices/view/<%= m.invoice_id %>" class="btn btn-sm btn-outline-primary">
+                  <i class="bi bi-eye"></i> <%= m.reference_number %>
+                </a>
+              <% } else if (m.doc_type === 'Order' && m.order_id) { %>
                 <a href="/orders/view/<%= m.order_id %>" class="btn btn-sm btn-outline-info">
                   <i class="bi bi-eye"></i> <%= m.reference_number %>
                 </a>
-              <% } else if (m.doc_type === 'Purchase') { %>
+              <% } else if (m.doc_type === 'Purchase' && m.purchase_id) { %>
                 <a href="/purchases/view/<%= m.purchase_id %>" class="btn btn-sm btn-outline-info">
                   <i class="bi bi-eye"></i> <%= m.reference_number %>
                 </a>
+              <% } else { %>
+                <span class="text-muted small"><%= m.doc_type %> · <%= m.reference_number %></span>
               <% } %>
             </td>
           </tr>
@@ -87,8 +93,8 @@
 <div class="mt-3 text-muted small">
   <p><strong>Legend:</strong></p>
   <ul class="mb-0">
-    <li><span class="badge bg-danger">Outbound</span> - Products sold to customers (Orders)</li>
-    <li><span class="badge bg-success">Inbound</span> - Products received from vendors (Invoices)</li>
+    <li><span class="badge bg-danger">Outbound</span> — Stock leaving (sales to customers, transfers out, damage)</li>
+    <li><span class="badge bg-success">Inbound</span> — Stock entering (purchases from vendors, returns, transfers in)</li>
   </ul>
 </div>
 

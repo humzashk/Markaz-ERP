@@ -8,6 +8,13 @@ const { validate, schemas } = require('../middleware/validate');
 // Orders DO NOT touch stock or ledger. They are draft sale agreements.
 // Stock + ledger are committed when an invoice is generated.
 
+// Helper: normalise bilty_no ("42" or "BLT42" → "BLT-0042")
+function _normBilty(s) {
+  if (!s) return s;
+  const m = s.match(/^(?:BLT-?)?(\d+)$/i);
+  return m ? 'BLT-' + String(parseInt(m[1], 10)).padStart(4, '0') : s.toUpperCase();
+}
+
 router.get('/', wrap(async (req, res) => {
   const search = req.query.search || '';
   const params = []; let i = 1;
@@ -69,6 +76,7 @@ router.get('/api/stock/:product_id', wrap(async (req, res) => {
 
 router.post('/add', validate(schemas.orderCreate), wrap(async (req, res) => {
   const v = req.valid;
+  if (v.bilty_no) v.bilty_no = _normBilty(v.bilty_no);
   const items = v._items || [];
   if (!items.length) return res.redirect('/orders/add?err=no_items');
 
@@ -122,7 +130,9 @@ router.get('/edit/:id', wrap(async (req, res) => {
 
 router.post('/edit/:id', validate(schemas.orderCreate), wrap(async (req, res) => {
   const id = toInt(req.params.id);
-  const v = req.valid; const items = v._items || [];
+  const v = req.valid;
+  if (v.bilty_no) v.bilty_no = _normBilty(v.bilty_no);
+  const items = v._items || [];
   if (!items.length) return res.redirect('/orders/edit/' + id + '?err=no_items');
   let subtotal=0, totalComm=0;
   for (const it of items) {
@@ -197,6 +207,21 @@ router.post('/delete/:id', wrap(async (req, res) => {
   });
   await addAuditLog('delete','orders', id, 'Deleted');
   res.redirect('/orders');
+}));
+
+// Generate invoice from single order
+router.get('/generate-invoice/:id', wrap(async (req, res) => {
+  const id = toInt(req.params.id);
+  const order = (await pool.query(`SELECT * FROM orders WHERE id=$1`, [id])).rows[0];
+  if (!order) return res.redirect('/orders');
+  res.redirect(`/invoices/from-orders?customer_id=${order.customer_id}&from_orders=${id}`);
+}));
+
+router.post('/generate-invoice/:id', wrap(async (req, res) => {
+  const id = toInt(req.params.id);
+  const order = (await pool.query(`SELECT customer_id FROM orders WHERE id=$1`, [id])).rows[0];
+  if (!order) return res.redirect('/orders');
+  res.redirect(`/invoices/from-orders?customer_id=${order.customer_id}&from_orders=${id}`);
 }));
 
 module.exports = router;

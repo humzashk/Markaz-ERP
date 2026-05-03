@@ -307,14 +307,46 @@ router.get('/bilty-report', wrap(async (req, res) => {
 
 router.get('/transactions', wrap(async (req, res) => {
   const from = req.query.from || monthStart(), to = req.query.to || today();
-  const scope = (req.query.scope || '').replace(/[^a-z_]/g, '');
-  const sf = scope ? ` AND account_scope = '${scope}'` : '';
-  const orders   = (await pool.query(`SELECT 'order' AS type, o.id AS ref_id, o.order_no AS ref, o.order_date AS date, COALESCE(c.name,'-') AS party, o.total AS amount, o.account_scope FROM orders o LEFT JOIN customers c ON c.id=o.customer_id WHERE o.order_date BETWEEN $1 AND $2 ${sf}`, [from, to])).rows;
-  const invoices = (await pool.query(`SELECT 'invoice' AS type, i.id AS ref_id, i.invoice_no AS ref, i.invoice_date AS date, COALESCE(c.name,'-') AS party, i.total AS amount, i.account_scope FROM invoices i LEFT JOIN customers c ON c.id=i.customer_id WHERE i.invoice_date BETWEEN $1 AND $2 ${sf}`, [from, to])).rows;
-  const purchases= (await pool.query(`SELECT 'purchase' AS type, p.id AS ref_id, p.purchase_no AS ref, p.purchase_date AS date, COALESCE(v.name,'-') AS party, p.total AS amount, p.account_scope FROM purchases p LEFT JOIN vendors v ON v.id=p.vendor_id WHERE p.purchase_date BETWEEN $1 AND $2 ${sf}`, [from, to])).rows;
-  const payments = (await pool.query(`SELECT 'payment' AS type, p.id AS ref_id, ('PMT-'||p.id) AS ref, p.payment_date AS date, CASE WHEN p.entity_type='customer' THEN c.name ELSE v.name END AS party, p.amount, p.account_scope FROM payments p LEFT JOIN customers c ON p.entity_type='customer' AND c.id=p.entity_id LEFT JOIN vendors v ON p.entity_type='vendor' AND v.id=p.entity_id WHERE p.payment_date BETWEEN $1 AND $2 ${sf}`, [from, to])).rows;
+  const scope = req.query.scope || '';
+
+  // Validate scope against known enum values
+  const validScopes = ['plastic_markaz', 'wings_furniture', 'cooler'];
+  const scopeFilter = validScopes.includes(scope) ? scope : '';
+
+  // Helper to build WHERE clause with optional scope filter
+  const buildQuery = (baseQuery, scopeField) => {
+    if (scopeFilter) {
+      return baseQuery + ` AND ${scopeField}=$3`;
+    }
+    return baseQuery;
+  };
+
+  // Build queries with or without scope parameter
+  const params = [from, to];
+  if (scopeFilter) params.push(scopeFilter);
+
+  const orders   = (await pool.query(
+    buildQuery(`SELECT 'order' AS type, o.id AS ref_id, o.order_no AS ref, o.order_date AS date, COALESCE(c.name,'-') AS party, o.total AS amount, o.account_scope FROM orders o LEFT JOIN customers c ON c.id=o.customer_id WHERE o.order_date BETWEEN $1 AND $2`, 'o.account_scope'),
+    params
+  )).rows;
+
+  const invoices = (await pool.query(
+    buildQuery(`SELECT 'invoice' AS type, i.id AS ref_id, i.invoice_no AS ref, i.invoice_date AS date, COALESCE(c.name,'-') AS party, i.total AS amount, i.account_scope FROM invoices i LEFT JOIN customers c ON c.id=i.customer_id WHERE i.invoice_date BETWEEN $1 AND $2`, 'i.account_scope'),
+    params
+  )).rows;
+
+  const purchases = (await pool.query(
+    buildQuery(`SELECT 'purchase' AS type, p.id AS ref_id, p.purchase_no AS ref, p.purchase_date AS date, COALESCE(v.name,'-') AS party, p.total AS amount, p.account_scope FROM purchases p LEFT JOIN vendors v ON v.id=p.vendor_id WHERE p.purchase_date BETWEEN $1 AND $2`, 'p.account_scope'),
+    params
+  )).rows;
+
+  const payments = (await pool.query(
+    buildQuery(`SELECT 'payment' AS type, p.id AS ref_id, ('PMT-'||p.id) AS ref, p.payment_date AS date, CASE WHEN p.entity_type='customer' THEN c.name ELSE v.name END AS party, p.amount, p.account_scope FROM payments p LEFT JOIN customers c ON p.entity_type='customer' AND c.id=p.entity_id LEFT JOIN vendors v ON p.entity_type='vendor' AND v.id=p.entity_id WHERE p.payment_date BETWEEN $1 AND $2`, 'p.account_scope'),
+    params
+  )).rows;
+
   const all = [...orders, ...invoices, ...purchases, ...payments].sort((a,b) => (a.date > b.date ? -1 : 1));
-  res.render('reports/transactions', { page:'reports', from, to, scope, all });
+  res.render('reports/transactions', { page:'reports', from, to, scope: scopeFilter, all });
 }));
 
 module.exports = router;

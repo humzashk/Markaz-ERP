@@ -242,7 +242,7 @@ const schemas = {
         packaging:['posInt', { max:1e6 }]
       }
     },
-    validate: (v) => {
+    validate: async (v) => {
       const items = v._items || [];
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
@@ -253,6 +253,7 @@ const schemas = {
         if (pkg > 0 && pkging > 0 && qty > 0 && pkg * pkging !== qty)
           return `Line ${i+1}: ${pkg} CTN × ${pkging} Pcs/Ctn = ${pkg*pkging} but Quantity entered is ${qty} — they must match`;
       }
+      return _checkQpp(items);
     }
   },
   paymentCreate: {
@@ -287,9 +288,21 @@ const schemas = {
         quantity:['posInt', { max:1e7 }], rate:['nonNegNum', { max:1e9 }]
       }
     },
-    validate: (v) => {
+    validate: async (v) => {
       if (v.note_type==='credit' && (!v.customer_id || !v.invoice_id))  return 'Credit note requires customer + invoice';
       if (v.note_type==='debit'  && (!v.vendor_id   || !v.purchase_id)) return 'Debit note requires vendor + purchase';
+      // Enforce invoice belongs to customer
+      if (v.note_type==='credit' && v.invoice_id && v.customer_id) {
+        const r = await pool.query(`SELECT customer_id FROM invoices WHERE id=$1`, [v.invoice_id]);
+        if (!r.rows[0] || String(r.rows[0].customer_id) !== String(v.customer_id))
+          return 'The selected invoice does not belong to this customer';
+      }
+      // Enforce purchase belongs to vendor
+      if (v.note_type==='debit' && v.purchase_id && v.vendor_id) {
+        const r = await pool.query(`SELECT vendor_id FROM purchases WHERE id=$1`, [v.purchase_id]);
+        if (!r.rows[0] || String(r.rows[0].vendor_id) !== String(v.vendor_id))
+          return 'The selected purchase does not belong to this vendor';
+      }
     }
   },
   productCreate: {
@@ -304,6 +317,10 @@ const schemas = {
       min_stock:['nonNegInt',{max:1e9}],
       status:['oneOf',{choices:['active','inactive']}],
       item_id:['str',{max:50}]
+    },
+    validate: (v) => {
+      if (v.qty_per_pack != null && v.qty_per_pack < 1)
+        return 'Pcs/Ctn (qty_per_pack) must be ≥ 1. Cannot save product with zero or missing Pcs/Ctn.';
     }
   },
   customerCreate: {

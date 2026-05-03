@@ -1,7 +1,7 @@
 'use strict';
 const express = require('express');
 const router = express.Router();
-const { pool, tx, applyStockMovement, addAuditLog, toInt } = require('../database');
+const { pool, tx, applyStockMovement, reverseStockForRef, addAuditLog, toInt } = require('../database');
 const { wrap } = require('../middleware/errorHandler');
 const { validate, schemas } = require('../middleware/validate');
 
@@ -42,6 +42,72 @@ router.post('/add', validate(schemas.stockAdjust), wrap(async (req, res) => {
   res.redirect('/stock');
 }));
 
+router.get('/edit/:id', wrap(async (req, res) => {
+  const id = toInt(req.params.id);
+  const adj = (await pool.query(`
+    SELECT sa.*, p.name AS product_name, w.name AS warehouse_name
+    FROM stock_adjustments sa
+    JOIN products p ON p.id = sa.product_id
+    LEFT JOIN warehouses w ON w.id = sa.warehouse_id
+    WHERE sa.id = $1`, [id])).rows[0];
+  if (!adj) return res.redirect('/stock');
+  // Normalise adj_date to YYYY-MM-DD string for <input type="date">
+  if (adj.adj_date) adj.adj_date = new Date(adj.adj_date).toISOString().split('T')[0];
+  const products   = (await pool.query(`SELECT id, name, unit, stock FROM products WHERE status='active' ORDER BY name`)).rows;
+  const warehouses = (await pool.query(`SELECT id, name FROM warehouses WHERE status='active' ORDER BY name`)).rows;
+  res.render('stock/edit', { page:'stock', adj, products, warehouses });
+}));
+
+router.post('/edit/:id', validate(schemas.stockAdjust), wrap(async (req, res) => {
+  const id = toInt(req.params.id);
+  const v  = req.valid;
+  await tx(async (db) => {
+    const existing = await db.one(`SELECT * FROM stock_adjustments WHERE id=$1`, [id]);
+    if (!existing) throw new Error('Adjustment not found');
+    // Reverse the old stock movement then re-apply with new values
+    await reverseStockForRef(db, 'stock_adjustment', id);
+    await db.run(`
+      UPDATE stock_adjustments
+      SET product_id=$1, warehouse_id=$2, adjustment_type=$3, quantity=$4,
+          reason=$5, reference=$6, adj_date=$7, notes=$8
+      WHERE id=$9`,
+      [v.product_id, v.warehouse_id, v.adjustment_type, v.quantity,
+       v.reason, v.reference, v.adj_date, v.notes, id]);
+    const positive = ['add','return','transfer_in'].includes(v.adjustment_type);
+    const delta    = positive ? +v.quantity : -v.quantity;
+    await applyStockMovement(db, v.product_id, v.warehouse_id, delta, 'stock_adjustment', id, v.adjustment_type, v.reason || null);
+    await addAuditLog('update','stock_adjustments', id, `Edited: ${v.adjustment_type} ${v.quantity}`);
+  });
+  res.redirect('/stock');
+}));
+
+router.post('/delete/:id', wrap(async (req, res) => {
+  const id = toInt(req.params.id);
+  await tx(async (db) => {
+    const existing = await db.one(`SELECT * FROM stock_adjustments WHERE id=$1`, [id]);
+    if (!existing) return;
+    await reverseStockForRef(db, 'stock_adjustment', id);
+    await db.run(`DELETE FROM stock_adjustments WHERE id=$1`, [id]);
+    await addAuditLog('delete','stock_adjustments', id, `Deleted adjustment`);
+  });
+  res.redirect('/stock');
+}));
+
+router.get('/print/:id', wrap(async (req, res) => {
+  const id = toInt(req.params.id);
+  const adj = (await pool.query(`
+    SELECT sa.*, p.name AS product_name, p.unit, w.name AS warehouse_name
+    FROM stock_adjustments sa
+    JOIN products p ON p.id = sa.product_id
+    LEFT JOIN warehouses w ON w.id = sa.warehouse_id
+    WHERE sa.id = $1`, [id])).rows[0];
+  if (!adj) return res.status(404).send('Adjustment not found');
+  res.render('stock/print', {
+    page:'stock', adj,
+    settings: res.locals.appSettings || {}, layout: false
+  });
+}));
+
 router.get('/position', wrap(async (req, res) => {
   const warehouseId = toInt(req.query.warehouse_id) || null;
   const warehouses = (await pool.query(`SELECT id, name FROM warehouses WHERE status='active' ORDER BY name`)).rows;
@@ -76,6 +142,66 @@ router.get('/ledger', wrap(async (req, res) => {
       WHERE sl.product_id=$1 ORDER BY sl.id DESC LIMIT 500`, [productId])).rows;
   }
   res.render('stock/ledger', { page:'stock', products, productId, product, movements });
+}));
+
+router.get('/movements', wrap(async (req, res) => {
+  const search = req.query.search || '';
+  const type   = req.query.type   || '';
+  const params = [];
+  const conditions = ['1=1'];
+
+  if (search) {
+    conditions.push(`p.name ILIKE $${params.length + 1}`);
+    params.push('%' + search + '%');
+  }
+  if (type === 'inbound')  conditions.push(`sl.qty_delta > 0`);
+  if (type === 'outbound') conditions.push(`sl.qty_delta < 0`);
+
+  const sql = `
+    SELECT
+      sl.id,
+      COALESCE(inv.invoice_date, pur.purchase_date, ord.order_date, CURRENT_DATE) AS movement_date,
+      p.name  AS product_name,
+      p.id    AS product_id,
+      ABS(sl.qty_delta) AS quantity,
+      sl.qty_delta,
+      sl.ref_type,
+      sl.ref_id,
+      sl.reason,
+      CASE
+        WHEN sl.ref_type IN ('invoice','sale','sale-edit')       THEN 'Invoice'
+        WHEN sl.ref_type IN ('purchase','purchase-edit')         THEN 'Purchase'
+        WHEN sl.ref_type = 'order'                              THEN 'Order'
+        WHEN sl.ref_type = 'credit_note'                        THEN 'Credit Note'
+        WHEN sl.ref_type = 'debit_note'                         THEN 'Debit Note'
+        WHEN sl.ref_type = 'stock_adjustment'                   THEN 'Adjustment'
+        WHEN sl.ref_type = 'reverse'                            THEN 'Reversal'
+        ELSE COALESCE(sl.ref_type, '-')
+      END AS doc_type,
+      COALESCE(c.name, v.name, '-')                             AS party_name,
+      CASE WHEN c.id IS NOT NULL THEN 'Customer'
+           WHEN v.id IS NOT NULL THEN 'Vendor'
+           ELSE 'Internal' END                                   AS party_type,
+      COALESCE(inv.invoice_no, pur.purchase_no, ord.order_no,
+               CAST(sl.ref_id AS TEXT), '-')                    AS reference_number,
+      inv.id   AS invoice_id,
+      pur.id   AS purchase_id,
+      ord.id   AS order_id,
+      w.name   AS warehouse_name
+    FROM stock_ledger sl
+    JOIN    products   p   ON p.id  = sl.product_id
+    LEFT JOIN warehouses w ON w.id  = sl.warehouse_id
+    LEFT JOIN invoices  inv ON sl.ref_type IN ('invoice','sale','sale-edit')   AND inv.id = sl.ref_id
+    LEFT JOIN orders    ord ON sl.ref_type = 'order'                           AND ord.id = sl.ref_id
+    LEFT JOIN purchases pur ON sl.ref_type IN ('purchase','purchase-edit')     AND pur.id = sl.ref_id
+    LEFT JOIN customers c   ON c.id = COALESCE(inv.customer_id, ord.customer_id)
+    LEFT JOIN vendors   v   ON v.id = pur.vendor_id
+    WHERE ${conditions.join(' AND ')}
+    ORDER BY sl.id DESC
+    LIMIT 500`;
+
+  const movements = (await pool.query(sql, params)).rows;
+  res.render('stock/movements', { page:'stock', movements, search, type });
 }));
 
 module.exports = router;

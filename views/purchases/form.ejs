@@ -28,10 +28,10 @@
           </div>
           <div class="mb-3"><label class="form-label">Purchase Date *</label><input type="date" name="purchase_date" class="form-control" value="<%= purchase?.purchase_date || new Date().toISOString().split('T')[0] %>" required></div>
           <div class="mb-3"><label class="form-label">Delivery Date</label><input type="date" name="delivery_date" class="form-control" value="<%= purchase?.delivery_date || new Date().toISOString().split('T')[0] %>"></div>
-          <div class="mb-3"><label class="form-label">Warehouse</label>
-            <select name="warehouse_id" class="form-select">
+          <div class="mb-3"><label class="form-label fw-bold">Warehouse *</label>
+            <select name="warehouse_id" class="form-select" required>
               <option value="">Select Warehouse</option>
-              <% warehouses?.forEach(w => { %><option value="<%= w.id %>" <%= (purchase && w.id==purchase.warehouse_id)?'selected':'' %>><%= w.name %></option><% }) %>
+              <% (warehouses || []).forEach(w => { %><option value="<%= w.id %>" <%= (purchase && w.id==purchase.warehouse_id)?'selected':'' %>><%= w.name %></option><% }) %>
             </select>
           </div>
           <div class="mb-3"><label class="form-label">Bilty #</label><input type="text" name="bilty_no" class="form-control" value="<%= purchase?.bilty_no || '' %>"></div>
