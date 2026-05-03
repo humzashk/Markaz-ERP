@@ -65,7 +65,7 @@ function updateBulk() {
   const checked = getChecked();
   bulkCount.textContent = checked.length;
   bulkIds.value = checked.join(',');
-  bulkBar.classList.toggle('active', checked.length > 0);
+  bulkBar.classList.toggle('visible', checked.length > 0);
 }
 function clearSelection() {
   document.querySelectorAll('.row-check, #selectAll').forEach(c => c.checked = false);

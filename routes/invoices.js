@@ -16,7 +16,7 @@ router.get('/', wrap(async (req, res) => {
   if (search) { sql += ` AND (i.invoice_no ILIKE $${i} OR c.name ILIKE $${i})`; params.push('%'+search+'%'); i++; }
   sql += ` ORDER BY i.id DESC LIMIT 500`;
   const r = await pool.query(sql, params);
-  res.render('invoices/index', { page:'invoices', invoices: r.rows, status, search });
+  res.render('invoices/index', { page:'invoices', invoices: r.rows, status, search, ok: req.query.ok || null, err: req.query.err || null });
 }));
 
 router.get('/add', wrap(async (req, res) => {
@@ -299,10 +299,14 @@ router.get('/bulk', wrap(async (req, res) => {
 }));
 
 router.post('/bulk', wrap(async (req, res) => {
+  const returnTo = req.body.return_to || '/invoices/bulk';
+  const backOk  = (msg) => res.redirect(returnTo + '?ok='  + encodeURIComponent(msg));
+  const backErr = (msg) => res.redirect(returnTo + '?err=' + encodeURIComponent(msg));
+
   const ids = (req.body.ids || '').split(',')
     .map(s => parseInt(s.trim(), 10))
     .filter(n => Number.isFinite(n) && n > 0);
-  if (!ids.length) return res.redirect('/invoices/bulk?err=' + encodeURIComponent('No invoices selected'));
+  if (!ids.length) return backErr('No invoices selected');
 
   const action = req.body.action || '';
   let updated = 0;
@@ -391,7 +395,7 @@ router.post('/bulk', wrap(async (req, res) => {
     await addAuditLog('delete', 'invoices', null, `Bulk deleted invoices: ${ids.join(',')}`);
   }
 
-  res.redirect('/invoices/bulk?ok=' + encodeURIComponent(`${updated} invoice(s) updated`));
+  backOk(`${updated} invoice(s) updated`);
 }));
 
 router.get('/print/:id', wrap(async (req, res) => {

@@ -22,23 +22,22 @@ router.get('/', wrap(async (req, res) => {
 
 router.get('/add', wrap(async (req, res) => {
   const noteType = req.query.type || 'credit';
-  const [customers, vendors, products, invoices, purchases] = await Promise.all([
+  const [customers, vendors] = await Promise.all([
     pool.query(`SELECT id, name FROM customers WHERE status='active' ORDER BY name`),
-    pool.query(`SELECT id, name FROM vendors WHERE status='active' ORDER BY name`),
-    pool.query(`SELECT id, name, COALESCE(selling_price,0) AS rate FROM products WHERE status='active' ORDER BY name`),
-    pool.query(`SELECT i.id, i.invoice_no, c.name AS customer_name, i.customer_id FROM invoices i JOIN customers c ON c.id=i.customer_id ORDER BY i.id DESC LIMIT 200`),
-    pool.query(`SELECT p.id, p.purchase_no, v.name AS vendor_name, p.vendor_id FROM purchases p JOIN vendors v ON v.id=p.vendor_id ORDER BY p.id DESC LIMIT 200`)
+    pool.query(`SELECT id, name FROM vendors WHERE status='active' ORDER BY name`)
   ]);
   res.render('creditnotes/form', {
     page:'creditnotes', note:null, noteType,
-    customers: customers.rows, vendors: vendors.rows, products: products.rows,
-    invoices: invoices.rows, purchases: purchases.rows, edit:false
+    customers: customers.rows, vendors: vendors.rows,
+    formError: req.query.err ? decodeURIComponent(req.query.err) : null
   });
 }));
 
 router.post('/add', validate(schemas.creditNoteCreate), wrap(async (req, res) => {
-  const v = req.valid; const items = v._items || [];
-  if (!items.length) return res.redirect('/creditnotes?err=no_items');
+  const v = req.valid;
+  // Filter out items with quantity = 0 (user left them blank — means "not returning this item")
+  const items = (v._items || []).filter(it => it.quantity > 0);
+  if (!items.length) return res.redirect('/creditnotes/add?type=' + (v.note_type || 'credit') + '&err=' + encodeURIComponent('At least one item must have a return quantity'));
   let total = 0;
   for (const it of items) { it.amount = it.quantity * it.rate; total += it.amount; }
 
@@ -80,6 +79,30 @@ router.post('/apply/:id', wrap(async (req, res) => {
     }
   });
   res.redirect('/creditnotes');
+}));
+
+// API: customer's invoices for credit note form
+router.get('/api/customer-invoices', wrap(async (req, res) => {
+  const customerId = toInt(req.query.customer_id);
+  if (!customerId) return res.json([]);
+  const rows = (await pool.query(`
+    SELECT i.id, i.invoice_no AS ref_no, TO_CHAR(i.invoice_date,'DD-Mon-YYYY') AS date_str, i.total
+    FROM invoices i
+    WHERE i.customer_id=$1 AND i.status != 'cancelled'
+    ORDER BY i.invoice_date DESC, i.id DESC LIMIT 200`, [customerId])).rows;
+  res.json(rows);
+}));
+
+// API: vendor's purchases for debit note form
+router.get('/api/vendor-purchases', wrap(async (req, res) => {
+  const vendorId = toInt(req.query.vendor_id);
+  if (!vendorId) return res.json([]);
+  const rows = (await pool.query(`
+    SELECT p.id, p.purchase_no AS ref_no, TO_CHAR(p.purchase_date,'DD-Mon-YYYY') AS date_str, p.total
+    FROM purchases p
+    WHERE p.vendor_id=$1 AND p.status != 'cancelled'
+    ORDER BY p.purchase_date DESC, p.id DESC LIMIT 200`, [vendorId])).rows;
+  res.json(rows);
 }));
 
 // API: return items for a given invoice or purchase (for credit/debit note filtering)

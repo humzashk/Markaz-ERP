@@ -3,236 +3,272 @@
   <h2><i class="bi bi-file-earmark-minus"></i> New <%= noteType === 'credit' ? 'Credit Note (Sales Return)' : 'Debit Note (Purchase Return)' %></h2>
   <a href="/creditnotes" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
 </div>
+
+<% if (locals.formError) { %>
+<div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> <%= formError %></div>
+<% } %>
+
 <div class="card">
   <div class="card-body">
-    <form method="POST" action="/creditnotes/add">
+    <form method="POST" action="/creditnotes/add" id="cnForm" onsubmit="return validateForm()">
       <input type="hidden" name="note_type" value="<%= noteType %>">
+
       <div class="row mb-3">
         <% if (noteType === 'credit') { %>
+        <!-- CUSTOMER SELECTION -->
         <div class="col-md-4">
-          <label class="form-label fw-semibold">Customer *</label>
-          <select name="customer_id" id="customer_sel" class="form-select" required onchange="onCustomerChange(this.value)">
+          <label class="form-label fw-semibold">Customer <span class="text-danger">*</span></label>
+          <select name="customer_id" id="customer_sel" class="form-select" required onchange="onPartyChange()">
             <option value="">— Select Customer —</option>
             <% customers.forEach(c => { %>
             <option value="<%= c.id %>"><%= c.name %></option>
             <% }) %>
           </select>
         </div>
+        <!-- INVOICE SELECTION — dynamically loaded per customer -->
         <div class="col-md-4">
-          <label class="form-label fw-semibold">Against Invoice *</label>
-          <select name="invoice_id" id="invoice_search" class="form-select" required onchange="loadReferenceItems('invoice', this.value)">
+          <label class="form-label fw-semibold">Against Invoice <span class="text-danger">*</span></label>
+          <select name="invoice_id" id="ref_sel" class="form-select" required onchange="onRefChange()" disabled>
             <option value="">— Select customer first —</option>
-            <% invoices.forEach(inv => { %>
-            <option value="<%= inv.id %>" data-customer="<%= inv.customer_id || '' %>"><%= inv.invoice_no %> — <%= inv.customer_name %></option>
-            <% }) %>
           </select>
-          <small class="text-muted">Select a customer to filter invoices.</small>
+          <div id="refLoading" class="text-muted small d-none"><i class="bi bi-hourglass-split"></i> Loading...</div>
         </div>
         <% } else { %>
+        <!-- VENDOR SELECTION -->
         <div class="col-md-4">
-          <label class="form-label fw-semibold">Vendor *</label>
-          <select name="vendor_id" id="vendor_sel" class="form-select" required onchange="onVendorChange(this.value)">
+          <label class="form-label fw-semibold">Vendor <span class="text-danger">*</span></label>
+          <select name="vendor_id" id="vendor_sel" class="form-select" required onchange="onPartyChange()">
             <option value="">— Select Vendor —</option>
             <% vendors.forEach(v => { %>
             <option value="<%= v.id %>"><%= v.name %></option>
             <% }) %>
           </select>
         </div>
+        <!-- PURCHASE SELECTION — dynamically loaded per vendor -->
         <div class="col-md-4">
-          <label class="form-label fw-semibold">Against Purchase *</label>
-          <select name="purchase_id" id="purchase_search" class="form-select" required onchange="loadReferenceItems('purchase', this.value)">
+          <label class="form-label fw-semibold">Against Purchase <span class="text-danger">*</span></label>
+          <select name="purchase_id" id="ref_sel" class="form-select" required onchange="onRefChange()" disabled>
             <option value="">— Select vendor first —</option>
-            <% purchases.forEach(p => { %>
-            <option value="<%= p.id %>" data-vendor="<%= p.vendor_id || '' %>"><%= p.purchase_no %> — <%= p.vendor_name %></option>
-            <% }) %>
           </select>
-          <small class="text-muted">Select a vendor to filter purchases.</small>
+          <div id="refLoading" class="text-muted small d-none"><i class="bi bi-hourglass-split"></i> Loading...</div>
         </div>
         <% } %>
+
         <div class="col-md-4">
-          <label class="form-label fw-semibold">Date *</label>
+          <label class="form-label fw-semibold">Date <span class="text-danger">*</span></label>
           <input type="date" name="note_date" class="form-control" value="<%= new Date().toISOString().split('T')[0] %>" required>
         </div>
       </div>
 
       <div class="mb-3">
-        <label class="form-label fw-semibold">Reason / Description *</label>
+        <label class="form-label fw-semibold">Reason / Description <span class="text-danger">*</span></label>
         <input type="text" name="reason" class="form-control" placeholder="e.g. Defective goods, wrong item..." required>
       </div>
 
+      <!-- Items table — auto-populated from invoice/purchase -->
       <div class="mb-3">
         <label class="form-label fw-semibold">Items Returned</label>
-        <table class="table table-bordered" id="itemsTable">
-          <thead class="table-light">
-            <tr><th>Product</th><th>Qty</th><th>Rate</th><th>Amount</th><th></th></tr>
-          </thead>
-          <tbody id="itemRows">
-            <tr>
-              <td>
-                <select name="product_id[]" class="form-select form-select-sm" onchange="calcRow(this)">
-                  <option value="">— Select —</option>
-                  <% products.forEach(p => { %>
-                  <option value="<%= p.id %>" data-rate="<%= p.rate %>"><%= p.name %></option>
-                  <% }) %>
-                </select>
-              </td>
-              <td><input type="number" name="quantity[]" class="form-control form-control-sm" min="1" onchange="calcRow(this)"></td>
-              <td><input type="number" name="rate[]" class="form-control form-control-sm" step="0.01" onchange="calcRow(this)"></td>
-              <td><input type="number" name="amount[]" class="form-control form-control-sm" readonly></td>
-              <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove();calcTotal()"><i class="bi bi-trash"></i></button></td>
-            </tr>
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colspan="3" class="text-end fw-bold">Total:</td>
-              <td colspan="2"><strong id="grandTotal">Rs. 0.00</strong></td>
-            </tr>
-          </tfoot>
-        </table>
-        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addItemRow()"><i class="bi bi-plus"></i> Add Row</button>
+        <div id="itemsPlaceholder" class="alert alert-info py-2">
+          <i class="bi bi-info-circle"></i> Select a customer and invoice above — items will appear automatically.
+        </div>
+        <div id="itemsSection" class="d-none">
+          <table class="table table-bordered" id="itemsTable">
+            <thead class="table-light">
+              <tr>
+                <th>Product</th>
+                <th>Invoice Qty</th>
+                <th>Return Qty <span class="text-danger">*</span></th>
+                <th>Rate</th>
+                <th>Amount</th>
+              </tr>
+            </thead>
+            <tbody id="itemRows"></tbody>
+            <tfoot>
+              <tr>
+                <td colspan="4" class="text-end fw-bold">Total Return Amount:</td>
+                <td colspan="1"><strong id="grandTotal">Rs. 0.00</strong></td>
+              </tr>
+            </tfoot>
+          </table>
+          <div class="text-muted small"><i class="bi bi-info-circle"></i> Leave "Return Qty" as 0 to exclude an item from this note.</div>
+        </div>
       </div>
 
       <div class="mb-3">
         <label class="form-label fw-semibold">Notes</label>
         <textarea name="notes" class="form-control" rows="2"></textarea>
       </div>
-      <button type="submit" class="btn btn-primary btn-lg"><i class="bi bi-check"></i> Save <%= noteType === 'credit' ? 'Credit' : 'Debit' %> Note</button>
+
+      <button type="submit" id="saveBtn" class="btn btn-primary btn-lg" disabled>
+        <i class="bi bi-check"></i> Save <%= noteType === 'credit' ? 'Credit' : 'Debit' %> Note
+      </button>
     </form>
   </div>
 </div>
 
 <script>
-// All products (fallback when no invoice/purchase selected)
-// Note: Using JSON.stringify(JSON.stringify(...)) to safely output JSON in script context
-const _allProducts = JSON.parse(<%= JSON.stringify(JSON.stringify(products)) %>);
-// Currently filtered products (from selected invoice or purchase)
-let _activeProducts = _allProducts;
+const NOTE_TYPE = '<%= noteType %>';
 
-function _buildOpts(prods) {
-  return '<option value="">— Select —</option>' +
-    prods.map(p => `<option value="${p.product_id || p.id}" data-rate="${p.rate||0}" data-max="${p.max_qty||''}">${p.name}${p.max_qty ? ' (max: '+p.max_qty+')' : ''}</option>`).join('');
+// ── Party change: fetch their documents ──────────────────────────────────────
+function onPartyChange() {
+  const partySel = document.getElementById(NOTE_TYPE === 'credit' ? 'customer_sel' : 'vendor_sel');
+  const refSel   = document.getElementById('ref_sel');
+  const partyId  = partySel.value;
+
+  // Reset reference selector and items
+  refSel.innerHTML = '<option value="">— Loading... —</option>';
+  refSel.disabled = true;
+  clearItems();
+  document.getElementById('saveBtn').disabled = true;
+
+  if (!partyId) {
+    refSel.innerHTML = NOTE_TYPE === 'credit' ? '<option value="">— Select customer first —</option>' : '<option value="">— Select vendor first —</option>';
+    return;
+  }
+
+  const url = NOTE_TYPE === 'credit'
+    ? `/creditnotes/api/customer-invoices?customer_id=${partyId}`
+    : `/creditnotes/api/vendor-purchases?vendor_id=${partyId}`;
+
+  document.getElementById('refLoading').classList.remove('d-none');
+  fetch(url)
+    .then(r => r.json())
+    .then(docs => {
+      document.getElementById('refLoading').classList.add('d-none');
+      if (!docs.length) {
+        refSel.innerHTML = `<option value="">— No ${NOTE_TYPE === 'credit' ? 'invoices' : 'purchases'} found —</option>`;
+        refSel.disabled = true;
+        return;
+      }
+      const placeholder = NOTE_TYPE === 'credit' ? '— Select invoice —' : '— Select purchase —';
+      refSel.innerHTML = `<option value="">${placeholder}</option>` +
+        docs.map(d => `<option value="${d.id}">${d.ref_no} — ${d.date_str} — Rs.${Number(d.total||0).toLocaleString()}</option>`).join('');
+      refSel.disabled = false;
+    })
+    .catch(() => {
+      document.getElementById('refLoading').classList.add('d-none');
+      refSel.innerHTML = '<option value="">— Error loading —</option>';
+    });
 }
 
-function _refreshAllSelects() {
-  const opts = _buildOpts(_activeProducts);
-  document.querySelectorAll('select[name="product_id[]"]').forEach(sel => {
-    const prev = sel.value;
-    sel.innerHTML = opts;
-    sel.value = prev; // try to restore selection
-  });
-}
+// ── Reference (invoice/purchase) change: load items ─────────────────────────
+let _refItems = [];  // current items from selected reference doc
 
-// Fetch items for a reference document and restrict product dropdown
-function loadReferenceItems(docType, docId) {
-  if (!docId) { _activeProducts = _allProducts; _refreshAllSelects(); return; }
-  const qs = docType === 'invoice'
-    ? `invoice_id=${docId}`
-    : `purchase_id=${docId}`;
+function onRefChange() {
+  const refSel = document.getElementById('ref_sel');
+  const refId  = refSel.value;
+  clearItems();
+  document.getElementById('saveBtn').disabled = true;
+  if (!refId) return;
+
+  const qs = NOTE_TYPE === 'credit' ? `invoice_id=${refId}` : `purchase_id=${refId}`;
   fetch(`/creditnotes/api/items?${qs}`)
     .then(r => r.json())
     .then(items => {
-      if (!items || !items.length) {
-        // No items found — fall back to all products but warn
-        _activeProducts = _allProducts;
-        console.warn('No items found for this document; showing all products.');
-      } else {
-        _activeProducts = items;
-      }
-      _refreshAllSelects();
+      _refItems = items;
+      buildItemRows(items);
+      document.getElementById('saveBtn').disabled = false;
     })
-    .catch(() => { _activeProducts = _allProducts; _refreshAllSelects(); });
+    .catch(() => {
+      alert('Failed to load items from selected document.');
+    });
 }
 
-// ── Customer → Invoice filtering ─────────────────────────────────────────────
-function onCustomerChange(customerId) {
-  const invSel = document.getElementById('invoice_search');
-  if (!invSel) return;
-  Array.from(invSel.options).forEach(o => {
-    if (!o.value) return; // keep placeholder
-    o.hidden = customerId ? (o.dataset.customer !== String(customerId)) : false;
+function buildItemRows(items) {
+  if (!items.length) {
+    document.getElementById('itemsPlaceholder').textContent = 'No items found for this document.';
+    document.getElementById('itemsPlaceholder').classList.remove('d-none');
+    document.getElementById('itemsSection').classList.add('d-none');
+    return;
+  }
+
+  document.getElementById('itemsPlaceholder').classList.add('d-none');
+  document.getElementById('itemsSection').classList.remove('d-none');
+
+  const tbody = document.getElementById('itemRows');
+  tbody.innerHTML = '';
+
+  items.forEach((item, idx) => {
+    const maxQty = parseInt(item.max_qty, 10) || 0;
+    const rate   = parseFloat(item.rate) || 0;
+    const row = document.createElement('tr');
+    row.dataset.maxQty = maxQty;
+    row.dataset.rate   = rate;
+    row.dataset.idx    = idx;
+    row.innerHTML = `
+      <input type="hidden" name="product_id[]" value="${item.product_id}">
+      <input type="hidden" name="rate[]" value="${rate}">
+      <td class="fw-semibold">${escHtml(item.name)}</td>
+      <td class="text-center text-muted">${maxQty}</td>
+      <td style="width:120px">
+        <input type="number" name="quantity[]" class="form-control form-control-sm qty-input"
+          min="0" max="${maxQty}" value="0" oninput="onQtyChange(this)"
+          data-max="${maxQty}" data-idx="${idx}">
+        <div class="invalid-feedback">Max: ${maxQty}</div>
+      </td>
+      <td class="text-end">${formatRs(rate)}</td>
+      <td class="text-end fw-bold amount-cell">${formatRs(0)}</td>
+    `;
+    tbody.appendChild(row);
   });
-  // Reset if current selection is now hidden
-  const cur = invSel.options[invSel.selectedIndex];
-  if (cur && cur.hidden) {
-    invSel.value = '';
-    loadReferenceItems('invoice', '');
-  }
+
+  calcTotal();
 }
 
-// ── Vendor → Purchase filtering ───────────────────────────────────────────────
-function onVendorChange(vendorId) {
-  const purSel = document.getElementById('purchase_search');
-  if (!purSel) return;
-  Array.from(purSel.options).forEach(o => {
-    if (!o.value) return;
-    o.hidden = vendorId ? (o.dataset.vendor !== String(vendorId)) : false;
-  });
-  const cur = purSel.options[purSel.selectedIndex];
-  if (cur && cur.hidden) {
-    purSel.value = '';
-    loadReferenceItems('purchase', '');
-  }
-}
+function onQtyChange(input) {
+  const max = parseInt(input.dataset.max, 10) || 0;
+  const val = parseInt(input.value, 10) || 0;
+  const row = input.closest('tr');
+  const amtCell = row.querySelector('.amount-cell');
+  const rate = parseFloat(row.dataset.rate) || 0;
 
-// ── Wire up on page load ──────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  const custSel = document.getElementById('customer_sel');
-  const vendSel = document.getElementById('vendor_sel');
-  const invSel  = document.getElementById('invoice_search');
-  const purSel  = document.getElementById('purchase_search');
-
-  // Apply initial filters if values already set (e.g. form re-render after error)
-  if (custSel && custSel.value) onCustomerChange(custSel.value);
-  if (vendSel && vendSel.value) onVendorChange(vendSel.value);
-  if (invSel  && invSel.value)  loadReferenceItems('invoice',  invSel.value);
-  if (purSel  && purSel.value)  loadReferenceItems('purchase', purSel.value);
-});
-
-function calcRow(el) {
-  const row = el.closest('tr');
-  const sel = row.querySelector('select[name="product_id[]"]');
-  const rateInput = row.querySelector('input[name="rate[]"]');
-  const qtyInput  = row.querySelector('input[name="quantity[]"]');
-  const qty = parseFloat(qtyInput.value) || 0;
-  // Auto-populate rate when product changes (or rate empty). User can override.
-  if (el === sel || !rateInput.value) {
-    const opt = sel.options[sel.selectedIndex];
-    const autoRate = opt ? (parseFloat(opt.dataset.rate) || 0) : 0;
-    if (autoRate > 0) rateInput.value = autoRate;
-  }
-  // Warn if quantity exceeds max from reference doc
-  const opt = sel.options[sel.selectedIndex];
-  const maxQty = opt ? parseInt(opt.dataset.max || '', 10) : NaN;
-  if (!isNaN(maxQty) && qty > maxQty) {
-    qtyInput.classList.add('is-invalid');
-    qtyInput.title = `Max returnable: ${maxQty}`;
+  if (val < 0 || val > max) {
+    input.classList.add('is-invalid');
+    input.value = val < 0 ? 0 : max;
   } else {
-    qtyInput.classList.remove('is-invalid');
-    qtyInput.title = '';
+    input.classList.remove('is-invalid');
   }
-  const rate = parseFloat(rateInput.value) || 0;
-  row.querySelector('input[name="amount[]"]').value = (qty * rate).toFixed(2);
+  amtCell.textContent = formatRs((parseInt(input.value, 10) || 0) * rate);
   calcTotal();
 }
 
 function calcTotal() {
-  let t = 0;
-  document.querySelectorAll('input[name="amount[]"]').forEach(i => t += parseFloat(i.value)||0);
-  document.getElementById('grandTotal').textContent = 'Rs. ' + t.toLocaleString('en-PK', {minimumFractionDigits:2, maximumFractionDigits:2});
+  let total = 0;
+  document.querySelectorAll('.amount-cell').forEach(cell => {
+    total += parseFloat(cell.textContent.replace(/[^0-9.]/g, '')) || 0;
+  });
+  document.getElementById('grandTotal').textContent = 'Rs. ' + total.toLocaleString('en-PK', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 
+function clearItems() {
+  _refItems = [];
+  document.getElementById('itemRows').innerHTML = '';
+  document.getElementById('itemsPlaceholder').innerHTML = '<i class="bi bi-info-circle"></i> Select a customer and invoice above — items will appear automatically.';
+  document.getElementById('itemsPlaceholder').classList.remove('d-none');
+  document.getElementById('itemsSection').classList.add('d-none');
+  document.getElementById('grandTotal').textContent = 'Rs. 0.00';
+}
 
-function addItemRow() {
-  const opts = _buildOpts(_activeProducts);
-  const row = document.createElement('tr');
-  row.innerHTML = `
-    <td><select name="product_id[]" class="form-select form-select-sm" onchange="calcRow(this)">${opts}</select></td>
-    <td><input type="number" name="quantity[]" class="form-control form-control-sm" min="1" oninput="calcRow(this)"></td>
-    <td><input type="number" name="rate[]" class="form-control form-control-sm" step="0.01" oninput="calcRow(this)"></td>
-    <td><input type="number" name="amount[]" class="form-control form-control-sm" readonly></td>
-    <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove();calcTotal()"><i class="bi bi-trash"></i></button></td>
-  `;
-  document.getElementById('itemRows').appendChild(row);
+function validateForm() {
+  // Check at least one item has qty > 0
+  const qtys = [...document.querySelectorAll('.qty-input')].map(i => parseInt(i.value,10)||0);
+  if (!qtys.length || qtys.every(q => q === 0)) {
+    alert('Enter a return quantity for at least one item.');
+    return false;
+  }
+  // Check no invalid quantities
+  if (document.querySelectorAll('.qty-input.is-invalid').length) {
+    alert('Fix quantity errors before saving.');
+    return false;
+  }
+  return true;
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function formatRs(n) {
+  return 'Rs. ' + (Number(n)||0).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 </script>
 <%- include('../partials/footer') %>

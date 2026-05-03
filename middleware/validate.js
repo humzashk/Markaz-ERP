@@ -288,9 +288,10 @@ const schemas = {
         quantity:['posInt', { max:1e7 }], rate:['nonNegNum', { max:1e9 }]
       }
     },
-    validate: async (v) => {
+    validate: async (v, body) => {
       if (v.note_type==='credit' && (!v.customer_id || !v.invoice_id))  return 'Credit note requires customer + invoice';
       if (v.note_type==='debit'  && (!v.vendor_id   || !v.purchase_id)) return 'Debit note requires vendor + purchase';
+
       // Enforce invoice belongs to customer
       if (v.note_type==='credit' && v.invoice_id && v.customer_id) {
         const r = await pool.query(`SELECT customer_id FROM invoices WHERE id=$1`, [v.invoice_id]);
@@ -302,6 +303,33 @@ const schemas = {
         const r = await pool.query(`SELECT vendor_id FROM purchases WHERE id=$1`, [v.purchase_id]);
         if (!r.rows[0] || String(r.rows[0].vendor_id) !== String(v.vendor_id))
           return 'The selected purchase does not belong to this vendor';
+      }
+
+      // Enforce line item quantities don't exceed original document quantities
+      if (v._items && v._items.length) {
+        for (const item of v._items) {
+          if (!item.product_id || !item.quantity) continue;
+          if (v.note_type === 'credit' && v.invoice_id) {
+            const r = await pool.query(
+              `SELECT quantity FROM invoice_items WHERE invoice_id=$1 AND product_id=$2`,
+              [v.invoice_id, item.product_id]);
+            if (!r.rows[0]) return `Product not found on selected invoice`;
+            if (item.quantity > Number(r.rows[0].quantity))
+              return `Return quantity (${item.quantity}) exceeds invoice quantity (${r.rows[0].quantity}) for one or more items`;
+          }
+          if (v.note_type === 'debit' && v.purchase_id) {
+            const r = await pool.query(
+              `SELECT quantity FROM purchase_items WHERE purchase_id=$1 AND product_id=$2`,
+              [v.purchase_id, item.product_id]);
+            if (!r.rows[0]) return `Product not found on selected purchase`;
+            if (item.quantity > Number(r.rows[0].quantity))
+              return `Return quantity (${item.quantity}) exceeds purchase quantity (${r.rows[0].quantity}) for one or more items`;
+          }
+        }
+
+        // Ensure at least one item has qty > 0
+        const hasQty = v._items.some(i => (i.quantity || 0) > 0);
+        if (!hasQty) return 'At least one item must have a return quantity greater than 0';
       }
     }
   },

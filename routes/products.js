@@ -78,48 +78,46 @@ router.post('/bulk', wrap(async (req, res) => {
   const action = req.body.action || '';
   const ids = (req.body.ids || '').split(',')
     .map(s => toInt(s.trim())).filter(n => n > 0);
-  const value = req.body.value || '';
-  const numVal = toNum(value, 0);
+
+  // value is a single hidden field populated by JS from the visible input
+  const rawVal = req.body.value;
+  // Guard: body-parser may return array if multiple fields named "value" sneak through
+  const value = Array.isArray(rawVal) ? (rawVal.find(v => v && v.trim()) || '') : (rawVal || '');
+  const numVal = toNum(value, NaN);  // NaN so we can detect "not provided"
 
   if (!ids.length) return res.redirect('/products?err=' + encodeURIComponent('No products selected'));
 
   let ok = '';
   switch (action) {
-    case 'set_vendor': {
-      // vendor_id can be empty (clear manufacturer)
-      const vid = toInt(value) || null;
-      const r = await pool.query(`UPDATE products SET vendor_id=$1 WHERE id=ANY($2::int[])`, [vid, ids]);
-      ok = `${r.rowCount} product(s) updated`;
-      break;
-    }
     case 'set_category': {
-      if (!value.trim()) return res.redirect('/products?err=' + encodeURIComponent('Category value required'));
-      const r = await pool.query(`UPDATE products SET category=$1 WHERE id=ANY($2::int[])`, [value.trim(), ids]);
-      ok = `${r.rowCount} product(s) category updated`;
+      const cat = String(value || '').trim();
+      if (!cat) return res.redirect('/products?err=' + encodeURIComponent('Category name is required'));
+      const r = await pool.query(`UPDATE products SET category=$1 WHERE id=ANY($2::int[])`, [cat, ids]);
+      ok = `${r.rowCount} product(s) category updated to "${cat}"`;
       break;
     }
     case 'set_packaging': {
       const qpp = toInt(value);
-      if (!qpp || qpp < 1) return res.redirect('/products?err=' + encodeURIComponent('Invalid Pcs/Ctn value'));
+      if (!Number.isFinite(qpp) || qpp < 1) return res.redirect('/products?err=' + encodeURIComponent('Invalid Pcs/Ctn — must be a whole number ≥ 1'));
       const r = await pool.query(`UPDATE products SET qty_per_pack=$1 WHERE id=ANY($2::int[])`, [qpp, ids]);
-      ok = `${r.rowCount} product(s) Pcs/Ctn updated`;
+      ok = `${r.rowCount} product(s) Pcs/Ctn set to ${qpp}`;
       break;
     }
     case 'set_rate': {
-      if (numVal < 0) return res.redirect('/products?err=' + encodeURIComponent('Invalid rate value'));
+      if (!Number.isFinite(numVal) || numVal < 0) return res.redirect('/products?err=' + encodeURIComponent('Rate must be a number ≥ 0'));
       const r = await pool.query(`UPDATE products SET selling_price=$1 WHERE id=ANY($2::int[])`, [numVal, ids]);
-      ok = `${r.rowCount} product(s) rate updated`;
+      ok = `${r.rowCount} product(s) rate set to ${numVal}`;
       break;
     }
     case 'rate_by_pct': {
-      if (numVal === 0) return res.redirect('/products?err=' + encodeURIComponent('Percentage cannot be zero'));
-      const r = await pool.query(`UPDATE products SET selling_price = GREATEST(0, selling_price * (1 + $1/100)) WHERE id=ANY($2::int[])`, [numVal, ids]);
+      if (!Number.isFinite(numVal) || numVal === 0) return res.redirect('/products?err=' + encodeURIComponent('Percentage must be a non-zero number (e.g. 10 or -5)'));
+      const r = await pool.query(`UPDATE products SET selling_price = GREATEST(0, selling_price * (1 + $1::numeric/100)) WHERE id=ANY($2::int[])`, [numVal, ids]);
       ok = `${r.rowCount} product(s) rate adjusted by ${numVal}%`;
       break;
     }
     case 'stock_add': {
       const qty = toInt(value);
-      if (!qty || qty < 1) return res.redirect('/products?err=' + encodeURIComponent('Invalid quantity'));
+      if (!Number.isFinite(qty) || qty < 1) return res.redirect('/products?err=' + encodeURIComponent('Quantity must be a whole number ≥ 1'));
       await tx(async (db) => {
         const wh = await db.one(`SELECT id FROM warehouses WHERE status='active' ORDER BY id LIMIT 1`);
         for (const pid of ids) {
@@ -132,7 +130,7 @@ router.post('/bulk', wrap(async (req, res) => {
     }
     case 'stock_sub': {
       const qty = toInt(value);
-      if (!qty || qty < 1) return res.redirect('/products?err=' + encodeURIComponent('Invalid quantity'));
+      if (!Number.isFinite(qty) || qty < 1) return res.redirect('/products?err=' + encodeURIComponent('Quantity must be a whole number ≥ 1'));
       await tx(async (db) => {
         const wh = await db.one(`SELECT id FROM warehouses WHERE status='active' ORDER BY id LIMIT 1`);
         for (const pid of ids) {
@@ -141,6 +139,11 @@ router.post('/bulk', wrap(async (req, res) => {
         }
       });
       ok = `Stock reduced by ${qty} for ${ids.length} product(s)`;
+      break;
+    }
+    case 'activate': {
+      const r = await pool.query(`UPDATE products SET status='active' WHERE id=ANY($1::int[])`, [ids]);
+      ok = `${r.rowCount} product(s) activated`;
       break;
     }
     case 'delete': {

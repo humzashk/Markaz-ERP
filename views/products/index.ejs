@@ -15,32 +15,27 @@
 <!-- Bulk Action Bar -->
 <div class="bulk-bar" id="bulkBar">
   <span class="bulk-count"><span id="bulkCount">0</span> selected</span>
-  <form method="post" action="/products/bulk" id="bulkForm" class="d-flex align-items-center gap-2 flex-wrap">
+  <form method="post" action="/products/bulk" id="bulkForm" class="d-flex align-items-center gap-2 flex-wrap" onsubmit="return prepBulkSubmit()">
     <input type="hidden" name="ids" id="bulkIds">
+    <input type="hidden" name="value" id="bulkValue">
     <select name="action" id="bulkAction" class="form-select form-select-sm" style="width:auto;" onchange="toggleBulkFields(this.value)">
       <option value="">-- Action --</option>
-      <option value="set_vendor">Set Manufacturer</option>
       <option value="set_category">Set Category</option>
       <option value="set_packaging">Set Pcs/Ctn</option>
-      <option value="set_rate">Set Rate (value)</option>
+      <option value="set_rate">Set Rate</option>
       <option value="rate_by_pct">Adjust Rate (%)</option>
       <option value="stock_add">Add Stock</option>
       <option value="stock_sub">Reduce Stock</option>
+      <option value="activate">Activate Selected</option>
       <option value="delete">Deactivate Selected</option>
     </select>
-    <div id="bf-vendor" class="d-none">
-      <select name="value" class="form-select form-select-sm" style="width:160px;">
-        <option value="">Clear Manufacturer</option>
-        <% vendors.forEach(v => { %><option value="<%= v.id %>"><%= v.name %></option><% }) %>
-      </select>
-    </div>
     <div id="bf-text" class="d-none">
-      <input type="text" name="value" class="form-control form-control-sm" style="width:160px;" placeholder="Value">
+      <input type="text" id="bfTextVal" class="form-control form-control-sm" style="width:160px;" placeholder="Category name">
     </div>
     <div id="bf-num" class="d-none">
-      <input type="number" name="value" class="form-control form-control-sm" style="width:100px;" placeholder="Value" step="0.01">
+      <input type="number" id="bfNumVal" class="form-control form-control-sm" style="width:100px;" placeholder="Value" step="0.01" min="0">
     </div>
-    <button type="submit" class="btn btn-sm btn-light" onclick="return confirmBulkProduct()"><i class="bi bi-check2"></i> Apply</button>
+    <button type="submit" class="btn btn-sm btn-light"><i class="bi bi-check2"></i> Apply</button>
   </form>
   <button class="btn btn-sm btn-outline-light ms-auto" onclick="clearSelection()"><i class="bi bi-x"></i> Clear</button>
 </div>
@@ -105,17 +100,42 @@ function clearSelection() {
   updateBulk();
 }
 function toggleBulkFields(action) {
-  document.getElementById('bf-vendor').classList.add('d-none');
   document.getElementById('bf-text').classList.add('d-none');
   document.getElementById('bf-num').classList.add('d-none');
-  if (action === 'set_vendor') document.getElementById('bf-vendor').classList.remove('d-none');
-  else if (action === 'set_category') document.getElementById('bf-text').classList.remove('d-none');
-  else if (['set_packaging','set_rate','rate_by_pct','stock_add','stock_sub'].includes(action)) document.getElementById('bf-num').classList.remove('d-none');
+  document.getElementById('bfNumVal').step = '0.01';
+  document.getElementById('bfNumVal').min = '0';
+  if (action === 'set_category') document.getElementById('bf-text').classList.remove('d-none');
+  else if (['set_packaging','set_rate','rate_by_pct','stock_add','stock_sub'].includes(action)) {
+    document.getElementById('bf-num').classList.remove('d-none');
+    if (action === 'set_packaging' || action === 'stock_add' || action === 'stock_sub') {
+      document.getElementById('bfNumVal').step = '1';
+      document.getElementById('bfNumVal').min = '1';
+    }
+    if (action === 'rate_by_pct') {
+      document.getElementById('bfNumVal').step = '0.01';
+      document.getElementById('bfNumVal').min = '-99';
+      document.getElementById('bfNumVal').placeholder = '% e.g. 10 or -5';
+    }
+  }
+  document.getElementById('bfNumVal').value = '';
+  document.getElementById('bfTextVal').value = '';
 }
-function confirmBulkProduct() {
+function prepBulkSubmit() {
   const action = document.getElementById('bulkAction').value;
   if (!action) { alert('Please select an action.'); return false; }
-  if (action === 'delete') return confirm('Deactivate selected products? Products linked to orders will be skipped.');
+  if (!document.getElementById('bulkIds').value) { alert('Select at least one product.'); return false; }
+  // Copy active input value to hidden field
+  if (action === 'set_category') {
+    const v = document.getElementById('bfTextVal').value.trim();
+    if (!v) { alert('Enter a category name.'); return false; }
+    document.getElementById('bulkValue').value = v;
+  } else if (['set_packaging','set_rate','rate_by_pct','stock_add','stock_sub'].includes(action)) {
+    const v = document.getElementById('bfNumVal').value.trim();
+    if (v === '' || v === null) { alert('Enter a value.'); return false; }
+    document.getElementById('bulkValue').value = v;
+  }
+  if (action === 'delete') return confirm('Deactivate selected products?');
+  if (action === 'activate') return confirm('Activate selected products?');
   return true;
 }
 </script>
