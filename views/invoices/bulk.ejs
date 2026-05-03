@@ -20,14 +20,19 @@
           </div>
           <div class="mb-3">
             <label class="form-label fw-bold">Action <span class="text-danger">*</span></label>
-            <select name="action" class="form-select" required>
+            <select name="action" class="form-select" id="bulkAction" required onchange="onActionChange(this.value)">
               <option value="">— Select Action —</option>
               <option value="mark_paid">Mark as Paid (sets paid = total)</option>
               <option value="mark_unpaid">Mark as Unpaid</option>
               <option value="mark_cancelled">Mark as Cancelled</option>
+              <option value="delete" class="text-danger">🗑 Delete (irreversible — reverses stock &amp; ledger)</option>
             </select>
           </div>
-          <button type="submit" class="btn btn-primary"><i class="bi bi-check2-all"></i> Apply to Selected</button>
+          <div id="deleteWarn" class="alert alert-danger py-2 small d-none">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <strong>Delete</strong> will permanently remove the selected invoices, reverse their stock movements, and remove their ledger entries. This <strong>cannot be undone</strong>.
+          </div>
+          <button type="submit" class="btn btn-primary" id="applyBtn" onclick="return confirmAction()"><i class="bi bi-check2-all"></i> Apply to Selected</button>
         </form>
       </div>
     </div>
@@ -53,6 +58,19 @@
 </div>
 
 <script>
+function onActionChange(val) {
+  document.getElementById('deleteWarn').classList.toggle('d-none', val !== 'delete');
+  document.getElementById('applyBtn').className = val === 'delete' ? 'btn btn-danger' : 'btn btn-primary';
+}
+function confirmAction() {
+  const action = document.getElementById('bulkAction').value;
+  const ids = document.querySelector('input[name="ids"]').value.trim();
+  if (!ids) { alert('Enter Invoice IDs first.'); return false; }
+  if (action === 'delete') {
+    return confirm('PERMANENTLY delete these invoices? This will reverse stock and ledger entries and cannot be undone.');
+  }
+  return true;
+}
 const selected = new Set();
 let debounce;
 document.getElementById('quickSearch').addEventListener('input', function() {

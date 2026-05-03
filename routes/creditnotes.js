@@ -17,7 +17,7 @@ router.get('/', wrap(async (req, res) => {
     LEFT JOIN customers c ON c.id = cn.customer_id
     LEFT JOIN vendors v   ON v.id = cn.vendor_id
     WHERE ${parts.join(' AND ')} ORDER BY cn.id DESC LIMIT 500`, params);
-  res.render('creditnotes/index', { page:'creditnotes', notes: r.rows, type });
+  res.render('creditnotes/index', { page:'creditnotes', notes: r.rows, type, ok: req.query.ok || null, err: req.query.err || null });
 }));
 
 router.get('/add', wrap(async (req, res) => {
@@ -136,6 +136,35 @@ router.post('/delete/:id', wrap(async (req, res) => {
     await addAuditLog('delete','credit_notes', id, 'Deleted note');
   });
   res.redirect('/creditnotes');
+}));
+
+// Bulk operations on credit/debit notes
+router.post('/bulk', wrap(async (req, res) => {
+  const action = req.body.action || '';
+  const ids = (req.body.ids || '').split(',').map(s => toInt(s.trim())).filter(n => n > 0);
+  if (!ids.length) return res.redirect('/creditnotes?err=' + encodeURIComponent('No notes selected'));
+
+  if (action === 'delete') {
+    await tx(async (db) => {
+      const notes = await db.many(`SELECT id, note_type, status, customer_id, vendor_id FROM credit_notes WHERE id=ANY($1::int[])`, [ids]);
+      for (const note of notes) {
+        const refType = note.note_type === 'credit' ? 'credit_note' : 'debit_note';
+        await reverseStockForRef(db, refType, note.id);
+        if (note.status === 'applied') {
+          const entityType = note.note_type === 'credit' ? 'customer' : 'vendor';
+          const entityId = note.note_type === 'credit' ? note.customer_id : note.vendor_id;
+          await removeLedgerForRef(db, entityType, entityId, refType, note.id);
+          await recomputeBalance(db, entityType, entityId);
+        }
+        await db.run(`DELETE FROM credit_note_items WHERE note_id=$1`, [note.id]);
+        await db.run(`DELETE FROM credit_notes WHERE id=$1`, [note.id]);
+      }
+    });
+    await addAuditLog('delete', 'credit_notes', null, `Bulk deleted notes: ${ids.join(',')}`);
+    return res.redirect('/creditnotes?ok=' + encodeURIComponent(`${ids.length} note(s) deleted`));
+  }
+
+  res.redirect('/creditnotes?err=' + encodeURIComponent('Unknown action'));
 }));
 
 module.exports = router;

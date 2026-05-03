@@ -22,7 +22,7 @@ router.get('/', wrap(async (req, res) => {
   if (search) { sql += ` AND (o.order_no ILIKE $${i} OR c.name ILIKE $${i})`; params.push('%'+search+'%'); i++; }
   sql += ` ORDER BY o.id DESC LIMIT 500`;
   const r = await pool.query(sql, params);
-  res.render('orders/index', { page:'orders', orders: r.rows, search });
+  res.render('orders/index', { page:'orders', orders: r.rows, search, ok: req.query.ok || null, err: req.query.err || null });
 }));
 
 router.get('/add', wrap(async (req, res) => {
@@ -207,6 +207,36 @@ router.post('/delete/:id', wrap(async (req, res) => {
   });
   await addAuditLog('delete','orders', id, 'Deleted');
   res.redirect('/orders');
+}));
+
+// Bulk operations on orders
+router.post('/bulk', wrap(async (req, res) => {
+  const action = req.body.action || '';
+  const ids = (req.body.ids || '').split(',').map(s => toInt(s.trim())).filter(n => n > 0);
+  if (!ids.length) return res.redirect('/orders?err=' + encodeURIComponent('No orders selected'));
+
+  if (action === 'delete') {
+    await tx(async (db) => {
+      await db.run(`DELETE FROM order_items WHERE order_id=ANY($1::int[])`, [ids]);
+      await db.run(`DELETE FROM orders WHERE id=ANY($1::int[])`, [ids]);
+    });
+    await addAuditLog('delete', 'orders', null, `Bulk deleted orders: ${ids.join(',')}`);
+    return res.redirect('/orders?ok=' + encodeURIComponent(`${ids.length} order(s) deleted`));
+  }
+
+  if (action === 'mark_invoiced') {
+    const r = await pool.query(`UPDATE orders SET status='invoiced' WHERE id=ANY($1::int[])`, [ids]);
+    await addAuditLog('update', 'orders', null, `Bulk marked invoiced: ${ids.join(',')}`);
+    return res.redirect('/orders?ok=' + encodeURIComponent(`${r.rowCount} order(s) updated`));
+  }
+
+  if (action === 'mark_pending') {
+    const r = await pool.query(`UPDATE orders SET status='pending' WHERE id=ANY($1::int[])`, [ids]);
+    await addAuditLog('update', 'orders', null, `Bulk marked pending: ${ids.join(',')}`);
+    return res.redirect('/orders?ok=' + encodeURIComponent(`${r.rowCount} order(s) updated`));
+  }
+
+  res.redirect('/orders?err=' + encodeURIComponent('Unknown action'));
 }));
 
 // Generate invoice from single order

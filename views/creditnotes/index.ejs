@@ -7,6 +7,23 @@
   </div>
 </div>
 
+<% if (locals.ok) { %><div class="alert alert-success alert-dismissible"><%= ok %><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div><% } %>
+<% if (locals.err) { %><div class="alert alert-danger alert-dismissible"><%= err %><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div><% } %>
+
+<!-- Bulk Bar -->
+<div class="bulk-bar" id="bulkBar">
+  <span class="bulk-count"><span id="bulkCount">0</span> selected</span>
+  <form method="post" action="/creditnotes/bulk" id="bulkForm" class="d-flex align-items-center gap-2">
+    <input type="hidden" name="ids" id="bulkIds">
+    <select name="action" class="form-select form-select-sm" style="width:auto;" id="bulkAction">
+      <option value="">-- Action --</option>
+      <option value="delete">Delete Selected</option>
+    </select>
+    <button type="submit" class="btn btn-sm btn-light" onclick="return confirmBulk()"><i class="bi bi-check2"></i> Apply</button>
+  </form>
+  <button class="btn btn-sm btn-outline-light ms-auto" onclick="clearSelection()"><i class="bi bi-x"></i> Clear</button>
+</div>
+
 <div class="card mb-3">
   <div class="card-body py-2">
     <form method="GET" class="row g-2">
@@ -26,10 +43,14 @@
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table table-hover mb-0">
-        <thead><tr><th>Note #</th><th>Date</th><th>Type</th><th>Party</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr>
+          <th style="width:40px"><input type="checkbox" id="selectAll" class="form-check-input"></th>
+          <th>Note #</th><th>Date</th><th>Type</th><th>Party</th><th>Amount</th><th>Status</th><th>Actions</th>
+        </tr></thead>
         <tbody>
           <% notes.forEach(n => { %>
           <tr>
+            <td><input type="checkbox" class="form-check-input row-check" value="<%= n.id %>"></td>
             <td><a href="/creditnotes/view/<%= n.id %>" class="fw-bold"><%= n.note_no %></a></td>
             <td><%= formatDate(n.note_date) %></td>
             <td>
@@ -55,10 +76,39 @@
             </td>
           </tr>
           <% }) %>
-          <% if (!notes.length) { %><tr><td colspan="7" class="text-center text-muted py-4">No notes found</td></tr><% } %>
+          <% if (!notes.length) { %><tr><td colspan="8" class="text-center text-muted py-4">No notes found</td></tr><% } %>
         </tbody>
       </table>
     </div>
   </div>
 </div>
+
+<script>
+const bulkBar = document.getElementById('bulkBar');
+const bulkCount = document.getElementById('bulkCount');
+const bulkIds = document.getElementById('bulkIds');
+
+function getChecked() { return [...document.querySelectorAll('.row-check:checked')].map(c => c.value); }
+function updateBulk() {
+  const checked = getChecked();
+  bulkCount.textContent = checked.length;
+  bulkIds.value = checked.join(',');
+  bulkBar.classList.toggle('active', checked.length > 0);
+}
+function clearSelection() {
+  document.querySelectorAll('.row-check, #selectAll').forEach(c => c.checked = false);
+  updateBulk();
+}
+function confirmBulk() {
+  const action = document.getElementById('bulkAction').value;
+  if (!action) { alert('Please select a bulk action.'); return false; }
+  if (action === 'delete') return confirm('Delete selected notes? Applied notes will have their ledger entries reversed. Cannot be undone.');
+  return true;
+}
+document.getElementById('selectAll').addEventListener('change', function() {
+  document.querySelectorAll('.row-check').forEach(c => c.checked = this.checked);
+  updateBulk();
+});
+document.querySelectorAll('.row-check').forEach(c => c.addEventListener('change', updateBulk));
+</script>
 <%- include('../partials/footer') %>

@@ -4,6 +4,25 @@
   <a href="/orders/add" class="btn btn-primary btn-lg"><i class="bi bi-plus-circle"></i> New Order</a>
 </div>
 
+<% if (locals.ok) { %><div class="alert alert-success alert-dismissible"><%= ok %><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div><% } %>
+<% if (locals.err) { %><div class="alert alert-danger alert-dismissible"><%= err %><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div><% } %>
+
+<!-- Bulk Bar -->
+<div class="bulk-bar" id="bulkBar">
+  <span class="bulk-count"><span id="bulkCount">0</span> selected</span>
+  <form method="post" action="/orders/bulk" id="bulkForm" class="d-flex align-items-center gap-2">
+    <input type="hidden" name="ids" id="bulkIds">
+    <select name="action" class="form-select form-select-sm" style="width:auto;" id="bulkAction">
+      <option value="">-- Action --</option>
+      <option value="mark_invoiced">Mark Invoiced</option>
+      <option value="mark_pending">Mark Pending</option>
+      <option value="delete">Delete Selected</option>
+    </select>
+    <button type="submit" class="btn btn-sm btn-light" onclick="return confirmBulk()"><i class="bi bi-check2"></i> Apply</button>
+  </form>
+  <button class="btn btn-sm btn-outline-light ms-auto" onclick="clearSelection()"><i class="bi bi-x"></i> Clear</button>
+</div>
+
 <div class="card">
   <div class="card-header">
     <form method="get" class="d-flex gap-2">
@@ -16,27 +35,62 @@
     <div class="table-responsive">
       <table class="table table-hover mb-0">
         <thead><tr>
-          <th>Order #</th><th>Customer</th><th>Order Date</th><th>Delivery Date</th><th>Amount</th><th>Actions</th>
+          <th style="width:40px"><input type="checkbox" id="selectAll" class="form-check-input"></th>
+          <th>Order #</th><th>Customer</th><th>Order Date</th><th>Delivery Date</th><th>Amount</th><th>Status</th><th>Actions</th>
         </tr></thead>
         <tbody>
           <% orders.forEach(o => { %>
           <tr>
+            <td><input type="checkbox" class="form-check-input row-check" value="<%= o.id %>"></td>
             <td><strong><%= o.order_no %></strong></td>
             <td><%= o.customer_name %></td>
             <td><%= formatDate(o.order_date) %></td>
             <td><%= formatDate(o.delivery_date) %></td>
             <td class="fw-bold text-end"><%= formatCurrency(o.total) %></td>
+            <td><span class="badge bg-<%= o.status === 'invoiced' ? 'success' : 'warning' %>"><%= o.status || 'pending' %></span></td>
             <td>
-              <a href="/orders/view/<%= o.id %>" class="btn btn-sm btn-info"><i class="bi bi-eye"></i> View</a>
-              <a href="/orders/print/<%= o.id %>" target="_blank" class="btn btn-sm btn-secondary"><i class="bi bi-printer"></i> Print</a>
-              <a href="/orders/edit/<%= o.id %>" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i> Edit</a>
+              <a href="/orders/view/<%= o.id %>" class="btn btn-sm btn-info"><i class="bi bi-eye"></i></a>
+              <a href="/orders/print/<%= o.id %>" target="_blank" class="btn btn-sm btn-secondary"><i class="bi bi-printer"></i></a>
+              <a href="/orders/edit/<%= o.id %>" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i></a>
+              <form class="d-inline" method="post" action="/orders/delete/<%= o.id %>" onsubmit="return confirm('Delete this order?')">
+                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+              </form>
             </td>
           </tr>
           <% }) %>
-          <% if (!orders.length) { %><tr><td colspan="6" class="text-center text-muted py-4">No orders found</td></tr><% } %>
+          <% if (!orders.length) { %><tr><td colspan="8" class="text-center text-muted py-4">No orders found</td></tr><% } %>
         </tbody>
       </table>
     </div>
   </div>
 </div>
+
+<script>
+const bulkBar = document.getElementById('bulkBar');
+const bulkCount = document.getElementById('bulkCount');
+const bulkIds = document.getElementById('bulkIds');
+
+function getChecked() { return [...document.querySelectorAll('.row-check:checked')].map(c => c.value); }
+function updateBulk() {
+  const checked = getChecked();
+  bulkCount.textContent = checked.length;
+  bulkIds.value = checked.join(',');
+  bulkBar.classList.toggle('active', checked.length > 0);
+}
+function clearSelection() {
+  document.querySelectorAll('.row-check, #selectAll').forEach(c => c.checked = false);
+  updateBulk();
+}
+function confirmBulk() {
+  const action = document.getElementById('bulkAction').value;
+  if (!action) { alert('Please select a bulk action.'); return false; }
+  if (action === 'delete') return confirm('Delete selected orders? This cannot be undone.');
+  return true;
+}
+document.getElementById('selectAll').addEventListener('change', function() {
+  document.querySelectorAll('.row-check').forEach(c => c.checked = this.checked);
+  updateBulk();
+});
+document.querySelectorAll('.row-check').forEach(c => c.addEventListener('change', updateBulk));
+</script>
 <%- include('../partials/footer') %>

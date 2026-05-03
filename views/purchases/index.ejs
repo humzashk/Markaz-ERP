@@ -3,6 +3,26 @@
   <h2><i class="bi bi-bag"></i> Purchases</h2>
   <a href="/purchases/add" class="btn btn-primary btn-lg"><i class="bi bi-plus"></i> New Purchase</a>
 </div>
+
+<% if (locals.ok) { %><div class="alert alert-success alert-dismissible"><%= ok %><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div><% } %>
+<% if (locals.err) { %><div class="alert alert-danger alert-dismissible"><%= err %><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div><% } %>
+
+<!-- Bulk Bar -->
+<div class="bulk-bar" id="bulkBar">
+  <span class="bulk-count"><span id="bulkCount">0</span> selected</span>
+  <form method="post" action="/purchases/bulk" id="bulkForm" class="d-flex align-items-center gap-2">
+    <input type="hidden" name="ids" id="bulkIds">
+    <select name="action" class="form-select form-select-sm" style="width:auto;" id="bulkAction">
+      <option value="">-- Action --</option>
+      <option value="mark_paid">Mark Paid</option>
+      <option value="mark_unpaid">Mark Unpaid</option>
+      <option value="delete">Delete Selected</option>
+    </select>
+    <button type="submit" class="btn btn-sm btn-light" onclick="return confirmBulk()"><i class="bi bi-check2"></i> Apply</button>
+  </form>
+  <button class="btn btn-sm btn-outline-light ms-auto" onclick="clearSelection()"><i class="bi bi-x"></i> Clear</button>
+</div>
+
 <div class="filter-bar">
   <form class="row g-2" method="get">
     <div class="col-md-6"><input type="text" name="search" class="form-control" placeholder="Search by purchase no, vendor..." value="<%= search %>"></div>
@@ -14,10 +34,14 @@
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table table-hover mb-0">
-        <thead><tr><th>Purchase No</th><th>Vendor</th><th>Date</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr>
+          <th style="width:40px"><input type="checkbox" id="selectAll" class="form-check-input"></th>
+          <th>Purchase No</th><th>Vendor</th><th>Date</th><th>Total</th><th>Status</th><th>Actions</th>
+        </tr></thead>
         <tbody>
           <% purchases.forEach(p => { %>
           <tr>
+            <td><input type="checkbox" class="form-check-input row-check" value="<%= p.id %>"></td>
             <td><strong><%= p.purchase_no %></strong></td>
             <td><%= p.vendor_name %></td>
             <td><%= formatDate(p.purchase_date) %></td>
@@ -25,15 +49,45 @@
             <td><span class="badge bg-<%= statusBadge(p.status) %>"><%= p.status %></span></td>
             <td>
               <a href="/purchases/view/<%= p.id %>" class="btn btn-sm btn-outline-info"><i class="bi bi-eye"></i></a>
+              <a href="/purchases/print/<%= p.id %>" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i></a>
               <a href="/purchases/edit/<%= p.id %>" class="btn btn-sm btn-outline-warning"><i class="bi bi-pencil"></i></a>
               <form class="d-inline delete-form" method="post" action="/purchases/delete/<%= p.id %>"><button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form>
             </td>
           </tr>
           <% }) %>
-          <% if (!purchases.length) { %><tr><td colspan="6" class="text-center text-muted py-4">No purchases found</td></tr><% } %>
+          <% if (!purchases.length) { %><tr><td colspan="7" class="text-center text-muted py-4">No purchases found</td></tr><% } %>
         </tbody>
       </table>
     </div>
   </div>
 </div>
+
+<script>
+const bulkBar = document.getElementById('bulkBar');
+const bulkCount = document.getElementById('bulkCount');
+const bulkIds = document.getElementById('bulkIds');
+
+function getChecked() { return [...document.querySelectorAll('.row-check:checked')].map(c => c.value); }
+function updateBulk() {
+  const checked = getChecked();
+  bulkCount.textContent = checked.length;
+  bulkIds.value = checked.join(',');
+  bulkBar.classList.toggle('active', checked.length > 0);
+}
+function clearSelection() {
+  document.querySelectorAll('.row-check, #selectAll').forEach(c => c.checked = false);
+  updateBulk();
+}
+function confirmBulk() {
+  const action = document.getElementById('bulkAction').value;
+  if (!action) { alert('Please select a bulk action.'); return false; }
+  if (action === 'delete') return confirm('Delete selected purchases? This will reverse stock and ledger entries. Cannot be undone.');
+  return true;
+}
+document.getElementById('selectAll').addEventListener('change', function() {
+  document.querySelectorAll('.row-check').forEach(c => c.checked = this.checked);
+  updateBulk();
+});
+document.querySelectorAll('.row-check').forEach(c => c.addEventListener('change', updateBulk));
+</script>
 <%- include('../partials/footer') %>

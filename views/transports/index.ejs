@@ -3,6 +3,26 @@
   <h2><i class="bi bi-truck"></i> Transports</h2>
   <a href="/transports/add" class="btn btn-primary"><i class="bi bi-plus"></i> Add Transport</a>
 </div>
+
+<% if (locals.ok) { %><div class="alert alert-success alert-dismissible"><%= ok %><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div><% } %>
+<% if (locals.err) { %><div class="alert alert-danger alert-dismissible"><%= err %><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div><% } %>
+
+<!-- Bulk Bar -->
+<div class="bulk-bar" id="bulkBar">
+  <span class="bulk-count"><span id="bulkCount">0</span> selected</span>
+  <form method="post" action="/transports/bulk" id="bulkForm" class="d-flex align-items-center gap-2">
+    <input type="hidden" name="ids" id="bulkIds">
+    <select name="action" class="form-select form-select-sm" style="width:auto;" id="bulkAction">
+      <option value="">-- Action --</option>
+      <option value="set_active">Set Active</option>
+      <option value="set_inactive">Set Inactive</option>
+      <option value="delete">Delete Selected</option>
+    </select>
+    <button type="submit" class="btn btn-sm btn-light" onclick="return confirmBulk()"><i class="bi bi-check2"></i> Apply</button>
+  </form>
+  <button class="btn btn-sm btn-outline-light ms-auto" onclick="clearSelection()"><i class="bi bi-x"></i> Clear</button>
+</div>
+
 <form method="get" class="mb-3 no-confirm no-validate">
   <div class="input-group" style="max-width:400px">
     <input type="text" name="search" class="form-control" placeholder="Search by name" value="<%= search %>">
@@ -10,10 +30,14 @@
   </div>
 </form>
 <div class="card"><div class="table-responsive"><table class="table table-striped mb-0">
-  <thead><tr><th>Name</th><th>Contact</th><th>Phone</th><th>City</th><th>Vehicle</th><th>Driver</th><th>Status</th><th></th></tr></thead>
+  <thead><tr>
+    <th style="width:40px"><input type="checkbox" id="selectAll" class="form-check-input"></th>
+    <th>Name</th><th>Contact</th><th>Phone</th><th>City</th><th>Vehicle</th><th>Driver</th><th>Status</th><th></th>
+  </tr></thead>
   <tbody>
     <% transports.forEach(t => { %>
       <tr>
+        <td><input type="checkbox" class="form-check-input row-check" value="<%= t.id %>"></td>
         <td class="fw-bold"><%= t.name %></td>
         <td><%= t.contact || '-' %></td>
         <td><%= t.phone || '-' %></td>
@@ -27,7 +51,36 @@
         </td>
       </tr>
     <% }); %>
-    <% if (!transports.length) { %><tr><td colspan="8" class="text-center text-muted">No transports yet</td></tr><% } %>
+    <% if (!transports.length) { %><tr><td colspan="9" class="text-center text-muted">No transports yet</td></tr><% } %>
   </tbody>
 </table></div></div>
+
+<script>
+const bulkBar = document.getElementById('bulkBar');
+const bulkCount = document.getElementById('bulkCount');
+const bulkIds = document.getElementById('bulkIds');
+
+function getChecked() { return [...document.querySelectorAll('.row-check:checked')].map(c => c.value); }
+function updateBulk() {
+  const checked = getChecked();
+  bulkCount.textContent = checked.length;
+  bulkIds.value = checked.join(',');
+  bulkBar.classList.toggle('active', checked.length > 0);
+}
+function clearSelection() {
+  document.querySelectorAll('.row-check, #selectAll').forEach(c => c.checked = false);
+  updateBulk();
+}
+function confirmBulk() {
+  const action = document.getElementById('bulkAction').value;
+  if (!action) { alert('Please select a bulk action.'); return false; }
+  if (action === 'delete') return confirm('Delete selected transports? This cannot be undone.');
+  return true;
+}
+document.getElementById('selectAll').addEventListener('change', function() {
+  document.querySelectorAll('.row-check').forEach(c => c.checked = this.checked);
+  updateBulk();
+});
+document.querySelectorAll('.row-check').forEach(c => c.addEventListener('change', updateBulk));
+</script>
 <%- include('../partials/footer') %>

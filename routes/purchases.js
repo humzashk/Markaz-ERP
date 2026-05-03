@@ -14,7 +14,7 @@ router.get('/', wrap(async (req, res) => {
   if (search) { sql += ` AND (p.purchase_no ILIKE $${i} OR v.name ILIKE $${i})`; params.push('%'+search+'%'); i++; }
   sql += ` ORDER BY p.id DESC LIMIT 500`;
   const r = await pool.query(sql, params);
-  res.render('purchases/index', { page:'purchases', purchases: r.rows, search });
+  res.render('purchases/index', { page:'purchases', purchases: r.rows, search, ok: req.query.ok || null, err: req.query.err || null });
 }));
 
 router.get('/add', wrap(async (req, res) => {
@@ -156,6 +156,42 @@ router.get('/print/:id', wrap(async (req, res) => {
     page:'purchases', purchase, items,
     settings: res.locals.appSettings || {}, layout: false
   });
+}));
+
+// Bulk operations on purchases
+router.post('/bulk', wrap(async (req, res) => {
+  const action = req.body.action || '';
+  const ids = (req.body.ids || '').split(',').map(s => toInt(s.trim())).filter(n => n > 0);
+  if (!ids.length) return res.redirect('/purchases?err=' + encodeURIComponent('No purchases selected'));
+
+  if (action === 'delete') {
+    await tx(async (db) => {
+      const purs = await db.many(`SELECT id, vendor_id, purchase_no FROM purchases WHERE id=ANY($1::int[])`, [ids]);
+      for (const p of purs) {
+        await reverseStockForRef(db, 'purchase', p.id);
+        await removeLedgerForRef(db, 'vendor', p.vendor_id, 'purchase', p.id);
+        await recomputeBalance(db, 'vendor', p.vendor_id);
+        await db.run(`DELETE FROM purchase_items WHERE purchase_id=$1`, [p.id]);
+        await db.run(`DELETE FROM purchases WHERE id=$1`, [p.id]);
+      }
+    });
+    await addAuditLog('delete', 'purchases', null, `Bulk deleted purchases: ${ids.join(',')}`);
+    return res.redirect('/purchases?ok=' + encodeURIComponent(`${ids.length} purchase(s) deleted`));
+  }
+
+  if (action === 'mark_paid') {
+    const r = await pool.query(`UPDATE purchases SET status='paid' WHERE id=ANY($1::int[])`, [ids]);
+    await addAuditLog('update', 'purchases', null, `Bulk marked paid: ${ids.join(',')}`);
+    return res.redirect('/purchases?ok=' + encodeURIComponent(`${r.rowCount} purchase(s) updated`));
+  }
+
+  if (action === 'mark_unpaid') {
+    const r = await pool.query(`UPDATE purchases SET status='unpaid' WHERE id=ANY($1::int[])`, [ids]);
+    await addAuditLog('update', 'purchases', null, `Bulk marked unpaid: ${ids.join(',')}`);
+    return res.redirect('/purchases?ok=' + encodeURIComponent(`${r.rowCount} purchase(s) updated`));
+  }
+
+  res.redirect('/purchases?err=' + encodeURIComponent('Unknown action'));
 }));
 
 module.exports = router;

@@ -12,7 +12,7 @@ router.get('/', wrap(async (req, res) => {
   if (search) { sql += ` AND (name ILIKE $1 OR city ILIKE $1 OR vehicle_no ILIKE $1)`; params.push('%'+search+'%'); }
   sql += ` ORDER BY id DESC`;
   const r = await pool.query(sql, params);
-  res.render('transports/index', { page:'transports', transports: r.rows, search });
+  res.render('transports/index', { page:'transports', transports: r.rows, search, ok: req.query.ok || null, err: req.query.err || null });
 }));
 
 router.get('/add', (req, res) => res.render('transports/form', { page:'transports', transport:null, edit:false }));
@@ -43,6 +43,31 @@ router.post('/edit/:id', validate(schemas.transportCreate), wrap(async (req, res
 router.post('/delete/:id', wrap(async (req, res) => {
   await pool.query(`DELETE FROM transports WHERE id=$1`, [req.params.id]);
   res.redirect('/transports');
+}));
+
+// Bulk operations on transports
+router.post('/bulk', wrap(async (req, res) => {
+  const action = req.body.action || '';
+  const ids = (req.body.ids || '').split(',').map(s => parseInt(s.trim(), 10)).filter(n => Number.isFinite(n) && n > 0);
+  if (!ids.length) return res.redirect('/transports?err=' + encodeURIComponent('No transports selected'));
+
+  if (action === 'delete') {
+    await pool.query(`DELETE FROM transports WHERE id=ANY($1::int[])`, [ids]);
+    await addAuditLog('delete', 'transports', null, `Bulk deleted transports: ${ids.join(',')}`);
+    return res.redirect('/transports?ok=' + encodeURIComponent(`${ids.length} transport(s) deleted`));
+  }
+
+  if (action === 'set_active') {
+    const r = await pool.query(`UPDATE transports SET status='active' WHERE id=ANY($1::int[])`, [ids]);
+    return res.redirect('/transports?ok=' + encodeURIComponent(`${r.rowCount} transport(s) activated`));
+  }
+
+  if (action === 'set_inactive') {
+    const r = await pool.query(`UPDATE transports SET status='inactive' WHERE id=ANY($1::int[])`, [ids]);
+    return res.redirect('/transports?ok=' + encodeURIComponent(`${r.rowCount} transport(s) deactivated`));
+  }
+
+  res.redirect('/transports?err=' + encodeURIComponent('Unknown action'));
 }));
 
 router.post('/api/quick-create', wrap(async (req, res) => {

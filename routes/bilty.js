@@ -20,7 +20,7 @@ router.get('/', wrap(async (req, res) => {
   if (search) { sql += ` AND (b.bilty_no ILIKE $${i} OR b.transport_name ILIKE $${i} OR b.to_city ILIKE $${i})`; params.push('%'+search+'%'); i++; }
   sql += ` ORDER BY b.id DESC LIMIT 500`;
   const r = await pool.query(sql, params);
-  res.render('bilty/index', { page:'bilty', bilties: r.rows, search });
+  res.render('bilty/index', { page:'bilty', bilties: r.rows, search, ok: req.query.ok || null, err: req.query.err || null });
 }));
 
 router.get('/add', wrap(async (req, res) => {
@@ -99,6 +99,21 @@ router.get('/view/:id', wrap(async (req, res) => {
 router.post('/delete/:id', wrap(async (req, res) => {
   await pool.query(`DELETE FROM bilty WHERE id=$1`, [req.params.id]);
   res.redirect('/bilty');
+}));
+
+// Bulk operations on bilty
+router.post('/bulk', wrap(async (req, res) => {
+  const action = req.body.action || '';
+  const ids = (req.body.ids || '').split(',').map(s => toInt(s.trim())).filter(n => n > 0);
+  if (!ids.length) return res.redirect('/bilty?err=' + encodeURIComponent('No bilty selected'));
+
+  if (action === 'delete') {
+    await pool.query(`DELETE FROM bilty WHERE id=ANY($1::int[])`, [ids]);
+    await addAuditLog('delete', 'bilty', null, `Bulk deleted bilty: ${ids.join(',')}`);
+    return res.redirect('/bilty?ok=' + encodeURIComponent(`${ids.length} bilty record(s) deleted`));
+  }
+
+  res.redirect('/bilty?err=' + encodeURIComponent('Unknown action'));
 }));
 
 module.exports = router;

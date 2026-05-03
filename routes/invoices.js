@@ -373,6 +373,24 @@ router.post('/bulk', wrap(async (req, res) => {
     await addAuditLog('update', 'invoices', null, `Bulk cancelled: ${ids.join(',')}`);
   }
 
+  else if (action === 'delete') {
+    await tx(async (db) => {
+      const invs = await db.many(
+        `SELECT id, customer_id, invoice_no FROM invoices WHERE id = ANY($1::int[])`,
+        [ids]
+      );
+      for (const inv of invs) {
+        await reverseStockForRef(db, 'invoice', inv.id);
+        await removeLedgerForRef(db, 'customer', inv.customer_id, 'invoice', inv.id);
+        await recomputeBalance(db, 'customer', inv.customer_id);
+        await db.run(`DELETE FROM invoice_items WHERE invoice_id=$1`, [inv.id]);
+        await db.run(`DELETE FROM invoices WHERE id=$1`, [inv.id]);
+      }
+      updated = invs.length;
+    });
+    await addAuditLog('delete', 'invoices', null, `Bulk deleted invoices: ${ids.join(',')}`);
+  }
+
   res.redirect('/invoices/bulk?ok=' + encodeURIComponent(`${updated} invoice(s) updated`));
 }));
 

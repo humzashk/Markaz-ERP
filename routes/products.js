@@ -1,7 +1,7 @@
 'use strict';
 const express = require('express');
 const router = express.Router();
-const { pool, addAuditLog } = require('../database');
+const { pool, tx, applyStockMovement, addAuditLog, toInt, toNum } = require('../database');
 const { wrap } = require('../middleware/errorHandler');
 const { validate, schemas } = require('../middleware/validate');
 
@@ -17,7 +17,8 @@ router.get('/', wrap(async (req, res) => {
   sql += ` ORDER BY id DESC`;
   const r = await pool.query(sql, params);
   const v = await pool.query(`SELECT id, name FROM vendors WHERE status='active' ORDER BY name`);
-  res.render('products/index', { page:'products', products: r.rows, vendors: v.rows, search, stock });
+  res.render('products/index', { page:'products', products: r.rows, vendors: v.rows, search, stock,
+    ok: req.query.ok || null, err: req.query.err || null, error: req.query.err || null });
 }));
 
 router.get('/add', wrap(async (req, res) => {
@@ -70,6 +71,90 @@ router.post('/delete/:id', wrap(async (req, res) => {
 
 router.get('/bulk', wrap(async (req, res) => {
   res.render('products/bulk', { page: 'products' });
+}));
+
+// Bulk action from product list (inline action bar)
+router.post('/bulk', wrap(async (req, res) => {
+  const action = req.body.action || '';
+  const ids = (req.body.ids || '').split(',')
+    .map(s => toInt(s.trim())).filter(n => n > 0);
+  const value = req.body.value || '';
+  const numVal = toNum(value, 0);
+
+  if (!ids.length) return res.redirect('/products?err=' + encodeURIComponent('No products selected'));
+
+  let ok = '';
+  switch (action) {
+    case 'set_vendor': {
+      // vendor_id can be empty (clear manufacturer)
+      const vid = toInt(value) || null;
+      const r = await pool.query(`UPDATE products SET vendor_id=$1 WHERE id=ANY($2::int[])`, [vid, ids]);
+      ok = `${r.rowCount} product(s) updated`;
+      break;
+    }
+    case 'set_category': {
+      if (!value.trim()) return res.redirect('/products?err=' + encodeURIComponent('Category value required'));
+      const r = await pool.query(`UPDATE products SET category=$1 WHERE id=ANY($2::int[])`, [value.trim(), ids]);
+      ok = `${r.rowCount} product(s) category updated`;
+      break;
+    }
+    case 'set_packaging': {
+      const qpp = toInt(value);
+      if (!qpp || qpp < 1) return res.redirect('/products?err=' + encodeURIComponent('Invalid Pcs/Ctn value'));
+      const r = await pool.query(`UPDATE products SET qty_per_pack=$1 WHERE id=ANY($2::int[])`, [qpp, ids]);
+      ok = `${r.rowCount} product(s) Pcs/Ctn updated`;
+      break;
+    }
+    case 'set_rate': {
+      if (numVal < 0) return res.redirect('/products?err=' + encodeURIComponent('Invalid rate value'));
+      const r = await pool.query(`UPDATE products SET selling_price=$1 WHERE id=ANY($2::int[])`, [numVal, ids]);
+      ok = `${r.rowCount} product(s) rate updated`;
+      break;
+    }
+    case 'rate_by_pct': {
+      if (numVal === 0) return res.redirect('/products?err=' + encodeURIComponent('Percentage cannot be zero'));
+      const r = await pool.query(`UPDATE products SET selling_price = GREATEST(0, selling_price * (1 + $1/100)) WHERE id=ANY($2::int[])`, [numVal, ids]);
+      ok = `${r.rowCount} product(s) rate adjusted by ${numVal}%`;
+      break;
+    }
+    case 'stock_add': {
+      const qty = toInt(value);
+      if (!qty || qty < 1) return res.redirect('/products?err=' + encodeURIComponent('Invalid quantity'));
+      await tx(async (db) => {
+        const wh = await db.one(`SELECT id FROM warehouses WHERE status='active' ORDER BY id LIMIT 1`);
+        for (const pid of ids) {
+          if (wh) await applyStockMovement(db, pid, wh.id, qty, 'adjustment', pid, 'bulk_add', 'Bulk stock add');
+          else await db.run(`UPDATE products SET stock = stock + $1 WHERE id=$2`, [qty, pid]);
+        }
+      });
+      ok = `Stock increased by ${qty} for ${ids.length} product(s)`;
+      break;
+    }
+    case 'stock_sub': {
+      const qty = toInt(value);
+      if (!qty || qty < 1) return res.redirect('/products?err=' + encodeURIComponent('Invalid quantity'));
+      await tx(async (db) => {
+        const wh = await db.one(`SELECT id FROM warehouses WHERE status='active' ORDER BY id LIMIT 1`);
+        for (const pid of ids) {
+          if (wh) await applyStockMovement(db, pid, wh.id, -qty, 'adjustment', pid, 'bulk_sub', 'Bulk stock reduce');
+          else await db.run(`UPDATE products SET stock = stock - $1 WHERE id=$2`, [qty, pid]);
+        }
+      });
+      ok = `Stock reduced by ${qty} for ${ids.length} product(s)`;
+      break;
+    }
+    case 'delete': {
+      // Deactivate rather than hard delete to preserve history
+      const r = await pool.query(`UPDATE products SET status='inactive' WHERE id=ANY($1::int[])`, [ids]);
+      ok = `${r.rowCount} product(s) deactivated`;
+      break;
+    }
+    default:
+      return res.redirect('/products?err=' + encodeURIComponent('Unknown action'));
+  }
+
+  await addAuditLog('update', 'products', null, `Bulk ${action} on ${ids.length} products`);
+  res.redirect('/products?ok=' + encodeURIComponent(ok));
 }));
 
 // Bulk price update (all active or by category)
