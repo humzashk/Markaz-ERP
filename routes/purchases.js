@@ -5,7 +5,8 @@ const { pool, tx, nextDocNo, applyStockMovement, reverseStockForRef,
         addLedgerEntry, removeLedgerForRef, recomputeBalance,
         addAuditLog, toInt, toNum } = require('../database');
 const { wrap } = require('../middleware/errorHandler');
-const { validate, schemas } = require('../middleware/validate');
+const { validate, schemas, requireEditPermission } = require('../middleware/validate');
+const _lockPurchase = requireEditPermission('purchases', 'purchase_date');
 
 router.get('/', wrap(async (req, res) => {
   const search = req.query.search || '';
@@ -67,7 +68,7 @@ router.post('/add', validate(schemas.purchaseCreate), wrap(async (req, res) => {
   res.redirect('/purchases/view/' + newId);
 }));
 
-router.get('/edit/:id', wrap(async (req, res) => {
+router.get('/edit/:id', _lockPurchase, wrap(async (req, res) => {
   const id = toInt(req.params.id);
   const p = (await pool.query(`SELECT * FROM purchases WHERE id=$1`, [id])).rows[0];
   if (!p) return res.redirect('/purchases');
@@ -82,7 +83,7 @@ router.get('/edit/:id', wrap(async (req, res) => {
     vendors: vendors.rows, products: products.rows, warehouses: warehouses.rows, transports: transports.rows, edit:true });
 }));
 
-router.post('/edit/:id', validate(schemas.purchaseCreate), wrap(async (req, res) => {
+router.post('/edit/:id', _lockPurchase, validate(schemas.purchaseCreate), wrap(async (req, res) => {
   const id = toInt(req.params.id);
   const v = req.valid; const items = v._items || [];
   if (!items.length) return res.redirect('/purchases/edit/' + id + '?err=no_items');
@@ -121,7 +122,7 @@ router.post('/edit/:id', validate(schemas.purchaseCreate), wrap(async (req, res)
   res.redirect('/purchases/view/' + id);
 }));
 
-router.post('/delete/:id', wrap(async (req, res) => {
+router.post('/delete/:id', _lockPurchase, wrap(async (req, res) => {
   const id = toInt(req.params.id);
   await tx(async (db) => {
     const existing = await db.one(`SELECT * FROM purchases WHERE id=$1`, [id]);

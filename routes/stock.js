@@ -3,7 +3,8 @@ const express = require('express');
 const router = express.Router();
 const { pool, tx, applyStockMovement, reverseStockForRef, addAuditLog, toInt } = require('../database');
 const { wrap } = require('../middleware/errorHandler');
-const { validate, schemas } = require('../middleware/validate');
+const { validate, schemas, requireEditPermission } = require('../middleware/validate');
+const _lockStock = requireEditPermission('stock_adjustments', 'adj_date');
 
 router.get('/', wrap(async (req, res) => {
   const search = req.query.search || '';
@@ -46,7 +47,7 @@ router.post('/add', validate(schemas.stockAdjust), wrap(async (req, res) => {
   res.redirect('/stock');
 }));
 
-router.get('/edit/:id', wrap(async (req, res) => {
+router.get('/edit/:id', _lockStock, wrap(async (req, res) => {
   const id = toInt(req.params.id);
   const adj = (await pool.query(`
     SELECT sa.*, p.name AS product_name, w.name AS warehouse_name
@@ -62,7 +63,7 @@ router.get('/edit/:id', wrap(async (req, res) => {
   res.render('stock/edit', { page:'stock', adj, products, warehouses });
 }));
 
-router.post('/edit/:id', validate(schemas.stockAdjust), wrap(async (req, res) => {
+router.post('/edit/:id', _lockStock, validate(schemas.stockAdjust), wrap(async (req, res) => {
   const id = toInt(req.params.id);
   const v  = req.valid;
   await tx(async (db) => {
@@ -88,7 +89,7 @@ router.post('/edit/:id', validate(schemas.stockAdjust), wrap(async (req, res) =>
   res.redirect('/stock');
 }));
 
-router.post('/delete/:id', wrap(async (req, res) => {
+router.post('/delete/:id', _lockStock, wrap(async (req, res) => {
   const id = toInt(req.params.id);
   await tx(async (db) => {
     const existing = await db.one(`SELECT * FROM stock_adjustments WHERE id=$1`, [id]);

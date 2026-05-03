@@ -116,33 +116,6 @@
 </form>
 
 <script>
-function calcTotal() {
-  let subtotal = 0;
-  let totalCommission = 0;
-  let totalDiscount = 0;
-  document.querySelectorAll('tbody tr').forEach(row => {
-    const qty = parseFloat(row.querySelector('.qty-input')?.value) || 0;
-    const rate = parseFloat(row.querySelector('.rate-input')?.value) || 0;
-    const discPack = parseFloat(row.querySelector('.discount-input')?.value) || 0;
-    const commPct = parseFloat(row.querySelector('.commission-input')?.value) || 0;
-    const amount = qty * rate;
-    const comm = amount * commPct / 100;
-    const disc = qty * discPack; // discount per pack * qty
-    subtotal += amount;
-    totalCommission += comm;
-    totalDiscount += disc;
-  });
-  const transport = parseFloat(document.getElementById('transport_charges')?.value) || 0;
-  const total = subtotal + transport - totalCommission - totalDiscount;
-  const gross = total;
-  document.getElementById('subtotal').textContent = subtotal.toFixed(2);
-  document.getElementById('commPctDisp').textContent = (totalCommission > 0 ? 'Item-wise' : '0');
-  document.getElementById('commAmount').textContent = totalCommission.toFixed(2);
-  document.getElementById('grandTotal').textContent = total.toFixed(2);
-  document.getElementById('discAmount').textContent = totalDiscount.toFixed(2);
-  document.getElementById('grossAmount').textContent = gross.toFixed(2);
-}
-
 function applyDuePreset() {
   const sel = document.getElementById('due_preset');
   const inv = document.getElementById('invoice_date');

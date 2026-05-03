@@ -8,6 +8,26 @@ const { requireRole, ALL_MODULES } = require('../middleware/auth');
 const { validate, schemas } = require('../middleware/validate');
 const { DASH_WIDGETS } = require('./dashboard');
 
+// Profile route — any logged-in user can edit their own account (before role guard)
+router.get('/profile', wrap(async (req, res) => {
+  const u = (await pool.query(`SELECT id, username, name, email, role, status FROM users WHERE id=$1`, [req.user.id])).rows[0];
+  if (!u) return res.redirect('/');
+  res.render('users/form', { page:'users', editUser: u, user: u, edit:true, isNew:false, isProfile:true, ALL_MODULES, DASH_WIDGETS, perms: [] });
+}));
+router.post('/profile', wrap(async (req, res) => {
+  const id = req.user.id;
+  const name = (req.body.name || '').trim();
+  const email = (req.body.email || '').trim();
+  if (name) await pool.query(`UPDATE users SET name=$1, email=$2 WHERE id=$3`, [name, email || null, id]);
+  if (req.body.password && req.body.password.length >= 6) {
+    const bcrypt = require('bcryptjs');
+    const hash = bcrypt.hashSync(req.body.password, 10);
+    await pool.query(`UPDATE users SET password_hash=$1 WHERE id=$2`, [hash, id]);
+  }
+  await addAuditLog('update','users', id, 'Updated own profile');
+  res.redirect('/profile?saved=1');
+}));
+
 router.use(requireRole('superadmin','admin'));
 
 router.get('/', wrap(async (req, res) => {
@@ -29,7 +49,7 @@ router.post('/add', validate(schemas.userCreate), wrap(async (req, res) => {
   try {
     r = await pool.query(`
       INSERT INTO users(username, name, email, password_hash, role, status, created_by)
-      VALUES (LOWER($1),$2,$3,$4,$5,COALESCE($6,'active'),$7) RETURNING id`,
+      VALUES (LOWER($1),$2,$3,$4,$5,COALESCE($6::active_status_t,'active'::active_status_t),$7) RETURNING id`,
       [v.username, v.name || v.username, v.email, hash, v.role, v.status, req.user.id]);
   } catch(e) {
     // Unique constraint violation — username already taken
@@ -59,7 +79,7 @@ router.post('/edit/:id', validate(schemas.userCreate), wrap(async (req, res) => 
   const id = toInt(req.params.id);
   const v = req.valid;
   try {
-    await pool.query(`UPDATE users SET username=LOWER($1), name=$2, email=$3, role=$4, status=COALESCE($5,'active') WHERE id=$6`,
+    await pool.query(`UPDATE users SET username=LOWER($1), name=$2, email=$3, role=$4, status=COALESCE($5::active_status_t,'active'::active_status_t) WHERE id=$6`,
       [v.username, v.name || v.username, v.email, v.role, v.status, id]);
   } catch(e) {
     if (e.code === '23505') {

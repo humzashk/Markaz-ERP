@@ -24,7 +24,9 @@ router.get('/', wrap(async (req, res) => {
 router.get('/add', wrap(async (req, res) => {
   const c = await pool.query(`SELECT name FROM product_categories ORDER BY sort_order, name`);
   const v = await pool.query(`SELECT id, name FROM vendors WHERE status='active' ORDER BY name`);
-  res.render('products/form', { page:'products', product:null, categories: c.rows, vendors: v.rows, edit:false });
+  const ac = await pool.query(`SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND category <> '' ORDER BY category`);
+  const allCats = ac.rows.map(r => r.category);
+  res.render('products/form', { page:'products', product:null, categories: c.rows, vendors: v.rows, allCats, edit:false });
 }));
 
 router.post('/add', validate(schemas.productCreate), wrap(async (req, res) => {
@@ -33,7 +35,7 @@ router.post('/add', validate(schemas.productCreate), wrap(async (req, res) => {
   const sellPrice = v.selling_price != null ? v.selling_price : (req.body.rate != null ? Number(req.body.rate) || 0 : 0);
   const r = await pool.query(`
     INSERT INTO products(item_id,name,category,unit,qty_per_pack,cost_price,selling_price,default_commission_rate,stock,min_stock,status)
-    VALUES ($1,$2,$3,COALESCE($4,'PCS'),COALESCE($5,1),COALESCE($6,0),COALESCE($7,0),COALESCE($8,0),COALESCE($9,0),COALESCE($10,0),COALESCE($11,'active'))
+    VALUES ($1,$2,$3,COALESCE($4,'PCS'),COALESCE($5,1),COALESCE($6,0),COALESCE($7,0),COALESCE($8,0),COALESCE($9,0),COALESCE($10,0),COALESCE($11::active_status_t,'active'::active_status_t))
     RETURNING id`,
     [v.item_id, v.name, v.category, v.unit, v.qty_per_pack, v.cost_price, sellPrice, v.default_commission_rate, v.stock, v.min_stock, v.status]
   );
@@ -41,12 +43,36 @@ router.post('/add', validate(schemas.productCreate), wrap(async (req, res) => {
   res.redirect('/products');
 }));
 
+router.get('/view/:id', wrap(async (req, res) => {
+  const p = await pool.query(`SELECT *, selling_price AS rate FROM products WHERE id=$1`, [req.params.id]);
+  if (!p.rows[0]) return res.redirect('/products');
+  const prod = p.rows[0];
+  const movements = await pool.query(`
+    SELECT sl.*, COALESCE(c.name, v.name, 'Adjustment') AS party_name,
+      CASE WHEN sl.ref_type='invoice' THEN 'Invoice'
+           WHEN sl.ref_type='purchase' THEN 'Purchase'
+           WHEN sl.ref_type='order' THEN 'Order'
+           ELSE 'Adjustment' END AS doc_type,
+      sl.ref_id AS ref_doc_id
+    FROM stock_ledger sl
+    LEFT JOIN invoices i ON sl.ref_type='invoice' AND sl.ref_id=i.id
+    LEFT JOIN customers c ON i.customer_id=c.id
+    LEFT JOIN purchases pu ON sl.ref_type='purchase' AND sl.ref_id=pu.id
+    LEFT JOIN vendors v ON pu.vendor_id=v.id
+    WHERE sl.product_id=$1
+    ORDER BY sl.id DESC LIMIT 30
+  `, [req.params.id]);
+  res.render('products/view', { page:'products', product: prod, movements: movements.rows });
+}));
+
 router.get('/edit/:id', wrap(async (req, res) => {
   const p = await pool.query(`SELECT *, selling_price AS rate FROM products WHERE id=$1`, [req.params.id]);
   if (!p.rows[0]) return res.redirect('/products');
   const c = await pool.query(`SELECT name FROM product_categories ORDER BY sort_order, name`);
   const v = await pool.query(`SELECT id, name FROM vendors WHERE status='active' ORDER BY name`);
-  res.render('products/form', { page:'products', product: p.rows[0], categories: c.rows, vendors: v.rows, edit:true });
+  const ac = await pool.query(`SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND category <> '' ORDER BY category`);
+  const allCats = ac.rows.map(r => r.category);
+  res.render('products/form', { page:'products', product: p.rows[0], categories: c.rows, vendors: v.rows, allCats, edit:true });
 }));
 
 router.post('/edit/:id', validate(schemas.productCreate), wrap(async (req, res) => {
@@ -55,7 +81,7 @@ router.post('/edit/:id', validate(schemas.productCreate), wrap(async (req, res) 
   await pool.query(`
     UPDATE products SET item_id=$1, name=$2, category=$3, unit=COALESCE($4,'PCS'),
       qty_per_pack=COALESCE($5,1), cost_price=COALESCE($6,0), selling_price=COALESCE($7,0),
-      default_commission_rate=COALESCE($8,0), min_stock=COALESCE($9,0), status=COALESCE($10,'active')
+      default_commission_rate=COALESCE($8,0), min_stock=COALESCE($9,0), status=COALESCE($10::active_status_t,'active'::active_status_t)
     WHERE id=$11`,
     [v.item_id, v.name, v.category, v.unit, v.qty_per_pack, v.cost_price, sellPrice, v.default_commission_rate, v.min_stock, v.status, req.params.id]
   );

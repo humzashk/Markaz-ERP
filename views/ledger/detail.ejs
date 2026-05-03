@@ -23,13 +23,24 @@
 </div>
 
 <!-- Date Filter -->
-<div class="filter-bar no-print">
-  <form class="row g-2" method="get">
-    <div class="col-md-3"><label class="form-label">From Date</label><input type="date" name="from" class="form-control" value="<%= from %>"></div>
-    <div class="col-md-3"><label class="form-label">To Date</label><input type="date" name="to" class="form-control" value="<%= to %>"></div>
-    <div class="col-auto d-flex align-items-end"><button class="btn btn-primary"><i class="bi bi-filter"></i> Filter</button></div>
-    <% if (from||to) { %><div class="col-auto d-flex align-items-end"><a href="/ledger/<%= entityType %>/<%= entity.id %>" class="btn btn-outline-secondary">Clear</a></div><% } %>
-  </form>
+<div class="card mb-3 no-print">
+  <div class="card-body py-2">
+    <form class="row g-2 align-items-end" method="get">
+      <div class="col-auto">
+        <label class="form-label small mb-1">From Date</label>
+        <input type="date" name="from" class="form-control form-control-sm" value="<%= from %>">
+      </div>
+      <div class="col-auto">
+        <label class="form-label small mb-1">To Date</label>
+        <input type="date" name="to" class="form-control form-control-sm" value="<%= to %>">
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-primary btn-sm"><i class="bi bi-filter"></i> Filter</button>
+        <a href="/ledger/<%= entityType %>/<%= entity.id %>" class="btn btn-outline-secondary btn-sm ms-1">Last 30 Days</a>
+        <a href="/ledger/<%= entityType %>/<%= entity.id %>?from=&to=" class="btn btn-outline-secondary btn-sm ms-1">All Time</a>
+      </div>
+    </form>
+  </div>
 </div>
 
 <!-- Ledger Table + Detail Panel -->
@@ -40,9 +51,15 @@
         <div class="table-responsive">
           <table class="table table-hover mb-0" id="ledgerTable">
             <thead>
-              <tr><th>Date</th><th>Description</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th class="text-end">Balance</th></tr>
+              <tr><th>Date</th><th>Description</th><th>Pay Type</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th class="text-end">Balance</th></tr>
             </thead>
             <tbody>
+              <% var _ob = typeof openingBalance !== 'undefined' ? openingBalance : 0; %>
+              <tr class="table-light text-muted fw-semibold">
+                <td><%= from || '—' %></td>
+                <td colspan="4">Opening Balance</td>
+                <td class="text-end fw-bold"><%= formatCurrency(_ob) %></td>
+              </tr>
               <% entries.forEach((e, idx) => { %>
               <tr class="ledger-row" style="cursor:pointer;" onclick="showTxnDetail(<%= idx %>)"
                 data-id="<%= e.id %>"
@@ -50,23 +67,26 @@
                 data-desc="<%= (e.description || '').replace(/'/g, '&#39;') %>"
                 data-debit="<%= e.debit || 0 %>"
                 data-credit="<%= e.credit || 0 %>"
-                data-balance="<%= e.balance %>"
+                data-balance="<%= e.running_balance != null ? e.running_balance : (e.balance || 0) %>"
                 data-reftype="<%= e.reference_type || '' %>"
                 data-refid="<%= e.reference_id || '' %>">
                 <td><%= formatDate(e.txn_date) %></td>
                 <td><%= e.description || '-' %></td>
+                <td class="text-muted small"><%= e.payment_method ? e.payment_method.charAt(0).toUpperCase()+e.payment_method.slice(1) : '—' %></td>
                 <td class="text-end"><%= e.debit > 0 ? formatCurrency(e.debit) : '-' %></td>
                 <td class="text-end"><%= e.credit > 0 ? formatCurrency(e.credit) : '-' %></td>
-                <td class="text-end fw-bold <%= e.balance > 0 ? 'due-amount' : e.balance < 0 ? 'credit-amount' : '' %>"><%= formatCurrency(e.balance) %></td>
+                <% var _rb = e.running_balance != null ? e.running_balance : (e.balance || 0); %>
+                <td class="text-end fw-bold <%= _rb > 0 ? 'due-amount' : _rb < 0 ? 'credit-amount' : '' %>"><%= formatCurrency(_rb) %></td>
               </tr>
               <% }) %>
-              <% if (!entries.length) { %><tr><td colspan="5" class="text-center text-muted py-4">No transactions found</td></tr><% } %>
+              <% if (!entries.length) { %><tr><td colspan="6" class="text-center text-muted py-4">No transactions found for this period</td></tr><% } %>
             </tbody>
             <% if (entries.length) { %>
             <tfoot class="table-light">
               <tr class="fs-5 fw-bold">
-                <td colspan="4" class="text-end">Current Balance:</td>
-                <td class="text-end <%= entity.balance > 0 ? 'due-amount' : entity.balance < 0 ? 'credit-amount' : '' %>"><%= formatCurrency(entity.balance) %></td>
+                <td colspan="5" class="text-end">Closing Balance:</td>
+                <% var _cb = typeof closingBalance !== 'undefined' ? closingBalance : entity.balance; %>
+                <td class="text-end <%= _cb > 0 ? 'due-amount' : _cb < 0 ? 'credit-amount' : '' %>"><%= formatCurrency(_cb) %></td>
               </tr>
             </tfoot>
             <% } %>
@@ -110,18 +130,20 @@ function showTxnDetail(idx) {
   document.getElementById('td_debit').textContent = parseFloat(d.debit) > 0 ? 'Rs. ' + fmt(d.debit) : '-';
   document.getElementById('td_credit').textContent = parseFloat(d.credit) > 0 ? 'Rs. ' + fmt(d.credit) : '-';
   document.getElementById('td_balance').textContent = 'Rs. ' + fmt(d.balance);
-  document.getElementById('td_type').textContent = d.reftype ? d.reftype.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()) : 'General';
+  document.getElementById('td_type').textContent = d.reftype ? d.reftype.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()) : 'General Entry';
 
   let linkHtml = '';
   if (d.reftype && d.refid) {
     const links = {
-      invoice: '/invoices/view/' + d.refid,
-      order: '/orders/view/' + d.refid,
-      purchase: '/purchases/view/' + d.refid,
-      payment: '/payments',
+      invoice:     '/invoices/view/'    + d.refid,
+      order:       '/orders/view/'      + d.refid,
+      purchase:    '/purchases/view/'   + d.refid,
+      payment:     '/payments/view/'    + d.refid,
+      credit_note: '/creditnotes/view/' + d.refid,
+      debit_note:  '/creditnotes/view/' + d.refid,
     };
     const url = links[d.reftype];
-    if (url) linkHtml = `<a href="${url}" class="btn btn-sm btn-outline-primary w-100"><i class="bi bi-box-arrow-up-right"></i> View ${d.reftype.charAt(0).toUpperCase()+d.reftype.slice(1)}</a>`;
+    if (url) linkHtml = `<a href="${url}" class="btn btn-sm btn-outline-primary w-100"><i class="bi bi-box-arrow-up-right"></i> View ${d.reftype.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</a>`;
   }
   document.getElementById('td_link').innerHTML = linkHtml;
   document.getElementById('txnDetailPanel').style.display = '';

@@ -451,4 +451,46 @@ const schemas = {
   }
 };
 
-module.exports = { validate, schemas, RULES, preventDoubleSubmit };
+// ── 2-Month Edit Lock ────────────────────────────────────────────────────────
+// Returns true if the given date is older than 2 calendar months from today.
+function isOlderThan2Months(dateVal) {
+  if (!dateVal) return false;
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return false;
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - 2);
+  cutoff.setHours(0, 0, 0, 0);
+  return d < cutoff;
+}
+
+/**
+ * requireEditPermission(table, dateCol, idParam)
+ * Middleware: blocks edit/delete of records older than 2 months for non-superadmin.
+ *   table    — DB table name
+ *   dateCol  — column that holds the record date (e.g. 'invoice_date')
+ *   idParam  — req.params key for the record ID (default 'id')
+ */
+function requireEditPermission(table, dateCol, idParam) {
+  idParam = idParam || 'id';
+  return async function(req, res, next) {
+    if (req.user && req.user.role === 'superadmin') return next();
+    const id = parseInt(req.params[idParam], 10);
+    if (!id || isNaN(id)) return next();
+    try {
+      const r = await pool.query(`SELECT ${dateCol} AS doc_date FROM ${table} WHERE id=$1`, [id]);
+      const row = r.rows[0];
+      if (row && isOlderThan2Months(row.doc_date)) {
+        const isJson = req.xhr || (req.headers.accept||'').includes('application/json');
+        if (isJson) return res.status(403).json({ error: 'This record is older than 2 months. Only a superadmin can modify it.' });
+        return res.status(403).render('error', {
+          page: 'error',
+          message: 'This record is older than 2 months and is locked. Only a superadmin can edit or delete it.',
+          back: req.get('Referer') || '/'
+        });
+      }
+    } catch(e) { /* allow on DB error */ }
+    next();
+  };
+}
+
+module.exports = { validate, schemas, RULES, preventDoubleSubmit, requireEditPermission, isOlderThan2Months };

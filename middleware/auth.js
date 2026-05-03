@@ -3,7 +3,7 @@ const { pool } = require('../database');
 
 const ALL_MODULES = [
   'dashboard', 'customers', 'vendors',
-  'products', 'ratelist', 'warehouses', 'stock',
+  'products', 'rates', 'warehouses', 'stock',
   'orders', 'invoices', 'purchases', 'creditnotes', 'bilty', 'transports', 'breakage', 'expenses',
   'payments-receive', 'payments-pay',
   'daybook', 'journal', 'ledger', 'reports',
@@ -12,7 +12,7 @@ const ALL_MODULES = [
 
 const PATH_MODULE_MAP = {
   '/': 'dashboard',
-  '/customers':'customers','/vendors':'vendors','/products':'products','/ratelist':'ratelist',
+  '/customers':'customers','/vendors':'vendors','/products':'products','/rates':'rates',
   '/warehouses':'warehouses','/stock':'stock',
   '/orders':'orders','/invoices':'invoices','/purchases':'purchases',
   '/creditnotes':'creditnotes','/bilty':'bilty','/transports':'transports',

@@ -63,7 +63,7 @@
       <div class="card">
         <div class="card-header">Purchase Items</div>
         <div class="card-body">
-          <%- include('../partials/item-rows') %>
+          <%- include('../partials/item-rows', { hideCommission: true }) %>
           <div class="text-end border-top pt-3">
             <div class="d-flex justify-content-end gap-4 mb-2"><span class="text-muted">Subtotal:</span><strong id="subtotal">0.00</strong></div>
             <div class="d-flex justify-content-end gap-4"><span class="fs-5 fw-bold">TOTAL:</span><strong class="fs-5 text-success" id="grandTotal">0.00</strong></div>

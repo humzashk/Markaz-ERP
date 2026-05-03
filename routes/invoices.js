@@ -5,7 +5,8 @@ const { pool, tx, nextDocNo, applyStockMovement, reverseStockForRef,
         addLedgerEntry, removeLedgerForRef, recomputeBalance,
         getProductCost, addAuditLog, toInt, toNum } = require('../database');
 const { wrap } = require('../middleware/errorHandler');
-const { validate, schemas } = require('../middleware/validate');
+const { validate, schemas, requireEditPermission } = require('../middleware/validate');
+const _lockInvoice = requireEditPermission('invoices', 'invoice_date');
 
 router.get('/', wrap(async (req, res) => {
   const status = req.query.status || '';
@@ -94,9 +95,7 @@ router.get('/api/stock/:product_id', wrap(async (req, res) => {
     const ws = await pool.query(`SELECT quantity FROM warehouse_stock WHERE product_id=$1 AND warehouse_id=$2`, [pid, wid]);
     stockPcs = ws.rows[0] ? Number(ws.rows[0].quantity) : 0;
   }
-  let rate = Number(prod.selling_price) || 0;
-  const rl = await pool.query(`SELECT rate FROM rate_list WHERE product_id=$1 AND customer_type=$2 AND effective_date <= CURRENT_DATE ORDER BY effective_date DESC, id DESC LIMIT 1`, [pid, customerType]);
-  if (rl.rows[0] && rl.rows[0].rate != null) rate = Number(rl.rows[0].rate);
+  const rate = Number(prod.selling_price) || 0;
   const qpp = prod.qty_per_pack || 1;
   // Flag suspicious qty_per_pack for the frontend warning system
   const unit = (prod.unit || '').toUpperCase().trim();
@@ -180,7 +179,7 @@ router.post('/add', validate(schemas.invoiceCreate), wrap(async (req, res) => {
   res.redirect('/invoices/view/' + newId);
 }));
 
-router.get('/edit/:id', wrap(async (req, res) => {
+router.get('/edit/:id', _lockInvoice, wrap(async (req, res) => {
   const id = toInt(req.params.id);
   const inv = (await pool.query(`SELECT * FROM invoices WHERE id=$1`, [id])).rows[0];
   if (!inv) return res.redirect('/invoices');
@@ -198,7 +197,7 @@ router.get('/edit/:id', wrap(async (req, res) => {
   });
 }));
 
-router.post('/edit/:id', validate(schemas.invoiceCreate), wrap(async (req, res) => {
+router.post('/edit/:id', _lockInvoice, validate(schemas.invoiceCreate), wrap(async (req, res) => {
   const id = toInt(req.params.id);
   const v = req.valid;
   if (v.bilty_no) v.bilty_no = _normBilty(v.bilty_no);
@@ -262,7 +261,7 @@ router.post('/edit/:id', validate(schemas.invoiceCreate), wrap(async (req, res) 
   res.redirect('/invoices/view/' + id);
 }));
 
-router.post('/delete/:id', wrap(async (req, res) => {
+router.post('/delete/:id', _lockInvoice, wrap(async (req, res) => {
   const id = toInt(req.params.id);
   await tx(async (db) => {
     const existing = await db.one(`SELECT * FROM invoices WHERE id=$1`, [id]);

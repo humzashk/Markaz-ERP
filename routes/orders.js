@@ -3,7 +3,8 @@ const express = require('express');
 const router = express.Router();
 const { pool, tx, nextDocNo, addAuditLog, toInt, toNum } = require('../database');
 const { wrap } = require('../middleware/errorHandler');
-const { validate, schemas } = require('../middleware/validate');
+const { validate, schemas, requireEditPermission } = require('../middleware/validate');
+const _lockOrder = requireEditPermission('orders', 'order_date');
 
 // Orders DO NOT touch stock or ledger. They are draft sale agreements.
 // Stock + ledger are committed when an invoice is generated.
@@ -51,9 +52,7 @@ router.get('/api/stock/:product_id', wrap(async (req, res) => {
     const ws = await pool.query(`SELECT quantity FROM warehouse_stock WHERE product_id=$1 AND warehouse_id=$2`, [pid, wid]);
     stockPcs = ws.rows[0] ? Number(ws.rows[0].quantity) : 0;
   }
-  let rate = Number(prod.selling_price) || 0;
-  const rl = await pool.query(`SELECT rate FROM rate_list WHERE product_id=$1 AND customer_type=$2 AND effective_date <= CURRENT_DATE ORDER BY effective_date DESC, id DESC LIMIT 1`, [pid, customerType]);
-  if (rl.rows[0] && rl.rows[0].rate != null) rate = Number(rl.rows[0].rate);
+  const rate = Number(prod.selling_price) || 0;
   const qpp = prod.qty_per_pack || 1;
   const unit = (prod.unit || '').toUpperCase().trim();
   const pcsUnits = new Set(['PCS','PIECE','PIECES','EA','EACH','NOS','NO']);
@@ -110,7 +109,7 @@ router.post('/add', validate(schemas.orderCreate), wrap(async (req, res) => {
   res.redirect('/orders/view/' + orderId);
 }));
 
-router.get('/edit/:id', wrap(async (req, res) => {
+router.get('/edit/:id', _lockOrder, wrap(async (req, res) => {
   const id = toInt(req.params.id);
   const o = await pool.query(`SELECT * FROM orders WHERE id=$1`, [id]);
   if (!o.rows[0]) return res.redirect('/orders');
@@ -128,7 +127,7 @@ router.get('/edit/:id', wrap(async (req, res) => {
   });
 }));
 
-router.post('/edit/:id', validate(schemas.orderCreate), wrap(async (req, res) => {
+router.post('/edit/:id', _lockOrder, validate(schemas.orderCreate), wrap(async (req, res) => {
   const id = toInt(req.params.id);
   const v = req.valid;
   if (v.bilty_no) v.bilty_no = _normBilty(v.bilty_no);
@@ -199,7 +198,7 @@ router.get('/challan/:id', wrap(async (req, res) => {
   res.render('orders/challan', { page:'orders', order, items, dc, settings: res.locals.appSettings || {}, layout:false });
 }));
 
-router.post('/delete/:id', wrap(async (req, res) => {
+router.post('/delete/:id', _lockOrder, wrap(async (req, res) => {
   const id = toInt(req.params.id);
   await tx(async (db) => {
     await db.run(`DELETE FROM order_items WHERE order_id=$1`, [id]);

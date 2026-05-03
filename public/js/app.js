@@ -6,19 +6,21 @@ function _buildRowHtml(idx) {
         `<option value="${p.id}" data-packaging="${p.packaging || p.qty_per_pack || 1}" data-rate="${p.rate || p.selling_price || 0}" data-stock="${p.stock || 0}" data-commission="${p.default_commission_rate || 0}">${p.name} · Stock: ${Math.floor((p.stock||0)/Math.max(1,p.qty_per_pack||1))} Ctn</option>`
       ).join('')
     : '';
+  const hideComm = !!window._hideCommission;
+  const hideDisc = !!window._hideDiscount;
   return `
-    <td class="text-muted">${idx}</td>
+    <td class="text-muted small">${idx}</td>
     <td>
-      <select name="product_id" class="form-select product-select" required onchange="onProductChange(this)">
+      <select name="product_id" class="form-select form-select-sm product-select" required onchange="onProductChange(this)">
         <option value="">— Select Product —</option>${opts}
       </select>
     </td>
-    <td><input type="number" name="packages" class="form-control pkg-input text-center fw-bold" min="0" value="" oninput="calcRow(this)" placeholder="0"></td>
-    <td><input type="number" name="packaging" class="form-control packaging-input text-center text-muted" min="1" value="1" oninput="calcRow(this)"></td>
-    <td><input type="number" name="quantity" class="form-control qty-input text-center fw-bold text-primary" min="0" value="" required oninput="onQtyInput(this)" placeholder="0"></td>
-    <td><input type="number" name="rate" class="form-control rate-input text-center" min="0" step="0.01" value="" required oninput="calcTotal()" placeholder="0.00"></td>
-    <td><input type="number" name="discount_per_pack" class="form-control discount-input text-center" min="0" step="0.01" value="0" oninput="calcTotal()"></td>
-    <td><input type="number" name="commission_pct" class="form-control commission-input text-center" min="0" step="0.01" max="100" value="0" oninput="calcTotal()"></td>
+    <td><input type="number" name="rate"             class="form-control form-control-sm rate-input text-center"        min="0" step="0.01" value="" required oninput="calcTotal()" placeholder="0.00"></td>
+    <td><input type="number" name="packages"         class="form-control form-control-sm pkg-input text-center fw-bold"  min="0" value="" oninput="calcRow(this)" placeholder="0"></td>
+    <td><input type="number" name="packaging"        class="form-control form-control-sm packaging-input text-center"   min="1" value="1" oninput="calcRow(this)"></td>
+    <td><input type="number" name="quantity"         class="form-control form-control-sm qty-input text-center fw-bold text-primary" min="0" value="" required oninput="onQtyInput(this)" placeholder="0"></td>
+    ${hideComm ? '<input type="hidden" name="commission_pct" value="0">' : '<td><input type="number" name="commission_pct" class="form-control form-control-sm commission-input text-center" min="0" step="0.01" max="50" value="0" oninput="calcTotal()"></td>'}
+    ${hideDisc ? '<input type="hidden" name="discount_per_pack" value="0">' : '<td><input type="number" name="discount_per_pack" class="form-control form-control-sm discount-input text-center" min="0" step="0.01" value="0" oninput="calcTotal()"></td>'}
     <td class="text-center"><span class="row-amount fw-bold text-success">0.00</span></td>
     <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="removeRow(this)"><i class="bi bi-x"></i></button></td>
   `;

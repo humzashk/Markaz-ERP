@@ -1,0 +1,165 @@
+<%- include('../partials/header') %>
+
+<div class="page-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <h2><i class="bi bi-journal-text"></i> Vendor Ledger — <strong><%= vendor.name %></strong></h2>
+  <div class="d-flex gap-2 flex-wrap no-print">
+    <a href="/payments/pay?entity_id=<%= vendor.id %>" class="btn btn-success btn-sm"><i class="bi bi-cash"></i> Pay Vendor</a>
+    <a href="/ledger/print/vendor/<%= vendor.id %>?from=<%= from %>&to=<%= to %>" class="btn btn-outline-secondary btn-sm" target="_blank"><i class="bi bi-printer"></i> Print</a>
+    <a href="/ledger" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+</div>
+
+<%/* ── Summary cards ── */%>
+<div class="row g-3 mb-3">
+  <div class="col-sm-4">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small mb-1">Opening Balance</div>
+        <div class="fs-5 fw-bold <%= openingBalance > 0 ? 'text-danger' : openingBalance < 0 ? 'text-success' : 'text-secondary' %>">
+          Rs. <%= Math.abs(openingBalance).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) %>
+          <small class="fs-6 fw-normal text-muted ms-1"><%= openingBalance > 0 ? '(Payable)' : openingBalance < 0 ? '(Advance)' : '' %></small>
+        </div>
+        <div class="text-muted" style="font-size:11px">Before <%= from || 'all time' %></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-4">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small mb-1">Closing Balance</div>
+        <div class="fs-5 fw-bold <%= closingBalance > 0 ? 'text-danger' : closingBalance < 0 ? 'text-success' : 'text-secondary' %>">
+          Rs. <%= Math.abs(closingBalance).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) %>
+          <small class="fs-6 fw-normal text-muted ms-1"><%= closingBalance > 0 ? '(Payable)' : closingBalance < 0 ? '(Advance)' : '' %></small>
+        </div>
+        <div class="text-muted" style="font-size:11px">As of <%= to || 'today' %></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-4">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small mb-1">Current Balance (All Time)</div>
+        <div class="fs-5 fw-bold <%= vendor.balance < 0 ? 'text-danger' : vendor.balance > 0 ? 'text-success' : 'text-secondary' %>">
+          Rs. <%= Math.abs(vendor.balance || 0).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) %>
+          <small class="fs-6 fw-normal text-muted ms-1"><%= (vendor.balance||0) < 0 ? '(Payable)' : (vendor.balance||0) > 0 ? '(Advance)' : '' %></small>
+        </div>
+        <div class="text-muted" style="font-size:11px"><%= vendor.phone || vendor.city || '' %></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%/* ── Date filter ── */%>
+<div class="card mb-3 no-print">
+  <div class="card-body py-2">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-auto">
+        <label class="form-label small mb-1">From Date</label>
+        <input type="date" name="from" class="form-control form-control-sm" value="<%= from %>">
+      </div>
+      <div class="col-auto">
+        <label class="form-label small mb-1">To Date</label>
+        <input type="date" name="to" class="form-control form-control-sm" value="<%= to %>">
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-primary btn-sm"><i class="bi bi-filter"></i> Filter</button>
+        <a href="/ledger/vendor/<%= vendor.id %>" class="btn btn-outline-secondary btn-sm ms-1">Last 30 Days</a>
+        <a href="/ledger/vendor/<%= vendor.id %>?from=&to=" class="btn btn-outline-secondary btn-sm ms-1">All Time</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<%/* ── Ledger table ── */%>
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead class="table-dark">
+          <tr>
+            <th style="width:105px">Date</th>
+            <th>Description</th>
+            <th style="width:110px">Pay Type</th>
+            <th class="text-end" style="width:130px">Debit (Dr)</th>
+            <th class="text-end" style="width:130px">Credit (Cr)</th>
+            <th class="text-end" style="width:140px">Balance</th>
+          </tr>
+        </thead>
+        <tbody>
+          <%/* Opening balance row */%>
+          <tr class="table-light fw-semibold text-muted">
+            <td><%= from || '—' %></td>
+            <td colspan="4"><i class="bi bi-flag"></i> Opening Balance</td>
+            <td class="text-end fw-bold <%= openingBalance > 0 ? 'text-danger' : openingBalance < 0 ? 'text-success' : '' %>">
+              Rs. <%= Math.abs(openingBalance).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) %>
+              <%= openingBalance > 0 ? 'Dr' : openingBalance < 0 ? 'Cr' : '' %>
+            </td>
+          </tr>
+
+          <% entries.forEach((e, idx) => {
+            const isPayment  = e.reference_type === 'payment';
+            const isPurchase = e.reference_type === 'purchase';
+            const isCrNote   = e.reference_type === 'credit_note';
+            const isDbNote   = e.reference_type === 'debit_note';
+            const rowClass   = isPurchase ? 'table-warning' : isPayment ? '' : isCrNote || isDbNote ? 'table-info' : '';
+            const payType    = e.payment_method
+              ? e.payment_method.charAt(0).toUpperCase() + e.payment_method.slice(1)
+              : (isPurchase ? 'Purchase' : isCrNote ? 'Credit Note' : isDbNote ? 'Debit Note' : '—');
+            const refLinks = { purchase: '/purchases/view/', payment: '/payments/view/', invoice: '/invoices/view/', credit_note: '/creditnotes/view/', debit_note: '/creditnotes/view/' };
+            const refUrl   = e.reference_id && refLinks[e.reference_type] ? refLinks[e.reference_type] + e.reference_id : null;
+          %>
+          <tr class="<%= rowClass %>" style="cursor:<%= refUrl ? 'pointer' : 'default' %>" <%= refUrl ? `onclick="window.location='${refUrl}'"` : '' %>>
+            <td class="text-muted small"><%= new Date(e.txn_date).toLocaleDateString('en-PK',{day:'2-digit',month:'short',year:'numeric'}) %></td>
+            <td>
+              <span class="fw-semibold"><%= e.description %></span>
+              <% if (e.reference_type && e.reference_id) { %>
+                <span class="badge bg-secondary ms-1" style="font-size:10px"><%= e.reference_type %> #<%= e.reference_id %></span>
+              <% } %>
+            </td>
+            <td class="small text-muted"><%= payType %></td>
+            <td class="text-end text-danger"><%= Number(e.debit||0) > 0 ? 'Rs. ' + Number(e.debit).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—' %></td>
+            <td class="text-end text-success"><%= Number(e.credit||0) > 0 ? 'Rs. ' + Number(e.credit).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—' %></td>
+            <td class="text-end fw-bold <%= e.running_balance > 0 ? 'text-danger' : e.running_balance < 0 ? 'text-success' : 'text-secondary' %>">
+              Rs. <%= Math.abs(e.running_balance).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) %>
+              <span class="fw-normal" style="font-size:10px"><%= e.running_balance > 0 ? 'Dr' : e.running_balance < 0 ? 'Cr' : '' %></span>
+            </td>
+          </tr>
+          <% }) %>
+
+          <% if (!entries.length) { %>
+          <tr>
+            <td colspan="6" class="text-center text-muted py-5">
+              <i class="bi bi-inbox fs-4 d-block mb-2"></i>
+              No transactions found for this period.
+            </td>
+          </tr>
+          <% } %>
+        </tbody>
+
+        <% if (entries.length) { %>
+        <tfoot>
+          <%
+            const totalDr = entries.reduce((s,e) => s + Number(e.debit||0), 0);
+            const totalCr = entries.reduce((s,e) => s + Number(e.credit||0), 0);
+          %>
+          <tr class="table-light fw-semibold">
+            <td colspan="3" class="text-end text-muted small">Period Totals:</td>
+            <td class="text-end text-danger">Rs. <%= totalDr.toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) %></td>
+            <td class="text-end text-success">Rs. <%= totalCr.toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) %></td>
+            <td></td>
+          </tr>
+          <tr class="table-dark fw-bold">
+            <td colspan="5" class="text-end">Closing Balance:</td>
+            <td class="text-end fs-6 <%= closingBalance > 0 ? 'text-warning' : closingBalance < 0 ? 'text-success' : 'text-light' %>">
+              Rs. <%= Math.abs(closingBalance).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) %>
+              <%= closingBalance > 0 ? 'Dr' : closingBalance < 0 ? 'Cr' : '' %>
+            </td>
+          </tr>
+        </tfoot>
+        <% } %>
+      </table>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>

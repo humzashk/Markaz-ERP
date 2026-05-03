@@ -44,10 +44,10 @@
         <% if (canSee('vendors')) { %><li><a href="/vendors" class="<%= page === 'vendors' ? 'active' : '' %>"><i class="bi bi-truck"></i><span>Vendors</span></a></li><% } %>
       <% } %>
 
-      <% if (canSee('products') || canSee('ratelist') || canSee('warehouses') || canSee('stock')) { %>
+      <% if (canSee('products') || canSee('rates') || canSee('warehouses') || canSee('stock')) { %>
         <li class="sidebar-section">INVENTORY</li>
         <% if (canSee('products')) { %><li><a href="/products" class="<%= page === 'products' ? 'active' : '' %>"><i class="bi bi-box"></i><span>Products</span></a></li><% } %>
-        <% if (canSee('ratelist')) { %><li><a href="/ratelist" class="<%= page === 'ratelist' ? 'active' : '' %>"><i class="bi bi-tags"></i><span>Rate List</span></a></li><% } %>
+        <% if (canSee('rates')) { %><li><a href="/rates" class="<%= page === 'rates' ? 'active' : '' %>"><i class="bi bi-tag"></i><span>Rate Update</span></a></li><% } %>
         <% if (canSee('warehouses')) { %><li><a href="/warehouses" class="<%= page === 'warehouses' ? 'active' : '' %>"><i class="bi bi-building"></i><span>Warehouses</span></a></li><% } %>
         <% if (canSee('stock')) { %>
           <li><a href="/stockinit" class="<%= page === 'stockinit' ? 'active' : '' %>"><i class="bi bi-database-add"></i><span>Opening Stock</span></a></li>
@@ -101,6 +101,20 @@
         <% if (canSee('settings')) { %><li><a href="/settings" class="<%= page === 'settings' ? 'active' : '' %>"><i class="bi bi-gear"></i><span>Settings</span></a></li><% } %>
       <% } %>
     </ul>
+    <div class="sidebar-footer">
+      <% if (typeof currentUser !== 'undefined' && currentUser) { %>
+        <div class="px-3 py-2 border-top" style="border-color:#334155!important;">
+          <div class="text-truncate small text-light opacity-75 mb-2">
+            <i class="bi bi-person-circle"></i>
+            <strong class="ms-1"><%= currentUser.name || currentUser.username %></strong>
+            <span class="badge bg-<%= currentUser.role === 'superadmin' ? 'danger' : currentUser.role === 'admin' ? 'primary' : 'secondary' %> ms-1" style="font-size:9px;"><%= currentUser.role %></span>
+          </div>
+          <a href="/logout" class="btn btn-sm btn-outline-light w-100">
+            <i class="bi bi-box-arrow-right"></i> Sign Out
+          </a>
+        </div>
+      <% } %>
+    </div>
   </nav>
 
   <!-- Main Content -->
@@ -126,7 +140,7 @@
               </span>
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
-              <li><a class="dropdown-item" href="/profile"><i class="bi bi-person-gear"></i> My Profile</a></li>
+              <li><a class="dropdown-item" href="/users/profile"><i class="bi bi-person-gear"></i> My Profile</a></li>
               <% if (_role === 'superadmin' || _role === 'admin') { %>
                 <li><a class="dropdown-item" href="/users"><i class="bi bi-people"></i> Users & Roles</a></li>
               <% } %>

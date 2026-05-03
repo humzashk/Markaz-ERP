@@ -1,6 +1,5 @@
 <%- include('partials/header') %>
 <style>
-  /* Minimal dashboard — white bg, black/grey text, no decorative gradients */
   .dash-wrap { background:#fff; color:#1f2937; }
   .dash-wrap h2, .dash-wrap h3 { color:#111827; font-weight:600; letter-spacing:-.01em; }
   .dash-wrap .text-muted { color:#6b7280 !important; }
@@ -9,7 +8,7 @@
   .metric .lbl { font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#6b7280; font-weight:600; }
   .metric .val { font-size:24px; font-weight:700; color:#111827; margin-top:6px; line-height:1.1; }
   .metric .sub { font-size:12px; color:#6b7280; margin-top:4px; }
-  .metric.alert-low { border-left:4px solid #ef4444; }
+  .metric.alert-low  { border-left:4px solid #ef4444; }
   .metric.alert-warn { border-left:4px solid #f59e0b; }
   .dash-card { background:#fff; border:1px solid #e5e7eb; border-radius:10px; }
   .dash-card .card-header { background:#fafafa; border-bottom:1px solid #e5e7eb; font-weight:600; color:#111827; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; }
@@ -18,13 +17,39 @@
   .dash-card .table thead th { background:#fafafa; color:#374151; border-bottom:1px solid #e5e7eb; font-size:12px; text-transform:uppercase; letter-spacing:.5px; font-weight:600; }
   .dash-card .table td { vertical-align:middle; color:#1f2937; }
   .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; background:#f3f4f6; color:#374151; }
-  .pill-warn { background:#fef3c7; color:#92400e; }
-  .pill-danger { background:#fee2e2; color:#991b1b; }
+  .pill-warn    { background:#fef3c7; color:#92400e; }
+  .pill-danger  { background:#fee2e2; color:#991b1b; }
   .pill-success { background:#d1fae5; color:#065f46; }
   .view-all { font-size:12px; color:#3b82f6; text-decoration:none; font-weight:500; }
   .view-all:hover { text-decoration:underline; }
   .alert-amount { color:#dc2626; font-weight:600; }
-  .neutral { color:#1f2937; }
+
+  /* Health score */
+  .health-dot { width:14px; height:14px; border-radius:50%; display:inline-block; flex-shrink:0; }
+  .health-green  { background:#16a34a; box-shadow:0 0 6px #16a34a88; }
+  .health-yellow { background:#d97706; box-shadow:0 0 6px #d9770688; }
+  .health-red    { background:#dc2626; box-shadow:0 0 6px #dc262688; }
+
+  /* Comparison widget */
+  .cmp-row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:0; }
+  .cmp-col { padding:10px 14px; border-right:1px solid #f3f4f6; }
+  .cmp-col:last-child { border-right:none; }
+  .cmp-lbl  { font-size:10px; text-transform:uppercase; letter-spacing:.8px; color:#9ca3af; font-weight:600; }
+  .cmp-cur  { font-size:16px; font-weight:700; color:#111827; margin:2px 0; }
+  .cmp-prev { font-size:11px; color:#9ca3af; }
+  .cmp-up   { color:#16a34a; font-size:11px; font-weight:600; }
+  .cmp-dn   { color:#dc2626; font-size:11px; font-weight:600; }
+  .cmp-flat { color:#9ca3af; font-size:11px; }
+
+  /* Fast movers */
+  .fm-bar-wrap { padding:10px 14px; }
+  .fm-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .fm-row:last-child { margin-bottom:0; }
+  .fm-rank { font-size:11px; color:#9ca3af; font-weight:700; width:16px; text-align:center; flex-shrink:0; }
+  .fm-name { font-size:13px; font-weight:500; color:#1f2937; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .fm-bar-bg { flex:2; background:#f3f4f6; border-radius:4px; height:7px; overflow:hidden; }
+  .fm-bar-fill { background:#1f2937; height:7px; border-radius:4px; }
+  .fm-qty { font-size:12px; font-weight:700; color:#374151; width:44px; text-align:right; flex-shrink:0; }
 </style>
 
 <div class="dash-wrap">
@@ -37,8 +62,9 @@
     </div>
   </div>
 
-  <!-- TOP METRICS (5 cards) -->
+  <!-- TOP METRICS -->
   <div class="row g-3 mb-4">
+    <% if (isSuperadmin) { %>
     <div class="col-6 col-md-4 col-lg">
       <a href="/invoices" class="text-decoration-none">
         <div class="metric">
@@ -66,6 +92,7 @@
         </div>
       </a>
     </div>
+    <% } %>
     <div class="col-6 col-md-4 col-lg">
       <a href="/reports/low-stock" class="text-decoration-none">
         <div class="metric <%= lowStockCount > 0 ? 'alert-low' : '' %>">
@@ -84,25 +111,92 @@
         </div>
       </a>
     </div>
+    <% if (isSuperadmin) { %>
+    <!-- Health Score -->
+    <div class="col-6 col-md-4 col-lg">
+      <div class="metric" style="border-left:4px solid <%= health==='green'?'#16a34a':health==='yellow'?'#d97706':'#dc2626' %>">
+        <div class="lbl">Daily Health</div>
+        <div class="val d-flex align-items-center gap-2 mt-2">
+          <span class="health-dot health-<%= health %>"></span>
+          <span style="font-size:18px;color:<%= health==='green'?'#16a34a':health==='yellow'?'#d97706':'#dc2626' %>"><%= healthLabel %></span>
+        </div>
+        <div class="sub mt-1">
+          Cash <% if(todayRev>0){%>✓<%}else{%>–<%}%> &nbsp;·&nbsp;
+          Recv <% if(netReceivable>=0){%>✓<%}else{%>✗<%}%> &nbsp;·&nbsp;
+          Stock <% if(lowStockCount<=3){%>✓<%}else{%>✗<%}%>
+        </div>
+      </div>
+    </div>
+    <% } %>
   </div>
 
-  <!-- CHARTS (2) -->
+  <% if (isSuperadmin) { %>
+  <!-- COMPARISON + FAST MOVERS ROW -->
   <div class="row g-3 mb-4">
+    <!-- Comparison Widget -->
     <div class="col-lg-7">
       <div class="dash-card">
-        <div class="card-header">Revenue vs Expenses (6 months) <a href="/reports" class="view-all">View Reports →</a></div>
-        <div class="card-body p-3"><canvas id="revExpChart" height="110"></canvas></div>
+        <div class="card-header">
+          <span>Period Comparison</span>
+          <select id="cmpPeriod" class="form-select form-select-sm" style="width:auto;">
+            <option value="day">Today vs Yesterday</option>
+            <option value="week">This Week vs Last Week</option>
+            <option value="month" selected>This Month vs Last Month</option>
+          </select>
+        </div>
+        <div class="cmp-row border-bottom px-0 py-2" style="padding:0!important;">
+          <div class="cmp-col">
+            <div class="cmp-lbl">Sales</div>
+            <div class="cmp-cur" id="cmpSalesCur">—</div>
+            <div class="cmp-prev" id="cmpSalesPrev">—</div>
+            <span id="cmpSalesDelta"></span>
+          </div>
+          <div class="cmp-col">
+            <div class="cmp-lbl">Cash Received</div>
+            <div class="cmp-cur" id="cmpCashCur">—</div>
+            <div class="cmp-prev" id="cmpCashPrev">—</div>
+            <span id="cmpCashDelta"></span>
+          </div>
+          <div class="cmp-col">
+            <div class="cmp-lbl">Orders</div>
+            <div class="cmp-cur" id="cmpOrdCur">—</div>
+            <div class="cmp-prev" id="cmpOrdPrev">—</div>
+            <span id="cmpOrdDelta"></span>
+          </div>
+        </div>
       </div>
     </div>
+
+    <!-- Fast Movers -->
     <div class="col-lg-5">
       <div class="dash-card">
-        <div class="card-header">Top 5 Products (30 days) <a href="/reports/product-sales" class="view-all">View All →</a></div>
-        <div class="card-body p-3"><canvas id="topProdChart" height="110"></canvas></div>
+        <div class="card-header">
+          <span>Fast Movers</span>
+          <select id="fmPeriod" class="form-select form-select-sm" style="width:auto;">
+            <option value="day">Today</option>
+            <option value="week">This Week</option>
+            <option value="month" selected>This Month</option>
+          </select>
+        </div>
+        <div class="fm-bar-wrap" id="fmList">
+          <div class="text-muted small text-center py-2">Loading...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <% } %>
+
+  <!-- Top Products Chart -->
+  <div class="row g-3 mb-4">
+    <div class="col-12">
+      <div class="dash-card">
+        <div class="card-header">Top 5 Products – Revenue (30 days) <a href="/reports/product-sales" class="view-all">View All →</a></div>
+        <div class="card-body p-3"><canvas id="topProdChart" height="80"></canvas></div>
       </div>
     </div>
   </div>
 
-  <!-- TABLES (3) -->
+  <!-- TABLES -->
   <div class="row g-3 mb-4">
     <div class="col-lg-6">
       <div class="dash-card">
@@ -178,35 +272,13 @@
 
 <script>
 (function(){
-  const chartData  = <%- JSON.stringify(chartData) %>;
-  const topProds   = <%- JSON.stringify(topProducts) %>;
+  const topProds  = <%- JSON.stringify(topProducts) %>;
+  const cmpData   = <%- JSON.stringify(cmp) %>;
+  const fmData    = <%- JSON.stringify(fastMovers) %>;
 
-  function init() {
-    if (typeof Chart === 'undefined') return setTimeout(init, 60);
-    // Revenue vs Expenses
-    const el1 = document.getElementById('revExpChart');
-    if (el1 && !el1._init) {
-      el1._init = true;
-      new Chart(el1, {
-        type: 'bar',
-        data: {
-          labels: chartData.map(d => d.month),
-          datasets: [
-            { label: 'Revenue',  data: chartData.map(d => d.revenue),  backgroundColor: '#1f2937', borderRadius: 3 },
-            { label: 'Expenses', data: chartData.map(d => d.expenses), backgroundColor: '#9ca3af', borderRadius: 3 }
-          ]
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { position: 'bottom', labels:{ color:'#374151', font:{size:11} } } },
-          scales: {
-            x: { ticks: { color: '#6b7280' }, grid: { display: false } },
-            y: { beginAtZero: true, ticks: { color: '#6b7280', callback: v => 'Rs. ' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v) }, grid: { color: '#f3f4f6' } }
-          }
-        }
-      });
-    }
-    // Top Products
+  // ── Top Products Chart ──────────────────────────────────────────────────
+  function initCharts() {
+    if (typeof Chart === 'undefined') return setTimeout(initCharts, 60);
     const el2 = document.getElementById('topProdChart');
     if (el2 && !el2._init) {
       el2._init = true;
@@ -227,15 +299,62 @@
       });
     }
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
 
-  // Refresh button — soft re-render via SPA nav if available
+  // ── Comparison Widget ───────────────────────────────────────────────────
+  function fmtRs(n) {
+    if (n >= 1e6)  return 'Rs.' + (n/1e6).toFixed(1) + 'M';
+    if (n >= 1000) return 'Rs.' + (n/1000).toFixed(0) + 'k';
+    return 'Rs.' + n.toLocaleString('en-PK');
+  }
+  function delta(cur, prev, isCurrency) {
+    if (prev === 0) return '';
+    const pct = ((cur - prev) / prev * 100).toFixed(0);
+    const fmt = isCurrency ? fmtRs(Math.abs(cur - prev)) : Math.abs(cur - prev);
+    if (cur > prev) return `<span class="cmp-up">▲ ${fmt} (+${pct}%)</span>`;
+    if (cur < prev) return `<span class="cmp-dn">▼ ${fmt} (${pct}%)</span>`;
+    return `<span class="cmp-flat">— no change</span>`;
+  }
+  const prevLabels = { day: 'Yesterday', week: 'Last week', month: 'Last month' };
+  function renderCmp(period) {
+    const d = cmpData[period];
+    document.getElementById('cmpSalesCur').textContent  = fmtRs(d.sales[0]);
+    document.getElementById('cmpSalesPrev').textContent = prevLabels[period] + ': ' + fmtRs(d.sales[1]);
+    document.getElementById('cmpSalesDelta').innerHTML  = delta(d.sales[0], d.sales[1], true);
+    document.getElementById('cmpCashCur').textContent   = fmtRs(d.cash[0]);
+    document.getElementById('cmpCashPrev').textContent  = prevLabels[period] + ': ' + fmtRs(d.cash[1]);
+    document.getElementById('cmpCashDelta').innerHTML   = delta(d.cash[0], d.cash[1], true);
+    document.getElementById('cmpOrdCur').textContent    = d.orders[0];
+    document.getElementById('cmpOrdPrev').textContent   = prevLabels[period] + ': ' + d.orders[1];
+    document.getElementById('cmpOrdDelta').innerHTML    = delta(d.orders[0], d.orders[1], false);
+  }
+
+  // ── Fast Movers ─────────────────────────────────────────────────────────
+  function renderFM(period) {
+    const rows = fmData[period] || [];
+    const container = document.getElementById('fmList');
+    if (!container) return;
+    if (!rows.length) { container.innerHTML = '<div class="text-muted small text-center py-3">No data</div>'; return; }
+    const max = rows[0].qty || 1;
+    container.innerHTML = rows.map((r, i) => `
+      <div class="fm-row">
+        <span class="fm-rank">${i+1}</span>
+        <span class="fm-name" title="${r.name}">${r.name}</span>
+        <div class="fm-bar-bg"><div class="fm-bar-fill" style="width:${Math.round(r.qty/max*100)}%"></div></div>
+        <span class="fm-qty">${r.qty} <span style="font-size:10px;color:#9ca3af">ctn</span></span>
+      </div>`).join('');
+  }
+
+  // ── Wire up dropdowns ───────────────────────────────────────────────────
+  const cmpSel = document.getElementById('cmpPeriod');
+  const fmSel  = document.getElementById('fmPeriod');
+  if (cmpSel) { cmpSel.addEventListener('change', () => renderCmp(cmpSel.value)); renderCmp(cmpSel.value); }
+  if (fmSel)  { fmSel.addEventListener('change',  () => renderFM(fmSel.value));   renderFM(fmSel.value);  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initCharts);
+  else initCharts();
+
   const btn = document.getElementById('refreshDash');
-  if (btn) btn.addEventListener('click', () => {
-    if (window.SPA && window.SPA.navigate) window.SPA.navigate(location.pathname + location.search, { force: true });
-    else location.reload();
-  });
+  if (btn) btn.addEventListener('click', () => { if (window.SPA && window.SPA.navigate) window.SPA.navigate(location.pathname, { force:true }); else location.reload(); });
 })();
 </script>
 <%- include('partials/footer') %>

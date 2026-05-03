@@ -88,6 +88,11 @@ body {
   pointer-events: none;
 }
 
+.sidebar-footer { position: sticky; bottom: 0; background: #111827; }
+.sidebar-collapsed .sidebar-footer .btn span,
+.sidebar-collapsed .sidebar-footer strong,
+.sidebar-collapsed .sidebar-footer .badge { display: none; }
+
 .sidebar-collapsed .sidebar { width: var(--sidebar-collapsed); }
 .sidebar-collapsed .sidebar .sidebar-brand span,
 .sidebar-collapsed .sidebar .sidebar-nav li a span { display: none; }

@@ -1,0 +1,297 @@
+<%- include('partials/header') %>
+
+<div class="page-header d-flex justify-content-between align-items-center">
+  <h2><i class="bi bi-tags"></i> Rate Update</h2>
+  <span class="text-muted small"><%= total %> product(s)</span>
+</div>
+
+<% if (ok)  { %><div class="alert alert-success alert-dismissible fade show py-2"><%= ok  %><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div><% } %>
+<% if (err) { %><div class="alert alert-danger  alert-dismissible fade show py-2"><%= err %><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div><% } %>
+
+<%/* ── Filters ── */%>
+<form method="get" action="/rates" class="row g-2 mb-3">
+  <div class="col-md-4">
+    <input type="text" name="search" class="form-control form-control-sm" placeholder="Search name / item ID…" value="<%= search %>">
+  </div>
+  <div class="col-md-3">
+    <select name="category" class="form-select form-select-sm">
+      <option value="">— All Categories —</option>
+      <% categories.forEach(c => { %><option value="<%= c %>" <%= category === c ? 'selected' : '' %>><%= c %></option><% }) %>
+    </select>
+  </div>
+  <div class="col-auto">
+    <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-search"></i> Filter</button>
+    <a href="/rates" class="btn btn-sm btn-outline-secondary">Clear</a>
+  </div>
+</form>
+
+<%/* ── Sticky bulk action bar (hidden until selection) ── */%>
+<div id="bulkBar" class="d-none mb-3 p-3 border rounded bg-white shadow-sm sticky-top" style="z-index:100; top:8px">
+  <div class="d-flex flex-wrap align-items-center gap-3">
+    <span class="fw-bold text-primary"><span id="selCount">0</span> selected</span>
+
+    <div class="vr"></div>
+
+    <%/* Set fixed rate */%>
+    <div class="d-flex align-items-center gap-2">
+      <label class="small fw-semibold mb-0 text-nowrap">Set rate to:</label>
+      <input type="number" id="bulkFixedRate" class="form-control form-control-sm" placeholder="e.g. 250" min="0" step="0.01" style="width:120px">
+      <button type="button" id="applyFixed" class="btn btn-sm btn-primary text-nowrap">
+        <i class="bi bi-check2-all"></i> Apply
+      </button>
+    </div>
+
+    <div class="vr"></div>
+
+    <%/* Adjust by % */%>
+    <div class="d-flex align-items-center gap-2">
+      <label class="small fw-semibold mb-0 text-nowrap">Adjust by %:</label>
+      <input type="number" id="bulkPct" class="form-control form-control-sm" placeholder="e.g. 10 or -5" step="0.1" style="width:100px">
+      <button type="button" id="applyPct" class="btn btn-sm btn-warning text-nowrap">
+        <i class="bi bi-percent"></i> Apply
+      </button>
+    </div>
+
+    <div class="vr"></div>
+
+    <button type="button" id="clearSelBtn" class="btn btn-sm btn-outline-secondary text-nowrap">
+      <i class="bi bi-x"></i> Clear
+    </button>
+  </div>
+</div>
+
+<%/* ── Product table ── */%>
+<div class="card">
+  <div class="card-body p-0">
+    <table class="table table-sm table-hover table-bordered mb-0 align-middle">
+      <thead class="table-dark">
+        <tr>
+          <th style="width:36px"><input type="checkbox" id="selAll" title="Select all visible"></th>
+          <th>Item ID</th>
+          <th>Product</th>
+          <th>Category</th>
+          <th>Unit</th>
+          <th class="text-end" style="width:130px">Prev Rate</th>
+          <th class="text-end" style="width:130px">Current Rate</th>
+          <th class="text-center" style="width:90px">Change</th>
+          <th style="width:155px">New Rate</th>
+          <th style="width:90px">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% products.forEach(p => { %>
+        <%
+          var _prev = p.prev_rate != null ? Number(p.prev_rate) : null;
+          var _cur  = Number(p.selling_price || 0);
+          var _pct  = null;
+          var _dir  = '';
+          if (_prev !== null && _prev !== 0) {
+            _pct = ((_cur - _prev) / _prev) * 100;
+            _dir = _pct > 0 ? 'up' : _pct < 0 ? 'down' : 'flat';
+          } else if (_prev === 0 && _cur > 0) {
+            _dir = 'up';
+          }
+        %>
+        <tr id="row-<%= p.id %>">
+          <td class="text-center">
+            <input type="checkbox" class="row-chk" data-id="<%= p.id %>" data-cur="<%= _cur %>">
+          </td>
+          <td class="text-muted small"><%= p.item_id || '—' %></td>
+          <td><strong><%= p.name %></strong></td>
+          <td class="small text-muted"><%= p.category || '—' %></td>
+          <td class="small"><%= p.unit || 'PCS' %></td>
+          <td class="text-end text-muted small">
+            <% if (_prev !== null) { %>
+              Rs. <%= _prev.toLocaleString('en-PK', {minimumFractionDigits:2, maximumFractionDigits:2}) %>
+              <% if (p.rate_changed_at) { %>
+                <div style="font-size:10px"><%= new Date(p.rate_changed_at).toLocaleDateString('en-PK',{day:'2-digit',month:'short',year:'numeric'}) %></div>
+              <% } %>
+            <% } else { %>—<% } %>
+          </td>
+          <td class="text-end fw-bold text-success">
+            Rs. <%= _cur.toLocaleString('en-PK', {minimumFractionDigits:2, maximumFractionDigits:2}) %>
+          </td>
+          <td class="text-center">
+            <% if (_dir === 'up') { %>
+              <span class="badge bg-success"><i class="bi bi-arrow-up-short"></i><%= _pct !== null ? _pct.toFixed(1)+'%' : 'New' %></span>
+            <% } else if (_dir === 'down') { %>
+              <span class="badge bg-danger"><i class="bi bi-arrow-down-short"></i><%= Math.abs(_pct).toFixed(1) %>%</span>
+            <% } else if (_dir === 'flat') { %>
+              <span class="badge bg-secondary">0%</span>
+            <% } else { %>
+              <span class="text-muted small">—</span>
+            <% } %>
+          </td>
+          <td>
+            <input type="number" class="form-control form-control-sm new-rate-input"
+                   id="rate-<%= p.id %>"
+                   data-orig="<%= _cur.toFixed(2) %>"
+                   data-id="<%= p.id %>"
+                   value="<%= _cur.toFixed(2) %>"
+                   min="0" step="0.01">
+          </td>
+          <td>
+            <button type="button" class="btn btn-sm btn-primary save-single" data-id="<%= p.id %>">
+              <i class="bi bi-check2"></i> Save
+            </button>
+          </td>
+        </tr>
+        <% }) %>
+        <% if (!products.length) { %>
+        <tr><td colspan="10" class="text-center text-muted py-4">No products found.</td></tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<%/* ── Save-all-changed button (shown when any input is manually edited) ── */%>
+<div id="saveChangedBar" class="d-none mt-3 d-flex align-items-center gap-3">
+  <button type="button" id="saveAllChanged" class="btn btn-success">
+    <i class="bi bi-save"></i> Save All Changed Rows (<span id="changedCount">0</span>)
+  </button>
+  <span class="text-muted small">Rows highlighted in yellow have unsaved changes.</span>
+</div>
+
+<%/* ── Pagination ── */%>
+<% if (pages > 1) { %>
+<nav class="mt-3">
+  <ul class="pagination pagination-sm justify-content-center">
+    <% for (let p = 1; p <= pages; p++) { %>
+      <li class="page-item <%= currentPage === p ? 'active' : '' %>">
+        <a class="page-link" href="/rates?search=<%= encodeURIComponent(search) %>&category=<%= encodeURIComponent(category) %>&page=<%= p %>"><%= p %></a>
+      </li>
+    <% } %>
+  </ul>
+</nav>
+<% } %>
+
+<%/* ── Hidden bulk submit form ── */%>
+<form id="bulkForm" method="post" action="/rates/bulk-update" style="display:none">
+  <input type="hidden" name="back" value="/rates?search=<%= encodeURIComponent(search) %>&category=<%= encodeURIComponent(category) %>&page=<%= currentPage %>">
+  <div id="bulkInputs"></div>
+</form>
+
+<%/* ── Hidden single submit form ── */%>
+<form id="singleForm" method="post" action="/rates/update" style="display:none">
+  <input type="hidden" name="product_id" id="sf_id">
+  <input type="hidden" name="new_rate"   id="sf_rate">
+  <input type="hidden" name="back" value="/rates?search=<%= encodeURIComponent(search) %>&category=<%= encodeURIComponent(category) %>&page=<%= currentPage %>">
+</form>
+
+<script>
+(function () {
+  'use strict';
+
+  const selAll        = document.getElementById('selAll');
+  const bulkBar       = document.getElementById('bulkBar');
+  const selCountEl    = document.getElementById('selCount');
+  const saveChangedBar= document.getElementById('saveChangedBar');
+  const changedCountEl= document.getElementById('changedCount');
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  function getChecked() { return [...document.querySelectorAll('.row-chk')].filter(c => c.checked); }
+  function getChanged() { return [...document.querySelectorAll('.new-rate-input')].filter(i => i.value !== i.dataset.orig); }
+
+  function updateBars() {
+    const n = getChecked().length;
+    selCountEl.textContent = n;
+    bulkBar.classList.toggle('d-none', n === 0);
+
+    const c = getChanged().length;
+    changedCountEl.textContent = c;
+    saveChangedBar.classList.toggle('d-none', c === 0);
+  }
+
+  function submitBulk(entries) {
+    // entries = [{id, rate}, ...]
+    if (!entries.length) { alert('No products to update.'); return; }
+    const container = document.getElementById('bulkInputs');
+    container.innerHTML = '';
+    entries.forEach(({id, rate}) => {
+      const iEl = document.createElement('input'); iEl.type='hidden'; iEl.name='ids';   iEl.value=id;   container.appendChild(iEl);
+      const rEl = document.createElement('input'); rEl.type='hidden'; rEl.name='rates'; rEl.value=rate; container.appendChild(rEl);
+    });
+    document.getElementById('bulkForm').submit();
+  }
+
+  function validateRate(val) {
+    const n = parseFloat(val);
+    return (!isNaN(n) && n >= 0) ? n : null;
+  }
+
+  // ── Checkbox selection ────────────────────────────────────────────────────
+  selAll.addEventListener('change', function () {
+    document.querySelectorAll('.row-chk').forEach(c => { c.checked = this.checked; });
+    updateBars();
+  });
+  document.querySelectorAll('.row-chk').forEach(c => c.addEventListener('change', updateBars));
+
+  document.getElementById('clearSelBtn').addEventListener('click', function () {
+    document.querySelectorAll('.row-chk').forEach(c => { c.checked = false; });
+    selAll.checked = false;
+    updateBars();
+  });
+
+  // ── Bulk: set fixed rate ──────────────────────────────────────────────────
+  document.getElementById('applyFixed').addEventListener('click', function () {
+    const val = validateRate(document.getElementById('bulkFixedRate').value);
+    if (val === null) { alert('Enter a valid rate ≥ 0'); return; }
+    const checked = getChecked();
+    if (!checked.length) { alert('No products selected.'); return; }
+    if (!confirm(`Set rate to Rs. ${val.toFixed(2)} for ${checked.length} product(s)?`)) return;
+    submitBulk(checked.map(c => ({ id: c.dataset.id, rate: val })));
+  });
+
+  // ── Bulk: adjust by % ────────────────────────────────────────────────────
+  document.getElementById('applyPct').addEventListener('click', function () {
+    const pct = parseFloat(document.getElementById('bulkPct').value);
+    if (isNaN(pct) || pct === 0) { alert('Enter a non-zero percentage (e.g. 10 or -5)'); return; }
+    const checked = getChecked();
+    if (!checked.length) { alert('No products selected.'); return; }
+    if (!confirm(`Adjust rate by ${pct > 0 ? '+' : ''}${pct}% for ${checked.length} product(s)?`)) return;
+    const entries = checked.map(c => {
+      const cur = parseFloat(c.dataset.cur) || 0;
+      const newRate = Math.max(0, cur * (1 + pct / 100));
+      return { id: c.dataset.id, rate: newRate.toFixed(2) };
+    });
+    submitBulk(entries);
+  });
+
+  // ── Single row save ───────────────────────────────────────────────────────
+  document.querySelectorAll('.save-single').forEach(btn => {
+    btn.addEventListener('click', function () {
+      const id  = this.dataset.id;
+      const val = validateRate(document.getElementById('rate-' + id).value);
+      if (val === null) { alert('Rate must be a valid number ≥ 0'); return; }
+      document.getElementById('sf_id').value   = id;
+      document.getElementById('sf_rate').value = val;
+      document.getElementById('singleForm').submit();
+    });
+  });
+
+  // ── Save all manually changed rows ───────────────────────────────────────
+  document.getElementById('saveAllChanged').addEventListener('click', function () {
+    const changed = getChanged();
+    if (!changed.length) return;
+    for (const inp of changed) {
+      if (validateRate(inp.value) === null) { alert('One or more rates are invalid. Fix before saving.'); return; }
+    }
+    if (!confirm(`Save changes to ${changed.length} product(s)?`)) return;
+    submitBulk(changed.map(inp => ({ id: inp.dataset.id, rate: parseFloat(inp.value).toFixed(2) })));
+  });
+
+  // ── Highlight manually edited inputs ─────────────────────────────────────
+  document.querySelectorAll('.new-rate-input').forEach(inp => {
+    inp.addEventListener('input', function () {
+      const changed = this.value !== this.dataset.orig;
+      this.classList.toggle('border-warning', changed);
+      this.classList.toggle('fw-bold', changed);
+      updateBars();
+    });
+  });
+
+})();
+</script>
+
+<%- include('partials/footer') %>

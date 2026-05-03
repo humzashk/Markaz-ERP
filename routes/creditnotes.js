@@ -5,7 +5,8 @@ const { pool, tx, nextDocNo, applyStockMovement, reverseStockForRef,
         addLedgerEntry, removeLedgerForRef, recomputeBalance,
         addAuditLog, toInt } = require('../database');
 const { wrap } = require('../middleware/errorHandler');
-const { validate, schemas } = require('../middleware/validate');
+const { validate, schemas, requireEditPermission } = require('../middleware/validate');
+const _lockNote = requireEditPermission('credit_notes', 'note_date');
 
 router.get('/', wrap(async (req, res) => {
   const type = req.query.type || '';
@@ -153,7 +154,7 @@ router.get('/view/:id', wrap(async (req, res) => {
   res.render('creditnotes/view', { page:'creditnotes', note, items });
 }));
 
-router.post('/delete/:id', wrap(async (req, res) => {
+router.post('/delete/:id', _lockNote, wrap(async (req, res) => {
   const id = toInt(req.params.id);
   await tx(async (db) => {
     const note = await db.one(`SELECT * FROM credit_notes WHERE id=$1`, [id]);

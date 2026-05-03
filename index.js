@@ -166,7 +166,7 @@ app.use('/',            require('./routes/dashboard'));
 app.use('/customers',   require('./routes/customers'));
 app.use('/vendors',     require('./routes/vendors'));
 app.use('/products',    require('./routes/products'));
-app.use('/ratelist',    require('./routes/ratelist'));
+app.use('/rates',       require('./routes/rates'));
 app.use('/orders',      require('./routes/orders'));
 app.use('/invoices',    require('./routes/invoices'));
 app.use('/purchases',   require('./routes/purchases'));

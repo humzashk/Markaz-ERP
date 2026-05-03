@@ -2,6 +2,8 @@
 const express = require('express');
 const router = express.Router();
 const { pool, tx, nextDocNo, addAuditLog, toInt, toNum } = require('../database');
+const { requireEditPermission } = require('../middleware/validate');
+const _lockJournal = requireEditPermission('journal_entries', 'entry_date');
 const { wrap } = require('../middleware/errorHandler');
 
 router.get('/', wrap(async (req, res) => {
@@ -62,7 +64,7 @@ router.get('/view/:id', wrap(async (req, res) => {
   res.render('journal/view', { page:'journal', entry, lines });
 }));
 
-router.post('/delete/:id', wrap(async (req, res) => {
+router.post('/delete/:id', _lockJournal, wrap(async (req, res) => {
   const id = toInt(req.params.id);
   await tx(async (db) => {
     await db.run(`DELETE FROM journal_lines WHERE entry_id=$1`, [id]);

@@ -3,7 +3,8 @@ const express = require('express');
 const router = express.Router();
 const { pool, tx, addLedgerEntry, removeLedgerForRef, recomputeBalance, addAuditLog, toInt, toNum } = require('../database');
 const { wrap } = require('../middleware/errorHandler');
-const { validate, schemas } = require('../middleware/validate');
+const { validate, schemas, requireEditPermission } = require('../middleware/validate');
+const _lockPayment = requireEditPermission('payments', 'payment_date');
 
 async function fetchPayments(type, from, to) {
   const params = [];
@@ -45,6 +46,34 @@ router.get('/paid', wrap(async (req, res) => {
   res.render('payments/list', { page:'payments', title:'Payments Made', listType:'paid', payments: rows, from, to, total: totalPaid });
 }));
 
+// Individual payment detail
+router.get('/view/:id', wrap(async (req, res) => {
+  const id = toInt(req.params.id);
+  if (!id) return res.redirect('/payments');
+
+  const p = (await pool.query(`SELECT * FROM payments WHERE id=$1`, [id])).rows[0];
+  if (!p) return res.redirect('/payments');
+
+  // Fetch entity (customer or vendor)
+  const entityTable = p.entity_type === 'customer' ? 'customers' : 'vendors';
+  const entity = (await pool.query(`SELECT id, name, balance, phone FROM ${entityTable} WHERE id=$1`, [p.entity_id])).rows[0];
+
+  // Fetch matching ledger entry for balance impact
+  const ledgerRow = (await pool.query(
+    `SELECT debit, credit FROM ledger WHERE entity_type=$1 AND entity_id=$2 AND reference_type='payment' AND reference_id=$3 LIMIT 1`,
+    [p.entity_type, p.entity_id, id]
+  )).rows[0];
+
+  res.render('payments/detail', {
+    page: 'payments',
+    payment: p,
+    entity: entity || null,
+    ledgerRow: ledgerRow || null,
+    ok:  req.query.ok  || null,
+    err: req.query.err || null
+  });
+}));
+
 // /payments/add?type=customer|vendor&entity_id=X  → redirect to correct form
 router.get('/add', (req, res) => {
   const type = req.query.type || '';
@@ -83,58 +112,43 @@ function _adapt(entityType) {
     next();
   };
 }
-router.post('/receive', _adapt('customer'), validate(schemas.paymentCreate), wrap(async (req, res) => savePayment(req, res, '/payments/receive')));
-router.post('/pay',     _adapt('vendor'),   validate(schemas.paymentCreate), wrap(async (req, res) => savePayment(req, res, '/payments/pay')));
+router.post('/receive', _adapt('customer'), validate(schemas.paymentCreate), wrap(async (req, res) => savePayment(req, res)));
+router.post('/pay',     _adapt('vendor'),   validate(schemas.paymentCreate), wrap(async (req, res) => savePayment(req, res)));
+router.post('/save',                        validate(schemas.paymentCreate), wrap(async (req, res) => savePayment(req, res)));
 
-async function savePayment(req, res, redirectBack) {
+async function savePayment(req, res) {
   const v = req.valid;
+  let pid;
   await tx(async (db) => {
     const ins = await db.run(`
       INSERT INTO payments(entity_type,entity_id,amount,payment_date,payment_method,reference,notes,account_scope)
       VALUES ($1,$2,$3,$4,$5::payment_method_t,$6,$7,COALESCE($8,'plastic_markaz')::account_scope_t) RETURNING id`,
       [v.entity_type, v.entity_id, v.amount, v.payment_date, v.payment_method, v.reference, v.notes, req.body.account_scope]);
-    const pid = ins.id;
+    pid = ins.id;
     if (v.entity_type === 'customer') {
       await addLedgerEntry(db, 'customer', v.entity_id, v.payment_date, `Payment received #${pid}`, 0, v.amount, 'payment', pid, req.body.account_scope || 'plastic_markaz');
     } else {
       await addLedgerEntry(db, 'vendor', v.entity_id, v.payment_date, `Payment made #${pid}`, v.amount, 0, 'payment', pid, req.body.account_scope || 'plastic_markaz');
     }
-    await addAuditLog('create','payments', pid, `${v.entity_type} payment ${v.amount}`);
+    await addAuditLog('create', 'payments', pid, `${v.entity_type} payment ${v.amount}`);
   });
-  res.redirect(redirectBack + '?ok=1');
+  res.redirect(`/payments/view/${pid}?ok=1`);
 }
 
-router.post('/save', validate(schemas.paymentCreate), wrap(async (req, res) => {
-  const v = req.valid;
-  await tx(async (db) => {
-    const ins = await db.run(`
-      INSERT INTO payments(entity_type,entity_id,amount,payment_date,payment_method,reference,notes,account_scope)
-      VALUES ($1,$2,$3,$4,$5::payment_method_t,$6,$7,COALESCE($8,'plastic_markaz')::account_scope_t) RETURNING id`,
-      [v.entity_type, v.entity_id, v.amount, v.payment_date, v.payment_method, v.reference, v.notes, req.body.account_scope]);
-    const pid = ins.id;
-
-    // Customer payment → CREDIT customer (reduces what customer owes us)
-    // Vendor payment   → DEBIT vendor   (reduces what we owe vendor)
-    if (v.entity_type === 'customer') {
-      await addLedgerEntry(db, 'customer', v.entity_id, v.payment_date, `Payment received #${pid}`, 0, v.amount, 'payment', pid, req.body.account_scope || 'plastic_markaz');
-    } else {
-      await addLedgerEntry(db, 'vendor', v.entity_id, v.payment_date, `Payment made #${pid}`, v.amount, 0, 'payment', pid, req.body.account_scope || 'plastic_markaz');
-    }
-    await addAuditLog('create','payments', pid, `${v.entity_type} payment ${v.amount}`);
-  });
-  res.redirect(v.entity_type === 'customer' ? '/payments/receive?ok=1' : '/payments/pay?ok=1');
-}));
-
-router.post('/delete/:id', wrap(async (req, res) => {
+router.post('/delete/:id', _lockPayment, wrap(async (req, res) => {
   const id = toInt(req.params.id);
+  let entityType, entityId;
   await tx(async (db) => {
     const p = await db.one(`SELECT * FROM payments WHERE id=$1`, [id]);
     if (!p) return;
+    entityType = p.entity_type;
+    entityId   = p.entity_id;
     await removeLedgerForRef(db, p.entity_type, p.entity_id, 'payment', p.id);
     await recomputeBalance(db, p.entity_type, p.entity_id);
     await db.run(`DELETE FROM payments WHERE id=$1`, [id]);
-    await addAuditLog('delete','payments', id, `Deleted payment ${p.amount}`);
+    await addAuditLog('delete', 'payments', id, `Deleted payment ${p.amount}`);
   });
+  if (entityType && entityId) return res.redirect(`/ledger/${entityType}/${entityId}?ok=${encodeURIComponent('Payment deleted')}`);
   res.redirect('/payments');
 }));
 
