@@ -46,7 +46,7 @@
       <table class="table table-hover mb-0">
         <thead><tr>
           <th style="width:40px"><input type="checkbox" id="selectAll" class="form-check-input"></th>
-          <th>Name</th><th>Category</th><th>Manufacturer</th><th>Pcs/Ctn</th><th>Rate/Pc</th><th>Stock (Pcs)</th><th>Min Stock</th><th>Status</th><th>Actions</th>
+          <th>Name</th><th>Category</th><th>Manufacturer</th><th>Pcs/Ctn</th><th>Rate/Pc</th><th>Stock (Ctn)</th><th>Min Stock</th><th>Status</th><th>Actions</th>
         </tr></thead>
         <tbody>
           <% products.forEach((p, i) => { %>
@@ -57,7 +57,7 @@
             <td><small><%= p.vendor_name ? p.vendor_name : '-' %></small></td>
             <td><%= p.qty_per_pack %></td>
             <td><strong><%= formatCurrency(p.rate) %></strong></td>
-            <td><strong class="<%= p.stock <= p.min_stock ? 'text-danger' : 'text-success' %>"><%= p.stock.toLocaleString() %></strong></td>
+            <td><% const _ctn = Math.floor((p.stock||0) / Math.max(1, p.qty_per_pack||1)); const _loose = (p.stock||0) % Math.max(1, p.qty_per_pack||1); %><strong class="<%= p.stock <= p.min_stock ? 'text-danger' : 'text-success' %>"><%= _ctn %></strong><% if (_loose > 0) { %><small class="text-muted ms-1">(+<%= _loose %> pcs)</small><% } %></td>
             <td><%= p.min_stock %></td>
             <td><span class="badge bg-<%= statusBadge(p.status) %>"><%= p.status %></span></td>
             <td>
@@ -107,9 +107,14 @@ function toggleBulkFields(action) {
   if (action === 'set_category') document.getElementById('bf-text').classList.remove('d-none');
   else if (['set_packaging','set_rate','rate_by_pct','stock_add','stock_sub'].includes(action)) {
     document.getElementById('bf-num').classList.remove('d-none');
-    if (action === 'set_packaging' || action === 'stock_add' || action === 'stock_sub') {
+    if (action === 'set_packaging') {
       document.getElementById('bfNumVal').step = '1';
       document.getElementById('bfNumVal').min = '1';
+      document.getElementById('bfNumVal').placeholder = 'Pcs per Ctn';
+    } else if (action === 'stock_add' || action === 'stock_sub') {
+      document.getElementById('bfNumVal').step = '1';
+      document.getElementById('bfNumVal').min = '1';
+      document.getElementById('bfNumVal').placeholder = 'Cartons (Ctn)';
     }
     if (action === 'rate_by_pct') {
       document.getElementById('bfNumVal').step = '0.01';

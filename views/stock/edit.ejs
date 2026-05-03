@@ -13,7 +13,7 @@
             <label class="form-label fw-semibold">Product *</label>
             <select name="product_id" class="form-select" required>
               <% products.forEach(p => { %>
-              <option value="<%= p.id %>" <%= p.id==adj.product_id?'selected':'' %>><%= p.name %> (Stock: <%= p.stock %>)</option>
+              <option value="<%= p.id %>" <%= p.id==adj.product_id?'selected':'' %>><%= p.name %> (Stock: <%= Math.floor((p.stock||0)/Math.max(1,p.qty_per_pack||1)) %> Ctn)</option>
               <% }) %>
             </select>
           </div>
@@ -27,8 +27,8 @@
           </div>
           <div class="row">
             <div class="col-md-6 mb-3">
-              <label class="form-label fw-semibold">Quantity *</label>
-              <input type="number" name="quantity" class="form-control" min="1" value="<%= adj.quantity %>" required>
+              <label class="form-label fw-semibold">Quantity (Ctn) *</label>
+              <input type="number" name="quantity" class="form-control" min="1" value="<%= adj.quantity %>" required placeholder="Enter cartons">
             </div>
             <div class="col-md-6 mb-3">
               <label class="form-label fw-semibold">Date *</label>

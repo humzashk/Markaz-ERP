@@ -305,25 +305,31 @@ const schemas = {
           return 'The selected purchase does not belong to this vendor';
       }
 
-      // Enforce line item quantities don't exceed original document quantities
+      // Enforce line item quantities (in Ctn) don't exceed original document quantities (in Ctn)
       if (v._items && v._items.length) {
         for (const item of v._items) {
           if (!item.product_id || !item.quantity) continue;
           if (v.note_type === 'credit' && v.invoice_id) {
             const r = await pool.query(
-              `SELECT quantity FROM invoice_items WHERE invoice_id=$1 AND product_id=$2`,
+              `SELECT COALESCE(ii.packages, CEIL(ii.quantity::numeric / NULLIF(p.qty_per_pack,0)))::int AS max_ctn
+               FROM invoice_items ii JOIN products p ON p.id = ii.product_id
+               WHERE ii.invoice_id=$1 AND ii.product_id=$2`,
               [v.invoice_id, item.product_id]);
             if (!r.rows[0]) return `Product not found on selected invoice`;
-            if (item.quantity > Number(r.rows[0].quantity))
-              return `Return quantity (${item.quantity}) exceeds invoice quantity (${r.rows[0].quantity}) for one or more items`;
+            const maxCtn = Number(r.rows[0].max_ctn) || 0;
+            if (item.quantity > maxCtn)
+              return `Return quantity (${item.quantity} Ctn) exceeds invoice quantity (${maxCtn} Ctn) for one or more items`;
           }
           if (v.note_type === 'debit' && v.purchase_id) {
             const r = await pool.query(
-              `SELECT quantity FROM purchase_items WHERE purchase_id=$1 AND product_id=$2`,
+              `SELECT COALESCE(pi.packages, CEIL(pi.quantity::numeric / NULLIF(p.qty_per_pack,0)))::int AS max_ctn
+               FROM purchase_items pi JOIN products p ON p.id = pi.product_id
+               WHERE pi.purchase_id=$1 AND pi.product_id=$2`,
               [v.purchase_id, item.product_id]);
             if (!r.rows[0]) return `Product not found on selected purchase`;
-            if (item.quantity > Number(r.rows[0].quantity))
-              return `Return quantity (${item.quantity}) exceeds purchase quantity (${r.rows[0].quantity}) for one or more items`;
+            const maxCtn = Number(r.rows[0].max_ctn) || 0;
+            if (item.quantity > maxCtn)
+              return `Return quantity (${item.quantity} Ctn) exceeds purchase quantity (${maxCtn} Ctn) for one or more items`;
           }
         }
 

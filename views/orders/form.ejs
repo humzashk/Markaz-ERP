@@ -66,7 +66,7 @@
           <small class="text-muted ms-2">Commission per item</small>
         </div>
         <div id="stockInfo" class="alert alert-info d-none" style="margin: 12px;">
-          <strong>Stock Available:</strong> <span id="stockQty">-</span> pcs
+          <strong>Stock Available:</strong> <span id="stockQty">-</span> Ctn
           <span id="stockMeter"></span>
         </div>
         <div class="card-body">
@@ -102,14 +102,18 @@
 function onProductChange(sel) {
   const opt = sel.options[sel.selectedIndex];
   if (!opt.value) { document.getElementById('stockInfo').classList.add('d-none'); return; }
-  const stock = opt.dataset.stock;
+  const stockPcs = parseInt(opt.dataset.stock) || 0;
+  const qpp = parseInt(opt.dataset.packaging) || 1;
+  const stockCtn = Math.floor(stockPcs / Math.max(1, qpp));
   const row = sel.closest('tr');
   if (row) {
     row.querySelector('.packaging-input').value = opt.dataset.packaging || 1;
     row.querySelector('.rate-input').value = opt.dataset.rate || 0;
     row.querySelector('.commission-input').value = opt.dataset.commission || 0;
+    row.dataset.stockPcs = stockPcs;
+    row.dataset.qtyPerPack = qpp;
   }
-  document.getElementById('stockQty').textContent = stock;
+  document.getElementById('stockQty').textContent = stockCtn;
   document.getElementById('stockInfo').classList.remove('d-none');
   calcRow(row?.querySelector('.pkg-input'));
 }
@@ -117,16 +121,17 @@ function onProductChange(sel) {
 function calcRow(inp) {
   if (!inp) return;
   const row = inp.closest('tr');
-  const pkg = parseInt(row.querySelector('.pkg-input').value) || 0;
-  const pcs = parseInt(row.querySelector('.packaging-input').value) || 1;
-  const qty = pkg * pcs;
-  const rate = parseFloat(row.querySelector('.rate-input').value) || 0;
-  row.querySelector('.qty-input').value = qty;
-  row.querySelector('.row-amount').textContent = (qty * rate).toFixed(2);
+  const pkg = parseInt(row.querySelector('.pkg-input')?.value) || 0;
+  const pcs = parseInt(row.querySelector('.packaging-input')?.value) || 1;
+  const qtyInput = row.querySelector('.qty-input');
+  // If packages or packaging triggered this, recompute total pcs
+  if (inp.classList.contains('pkg-input') || inp.classList.contains('packaging-input')) {
+    if (pkg > 0) { qtyInput.value = pkg * pcs; }
+  }
   calcTotal();
 }
 
-function onQtyInput(inp) { calcRow(inp); }
+function onQtyInput(inp) { calcTotal(); }
 
 function addItemRow() {
   const tbody = document.getElementById('itemsBody');
@@ -134,7 +139,7 @@ function addItemRow() {
   const idx = tbody.children.length + 1;
   row.innerHTML = `
     <td class="text-muted">${idx}</td>
-    <td><select name="product_id" class="form-select product-select" onchange="onProductChange(this)"><option>Select Product</option><% products.forEach(p => { %><option value="<%= p.id %>" data-packaging="<%= p.qty_per_pack %>" data-rate="<%= p.selling_price %>" data-commission="<%= p.default_commission_rate %>" data-stock="<%= p.stock %>"><%= p.name %> · Stock: <%= p.stock %></option><% }) %></select></td>
+    <td><select name="product_id" class="form-select product-select" onchange="onProductChange(this)"><option>Select Product</option><% products.forEach(p => { %><option value="<%= p.id %>" data-packaging="<%= p.qty_per_pack %>" data-rate="<%= p.selling_price %>" data-commission="<%= p.default_commission_rate %>" data-stock="<%= p.stock %>"><%= p.name %> · Stock: <%= Math.floor((p.stock||0)/Math.max(1,p.qty_per_pack||1)) %> Ctn</option><% }) %></select></td>
     <td><input type="number" name="packages" class="form-control pkg-input text-center" min="0" oninput="calcRow(this)"></td>
     <td><input type="number" name="packaging" class="form-control packaging-input text-center" min="1" value="1" oninput="calcRow(this)"></td>
     <td><input type="number" name="quantity" class="form-control qty-input text-center" min="0" oninput="calcRow(this)"></td>
@@ -163,18 +168,22 @@ function calcTotal() {
     const commPct = parseFloat(row.querySelector('.commission-input')?.value) || 0;
     const amount = qty * rate;
     const comm = amount * commPct / 100;
-    const disc = qty * discPack; // discount per pack * qty
+    const disc = qty * discPack;
+    // Update individual row amount cell
+    const amountCell = row.querySelector('.row-amount');
+    if (amountCell) amountCell.textContent = amount.toLocaleString('en-PK', {minimumFractionDigits:2, maximumFractionDigits:2});
     subtotal += amount;
     totalCommission += comm;
     totalDiscount += disc;
   });
   const gross = subtotal - totalCommission - totalDiscount;
-  document.getElementById('subtotal').textContent = subtotal.toFixed(2);
+  const fmt = n => n.toLocaleString('en-PK', {minimumFractionDigits:2, maximumFractionDigits:2});
+  document.getElementById('subtotal').textContent = fmt(subtotal);
   document.getElementById('commPctDisp').textContent = (totalCommission > 0 ? 'Item-wise' : '0');
-  document.getElementById('commAmount').textContent = totalCommission.toFixed(2);
-  document.getElementById('grandTotal').textContent = subtotal.toFixed(2);
-  document.getElementById('discAmount').textContent = totalDiscount.toFixed(2);
-  document.getElementById('grossAmount').textContent = gross.toFixed(2);
+  document.getElementById('commAmount').textContent = fmt(totalCommission);
+  document.getElementById('grandTotal').textContent = fmt(subtotal);
+  document.getElementById('discAmount').textContent = fmt(totalDiscount);
+  document.getElementById('grossAmount').textContent = fmt(gross);
 }
 
 // ── Bilty # auto-format ───────────────────────────────────────────────────────

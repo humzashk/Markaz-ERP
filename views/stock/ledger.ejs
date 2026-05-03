@@ -32,7 +32,8 @@
   <div class="card mb-3">
     <div class="card-body">
       <h5><%= product.name %></h5>
-      <p class="text-muted mb-0">Current Stock: <strong><%= product.stock %> pcs</strong></p>
+      <% const _lqpp = Math.max(1, product.qty_per_pack||1); %>
+      <p class="text-muted mb-0">Current Stock: <strong><%= Math.floor((product.stock||0)/_lqpp) %> Ctn</strong><% if ((product.stock||0)%_lqpp > 0) { %> <small class="text-muted">(+ <%= (product.stock||0)%_lqpp %> loose pcs)</small><% } %></p>
     </div>
   </div>
 
@@ -66,12 +67,12 @@
                     <span class="badge bg-danger">Out</span>
                   <% } %>
                 </td>
-                <td class="fw-bold"><%= m.quantity %></td>
+                <td class="fw-bold"><% const _mCtn = Math.round((m.qty_delta||0)/_lqpp); %><%= Math.abs(_mCtn) %> Ctn</td>
                 <td>
                   <% if (m.reason) { %><strong><%= m.reason %></strong><% } %>
                   <% if (m.reference) { %><div class="small text-muted"><%= m.reference %></div><% } %>
                 </td>
-                <td style="text-align:right; font-weight:700;"><%= m.balance %> pcs</td>
+                <td style="text-align:right; font-weight:700;"><%= Math.floor((m.running_balance_pcs||0)/_lqpp) %> Ctn</td>
                 <td>
                   <% if (m.source_type === 'adjustment') { %>
                     <a href="/stock/edit/<%= m.source_id %>" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>

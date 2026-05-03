@@ -116,29 +116,35 @@ router.post('/bulk', wrap(async (req, res) => {
       break;
     }
     case 'stock_add': {
-      const qty = toInt(value);
-      if (!Number.isFinite(qty) || qty < 1) return res.redirect('/products?err=' + encodeURIComponent('Quantity must be a whole number ≥ 1'));
+      const qty = toInt(value);  // qty is in Ctn
+      if (!Number.isFinite(qty) || qty < 1) return res.redirect('/products?err=' + encodeURIComponent('Quantity must be a whole number ≥ 1 (in Ctn)'));
       await tx(async (db) => {
         const wh = await db.one(`SELECT id FROM warehouses WHERE status='active' ORDER BY id LIMIT 1`);
         for (const pid of ids) {
-          if (wh) await applyStockMovement(db, pid, wh.id, qty, 'adjustment', pid, 'bulk_add', 'Bulk stock add');
-          else await db.run(`UPDATE products SET stock = stock + $1 WHERE id=$2`, [qty, pid]);
+          const prod = await db.one(`SELECT qty_per_pack FROM products WHERE id=$1`, [pid]);
+          const qpp = Math.max(1, prod ? (prod.qty_per_pack || 1) : 1);
+          const pcsQty = qty * qpp;
+          if (wh) await applyStockMovement(db, pid, wh.id, pcsQty, 'adjustment', pid, 'bulk_add', 'Bulk stock add');
+          else await db.run(`UPDATE products SET stock = stock + $1 WHERE id=$2`, [pcsQty, pid]);
         }
       });
-      ok = `Stock increased by ${qty} for ${ids.length} product(s)`;
+      ok = `Stock increased by ${qty} Ctn for ${ids.length} product(s)`;
       break;
     }
     case 'stock_sub': {
-      const qty = toInt(value);
-      if (!Number.isFinite(qty) || qty < 1) return res.redirect('/products?err=' + encodeURIComponent('Quantity must be a whole number ≥ 1'));
+      const qty = toInt(value);  // qty is in Ctn
+      if (!Number.isFinite(qty) || qty < 1) return res.redirect('/products?err=' + encodeURIComponent('Quantity must be a whole number ≥ 1 (in Ctn)'));
       await tx(async (db) => {
         const wh = await db.one(`SELECT id FROM warehouses WHERE status='active' ORDER BY id LIMIT 1`);
         for (const pid of ids) {
-          if (wh) await applyStockMovement(db, pid, wh.id, -qty, 'adjustment', pid, 'bulk_sub', 'Bulk stock reduce');
-          else await db.run(`UPDATE products SET stock = stock - $1 WHERE id=$2`, [qty, pid]);
+          const prod = await db.one(`SELECT qty_per_pack FROM products WHERE id=$1`, [pid]);
+          const qpp = Math.max(1, prod ? (prod.qty_per_pack || 1) : 1);
+          const pcsQty = qty * qpp;
+          if (wh) await applyStockMovement(db, pid, wh.id, -pcsQty, 'adjustment', pid, 'bulk_sub', 'Bulk stock reduce');
+          else await db.run(`UPDATE products SET stock = stock - $1 WHERE id=$2`, [pcsQty, pid]);
         }
       });
-      ok = `Stock reduced by ${qty} for ${ids.length} product(s)`;
+      ok = `Stock reduced by ${qty} Ctn for ${ids.length} product(s)`;
       break;
     }
     case 'activate': {

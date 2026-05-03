@@ -76,9 +76,9 @@
             <thead class="table-light">
               <tr>
                 <th>Product</th>
-                <th>Invoice Qty</th>
-                <th>Return Qty <span class="text-danger">*</span></th>
-                <th>Rate</th>
+                <th>Invoice Qty (Ctn)</th>
+                <th>Return Qty (Ctn) <span class="text-danger">*</span></th>
+                <th>Rate/Pc</th>
                 <th>Amount</th>
               </tr>
             </thead>
@@ -90,7 +90,7 @@
               </tr>
             </tfoot>
           </table>
-          <div class="text-muted small"><i class="bi bi-info-circle"></i> Leave "Return Qty" as 0 to exclude an item from this note.</div>
+          <div class="text-muted small"><i class="bi bi-info-circle"></i> Quantities are in <strong>Cartons (Ctn)</strong>. Leave "Return Qty" as 0 to exclude an item.</div>
         </div>
       </div>
 
@@ -189,24 +189,26 @@ function buildItemRows(items) {
   tbody.innerHTML = '';
 
   items.forEach((item, idx) => {
-    const maxQty = parseInt(item.max_qty, 10) || 0;
-    const rate   = parseFloat(item.rate) || 0;
+    const maxQty = parseInt(item.max_qty, 10) || 0;   // in Ctn
+    const rate   = parseFloat(item.rate) || 0;          // per pcs
+    const qpp    = Math.max(1, parseInt(item.qty_per_pack, 10) || 1);
     const row = document.createElement('tr');
     row.dataset.maxQty = maxQty;
     row.dataset.rate   = rate;
+    row.dataset.qpp    = qpp;
     row.dataset.idx    = idx;
     row.innerHTML = `
       <input type="hidden" name="product_id[]" value="${item.product_id}">
       <input type="hidden" name="rate[]" value="${rate}">
-      <td class="fw-semibold">${escHtml(item.name)}</td>
-      <td class="text-center text-muted">${maxQty}</td>
-      <td style="width:120px">
+      <td class="fw-semibold">${escHtml(item.name)}<br><small class="text-muted">${qpp} pcs/Ctn</small></td>
+      <td class="text-center text-muted">${maxQty} Ctn</td>
+      <td style="width:130px">
         <input type="number" name="quantity[]" class="form-control form-control-sm qty-input"
           min="0" max="${maxQty}" value="0" oninput="onQtyChange(this)"
-          data-max="${maxQty}" data-idx="${idx}">
-        <div class="invalid-feedback">Max: ${maxQty}</div>
+          data-max="${maxQty}" data-qpp="${qpp}" data-idx="${idx}">
+        <div class="invalid-feedback">Max: ${maxQty} Ctn</div>
       </td>
-      <td class="text-end">${formatRs(rate)}</td>
+      <td class="text-end">${formatRs(rate)}/pc</td>
       <td class="text-end fw-bold amount-cell">${formatRs(0)}</td>
     `;
     tbody.appendChild(row);
@@ -216,7 +218,8 @@ function buildItemRows(items) {
 }
 
 function onQtyChange(input) {
-  const max = parseInt(input.dataset.max, 10) || 0;
+  const max = parseInt(input.dataset.max, 10) || 0;  // Ctn
+  const qpp = parseInt(input.dataset.qpp, 10) || 1;
   const val = parseInt(input.value, 10) || 0;
   const row = input.closest('tr');
   const amtCell = row.querySelector('.amount-cell');
@@ -228,7 +231,9 @@ function onQtyChange(input) {
   } else {
     input.classList.remove('is-invalid');
   }
-  amtCell.textContent = formatRs((parseInt(input.value, 10) || 0) * rate);
+  // Amount = Ctn × pcs_per_ctn × rate_per_pcs
+  const ctn = parseInt(input.value, 10) || 0;
+  amtCell.textContent = formatRs(ctn * qpp * rate);
   calcTotal();
 }
 

@@ -22,7 +22,7 @@ router.get('/', wrap(async (req, res) => {
 }));
 
 router.get('/add', wrap(async (req, res) => {
-  const products = (await pool.query(`SELECT id, name, unit, stock FROM products WHERE status='active' ORDER BY name`)).rows;
+  const products = (await pool.query(`SELECT id, name, unit, qty_per_pack, stock FROM products WHERE status='active' ORDER BY name`)).rows;
   const warehouses = (await pool.query(`SELECT id, name FROM warehouses WHERE status='active' ORDER BY name`)).rows;
   res.render('stock/form', { page:'stock', products, warehouses, edit:false, adj:null, adjType: req.query.type || '' });
 }));
@@ -30,14 +30,18 @@ router.get('/add', wrap(async (req, res) => {
 router.post('/add', validate(schemas.stockAdjust), wrap(async (req, res) => {
   const v = req.valid;
   await tx(async (db) => {
+    // v.quantity is in Ctn — convert to PCS for stock movement
+    const prod = await db.one(`SELECT qty_per_pack FROM products WHERE id=$1`, [v.product_id]);
+    const qpp = Math.max(1, prod ? (prod.qty_per_pack || 1) : 1);
+    const deltaPcs = v.quantity * qpp;           // PCS for stock ledger
+    const positive = ['add','return','transfer_in'].includes(v.adjustment_type);
     const ins = await db.run(`
       INSERT INTO stock_adjustments(product_id, warehouse_id, adjustment_type, quantity, reason, reference, adj_date, notes)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
       [v.product_id, v.warehouse_id, v.adjustment_type, v.quantity, v.reason, v.reference, v.adj_date, v.notes]);
-    const positive = ['add','return','transfer_in'].includes(v.adjustment_type);
-    const delta = positive ? +v.quantity : -v.quantity;
-    await applyStockMovement(db, v.product_id, v.warehouse_id, delta, 'stock_adjustment', ins.id, v.adjustment_type, v.reason || null);
-    await addAuditLog('create','stock_adjustments', ins.id, `${v.adjustment_type} ${v.quantity}`);
+    // quantity stored in stock_adjustments is Ctn (user-facing); stock ledger uses PCS
+    await applyStockMovement(db, v.product_id, v.warehouse_id, positive ? deltaPcs : -deltaPcs, 'stock_adjustment', ins.id, v.adjustment_type, v.reason || null);
+    await addAuditLog('create','stock_adjustments', ins.id, `${v.adjustment_type} ${v.quantity} Ctn`);
   });
   res.redirect('/stock');
 }));
@@ -53,7 +57,7 @@ router.get('/edit/:id', wrap(async (req, res) => {
   if (!adj) return res.redirect('/stock');
   // Normalise adj_date to YYYY-MM-DD string for <input type="date">
   if (adj.adj_date) adj.adj_date = new Date(adj.adj_date).toISOString().split('T')[0];
-  const products   = (await pool.query(`SELECT id, name, unit, stock FROM products WHERE status='active' ORDER BY name`)).rows;
+  const products   = (await pool.query(`SELECT id, name, unit, qty_per_pack, stock FROM products WHERE status='active' ORDER BY name`)).rows;
   const warehouses = (await pool.query(`SELECT id, name FROM warehouses WHERE status='active' ORDER BY name`)).rows;
   res.render('stock/edit', { page:'stock', adj, products, warehouses });
 }));
@@ -64,6 +68,11 @@ router.post('/edit/:id', validate(schemas.stockAdjust), wrap(async (req, res) =>
   await tx(async (db) => {
     const existing = await db.one(`SELECT * FROM stock_adjustments WHERE id=$1`, [id]);
     if (!existing) throw new Error('Adjustment not found');
+    // v.quantity is in Ctn — convert to PCS for stock movement
+    const prod = await db.one(`SELECT qty_per_pack FROM products WHERE id=$1`, [v.product_id]);
+    const qpp = Math.max(1, prod ? (prod.qty_per_pack || 1) : 1);
+    const deltaPcs = v.quantity * qpp;
+    const positive = ['add','return','transfer_in'].includes(v.adjustment_type);
     // Reverse the old stock movement then re-apply with new values
     await reverseStockForRef(db, 'stock_adjustment', id);
     await db.run(`
@@ -73,10 +82,8 @@ router.post('/edit/:id', validate(schemas.stockAdjust), wrap(async (req, res) =>
       WHERE id=$9`,
       [v.product_id, v.warehouse_id, v.adjustment_type, v.quantity,
        v.reason, v.reference, v.adj_date, v.notes, id]);
-    const positive = ['add','return','transfer_in'].includes(v.adjustment_type);
-    const delta    = positive ? +v.quantity : -v.quantity;
-    await applyStockMovement(db, v.product_id, v.warehouse_id, delta, 'stock_adjustment', id, v.adjustment_type, v.reason || null);
-    await addAuditLog('update','stock_adjustments', id, `Edited: ${v.adjustment_type} ${v.quantity}`);
+    await applyStockMovement(db, v.product_id, v.warehouse_id, positive ? deltaPcs : -deltaPcs, 'stock_adjustment', id, v.adjustment_type, v.reason || null);
+    await addAuditLog('update','stock_adjustments', id, `Edited: ${v.adjustment_type} ${v.quantity} Ctn`);
   });
   res.redirect('/stock');
 }));
@@ -136,8 +143,10 @@ router.get('/ledger', wrap(async (req, res) => {
   let movements = []; let product = null;
   if (productId) {
     product = (await pool.query(`SELECT * FROM products WHERE id=$1`, [productId])).rows[0];
+    // Include running balance and qty_per_pack for Ctn conversion
     movements = (await pool.query(`
-      SELECT sl.*, w.name AS warehouse_name
+      SELECT sl.*, w.name AS warehouse_name,
+        SUM(sl.qty_delta) OVER (ORDER BY sl.id ROWS UNBOUNDED PRECEDING) AS running_balance_pcs
       FROM stock_ledger sl LEFT JOIN warehouses w ON w.id = sl.warehouse_id
       WHERE sl.product_id=$1 ORDER BY sl.id DESC LIMIT 500`, [productId])).rows;
   }
@@ -163,6 +172,7 @@ router.get('/movements', wrap(async (req, res) => {
       COALESCE(inv.invoice_date, pur.purchase_date, ord.order_date, CURRENT_DATE) AS movement_date,
       p.name  AS product_name,
       p.id    AS product_id,
+      p.qty_per_pack,
       ABS(sl.qty_delta) AS quantity,
       sl.qty_delta,
       sl.ref_type,

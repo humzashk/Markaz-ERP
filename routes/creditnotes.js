@@ -35,25 +35,33 @@ router.get('/add', wrap(async (req, res) => {
 
 router.post('/add', validate(schemas.creditNoteCreate), wrap(async (req, res) => {
   const v = req.valid;
-  // Filter out items with quantity = 0 (user left them blank — means "not returning this item")
+  // Filter out items with quantity = 0 (user entered 0 Ctn — not returning this item)
   const items = (v._items || []).filter(it => it.quantity > 0);
   if (!items.length) return res.redirect('/creditnotes/add?type=' + (v.note_type || 'credit') + '&err=' + encodeURIComponent('At least one item must have a return quantity'));
-  let total = 0;
-  for (const it of items) { it.amount = it.quantity * it.rate; total += it.amount; }
 
   const newId = await tx(async (db) => {
+    // Convert Ctn quantities to PCS and compute amounts
+    let total = 0;
+    for (const it of items) {
+      const prod = await db.one(`SELECT qty_per_pack FROM products WHERE id=$1`, [it.product_id]);
+      const qpp = Math.max(1, prod ? (prod.qty_per_pack || 1) : 1);
+      it.pcsQty = it.quantity * qpp;          // PCS for stock + amount
+      it.amount = it.pcsQty * it.rate;
+      total += it.amount;
+    }
+
     const noteNo = await nextDocNo(db, v.note_type === 'credit' ? 'CN' : 'DN', 'credit_notes', 'note_no');
     const ins = await db.run(`
       INSERT INTO credit_notes(note_no, note_type, customer_id, vendor_id, invoice_id, purchase_id, note_date, amount, reason, status, notes, account_scope)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending',$10,COALESCE($11,'plastic_markaz')) RETURNING id`,
-      [noteNo, v.note_type, v.customer_id, v.vendor_id, v.invoice_id, v.purchase_id, v.note_date, total, v.reason, v.notes, req.body.account_scope]);
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending',$10,COALESCE($11::account_scope_t,'plastic_markaz'::account_scope_t)) RETURNING id`,
+      [noteNo, v.note_type, v.customer_id, v.vendor_id, v.invoice_id, v.purchase_id, v.note_date, total, v.reason, v.notes, req.body.account_scope || null]);
     const id = ins.id;
     for (const it of items) {
+      // Store PCS in credit_note_items for consistency with invoice_items
       await db.run(`INSERT INTO credit_note_items(note_id, product_id, quantity, rate, amount) VALUES ($1,$2,$3,$4,$5)`,
-        [id, it.product_id, it.quantity, it.rate, it.amount]);
-      // Credit (sales return): stock IN
-      // Debit  (purchase return): stock OUT
-      const delta = v.note_type === 'credit' ? +it.quantity : -it.quantity;
+        [id, it.product_id, it.pcsQty, it.rate, it.amount]);
+      // Credit (sales return): stock IN;  Debit (purchase return): stock OUT — delta in PCS
+      const delta = v.note_type === 'credit' ? +it.pcsQty : -it.pcsQty;
       await applyStockMovement(db, it.product_id, null, delta, v.note_type === 'credit' ? 'credit_note' : 'debit_note', id, v.note_type === 'credit' ? 'sales-return' : 'purchase-return', `${noteNo}`);
     }
     await addAuditLog('create','credit_notes', id, `${noteNo} ${total}`);
@@ -105,13 +113,15 @@ router.get('/api/vendor-purchases', wrap(async (req, res) => {
   res.json(rows);
 }));
 
-// API: return items for a given invoice or purchase (for credit/debit note filtering)
+// API: return items for a given invoice or purchase (quantities in Ctn)
 router.get('/api/items', wrap(async (req, res) => {
   const invoiceId  = toInt(req.query.invoice_id);
   const purchaseId = toInt(req.query.purchase_id);
   if (invoiceId) {
     const rows = (await pool.query(`
-      SELECT ii.product_id, p.name, ii.rate, ii.quantity AS max_qty
+      SELECT ii.product_id, p.name, ii.rate,
+             COALESCE(ii.packages, CEIL(ii.quantity::numeric / NULLIF(p.qty_per_pack,0)))::int AS max_qty,
+             p.qty_per_pack
       FROM invoice_items ii
       JOIN products p ON p.id = ii.product_id
       WHERE ii.invoice_id = $1
@@ -120,7 +130,9 @@ router.get('/api/items', wrap(async (req, res) => {
   }
   if (purchaseId) {
     const rows = (await pool.query(`
-      SELECT pi.product_id, p.name, pi.rate, pi.quantity AS max_qty
+      SELECT pi.product_id, p.name, pi.rate,
+             COALESCE(pi.packages, CEIL(pi.quantity::numeric / NULLIF(p.qty_per_pack,0)))::int AS max_qty,
+             p.qty_per_pack
       FROM purchase_items pi
       JOIN products p ON p.id = pi.product_id
       WHERE pi.purchase_id = $1

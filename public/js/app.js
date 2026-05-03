@@ -3,7 +3,7 @@
 function _buildRowHtml(idx) {
   const opts = window.productsData
     ? window.productsData.map(p =>
-        `<option value="${p.id}" data-packaging="${p.packaging || p.qty_per_pack || 1}" data-rate="${p.rate || p.selling_price || 0}" data-stock="${p.stock || 0}" data-commission="${p.default_commission_rate || 0}">${p.name} · Stock: ${p.stock || 0}</option>`
+        `<option value="${p.id}" data-packaging="${p.packaging || p.qty_per_pack || 1}" data-rate="${p.rate || p.selling_price || 0}" data-stock="${p.stock || 0}" data-commission="${p.default_commission_rate || 0}">${p.name} · Stock: ${Math.floor((p.stock||0)/Math.max(1,p.qty_per_pack||1))} Ctn</option>`
       ).join('')
     : '';
   return `
@@ -86,8 +86,9 @@ function onProductChange(sel) {
         const ctn = d.stock_ctn != null ? d.stock_ctn : Math.floor((d.stock||0)/qpp);
         const loose = d.stock_loose != null ? d.stock_loose : ((d.stock||0) % qpp);
         const hint = document.createElement('small');
-        hint.className = 'stock-hint ' + ((d.stock||0) < 10 ? 'text-danger' : 'text-muted') + ' d-block';
-        hint.innerHTML = `Stock: <strong>${d.stock||0}</strong> pcs &nbsp;·&nbsp; <strong>${ctn}</strong> ctn ${loose ? '+ '+loose+' loose' : ''}`;
+        const stockLow = ctn < 5;
+        hint.className = 'stock-hint ' + (stockLow ? 'text-danger' : 'text-muted') + ' d-block';
+        hint.innerHTML = `Stock: <strong>${ctn}</strong> Ctn${loose ? ' + '+loose+' pcs' : ''}`;
         sel.parentElement.appendChild(hint);
         // Apply rate from rate_list if backend returned one
         if (d.rate != null) {
@@ -106,7 +107,9 @@ function onProductChange(sel) {
     const stock = parseInt(opt.dataset.stock) || 0;
     const hint = document.createElement('small');
     hint.className = 'stock-hint text-muted d-block';
-    hint.innerHTML = `Stock: <strong>${stock}</strong> pcs`;
+    const qppFallback = parseInt(opt.dataset.packaging, 10) || 1;
+    const ctnFallback = Math.floor(stock / Math.max(1, qppFallback));
+    hint.innerHTML = `Stock: <strong>${ctnFallback}</strong> Ctn`;
     sel.parentElement.appendChild(hint);
     row.dataset.stockPcs = stock;
     // Check packaging from data attribute for non-API path (purchases)
@@ -198,8 +201,10 @@ function _checkOverStock(row) {
   const cell = row.querySelector('.qty-input');
   if (!cell) return;
   if (stockPcs > 0 && qty > stockPcs) {
+    const qpp2 = parseFloat(row.dataset.qtyPerPack || '1') || 1;
+    const ctnAvail = Math.floor(stockPcs / qpp2);
     cell.classList.add('is-invalid');
-    cell.title = 'Exceeds available stock (' + stockPcs + ' pcs)';
+    cell.title = 'Exceeds available stock (' + ctnAvail + ' Ctn)';
   } else {
     cell.classList.remove('is-invalid');
     cell.title = '';

@@ -16,7 +16,11 @@
           <tr><th width="130">Category</th><td><%= product.category || '-' %></td></tr>
           <tr><th>Pcs per Carton</th><td><strong><%= product.qty_per_pack %></strong></td></tr>
           <tr><th>Rate / Piece</th><td><strong class="text-success"><%= formatCurrency(product.rate) %></strong></td></tr>
-          <tr><th>Current Stock</th><td><strong class="<%= product.stock <= product.min_stock ? 'text-danger' : 'text-success' %> fs-5"><%= product.stock.toLocaleString() %> pcs</strong></td></tr>
+          <tr><th>Current Stock</th><td>
+            <% const _qpp = Math.max(1, product.qty_per_pack||1); const _ctn = Math.floor((product.stock||0)/_qpp); const _loose = (product.stock||0) % _qpp; %>
+            <strong class="<%= product.stock <= product.min_stock ? 'text-danger' : 'text-success' %> fs-5"><%= _ctn %> Ctn</strong>
+            <% if (_loose > 0) { %><small class="text-muted ms-2">(+ <%= _loose %> loose pcs)</small><% } %>
+          </td></tr>
           <tr><th>Min Stock</th><td><%= product.min_stock %></td></tr>
           <tr><th>Status</th><td><span class="badge bg-<%= statusBadge(product.status) %>"><%= product.status %></span></td></tr>
         </table>

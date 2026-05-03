@@ -25,7 +25,7 @@
           <select name="product_id" class="form-select product-select" required onchange="onProductChange(this)">
             <option value="">— Select Product —</option>
             <% (products||[]).forEach(p => { %>
-            <option value="<%= p.id %>" data-packaging="<%= p.packaging || p.qty_per_pack || 1 %>" data-rate="<%= p.rate || p.selling_price || 0 %>" data-stock="<%= p.stock || 0 %>" data-commission="<%= p.default_commission_rate || 0 %>" <%= p.id == item.product_id ? 'selected' : '' %>><%= p.name %> &nbsp;·&nbsp; Stock: <%= p.stock||0 %></option>
+            <option value="<%= p.id %>" data-packaging="<%= p.packaging || p.qty_per_pack || 1 %>" data-rate="<%= p.rate || p.selling_price || 0 %>" data-stock="<%= p.stock || 0 %>" data-commission="<%= p.default_commission_rate || 0 %>" <%= p.id == item.product_id ? 'selected' : '' %>><%= p.name %> &nbsp;·&nbsp; Stock: <%= Math.floor((p.stock||0)/Math.max(1,p.qty_per_pack||1)) %> Ctn</option>
             <% }) %>
           </select>
         </td>
@@ -58,7 +58,7 @@
           <select name="product_id" class="form-select product-select" required onchange="onProductChange(this)">
             <option value="">— Select Product —</option>
             <% (products||[]).forEach(p => { %>
-            <option value="<%= p.id %>" data-packaging="<%= p.packaging || p.qty_per_pack || 1 %>" data-rate="<%= p.rate || p.selling_price || 0 %>" data-stock="<%= p.stock || 0 %>" data-commission="<%= p.default_commission_rate || 0 %>"><%= p.name %> &nbsp;·&nbsp; Stock: <%= p.stock||0 %></option>
+            <option value="<%= p.id %>" data-packaging="<%= p.packaging || p.qty_per_pack || 1 %>" data-rate="<%= p.rate || p.selling_price || 0 %>" data-stock="<%= p.stock || 0 %>" data-commission="<%= p.default_commission_rate || 0 %>"><%= p.name %> &nbsp;·&nbsp; Stock: <%= Math.floor((p.stock||0)/Math.max(1,p.qty_per_pack||1)) %> Ctn</option>
             <% }) %>
           </select>
         </td>
