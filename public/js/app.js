@@ -374,4 +374,202 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   calcTotal();
+
+  // ── Product search combobox init ──────────────────────────────────────────
+  initAllProductSearches();
+
+  // Patch addItemRow so every new row also gets the combobox
+  if (typeof window.addItemRow === 'function') {
+    const _origAdd = window.addItemRow;
+    window.addItemRow = function () {
+      _origAdd();
+      const tbody = document.getElementById('itemsBody');
+      if (tbody && tbody.rows.length) {
+        const last = tbody.rows[tbody.rows.length - 1];
+        const sel  = last && last.querySelector('select.product-select');
+        if (sel) initProductSearch(sel);
+      }
+    };
+  }
 });
+
+/* ============================================================
+   PRODUCT SEARCH COMBOBOX
+   – Wraps every select.product-select with a text-filter UI.
+   – Native <select> stays hidden in the DOM → form submits normally.
+   – Calls existing onProductChange() on commit → stock/rate/comm
+     logic is fully preserved.
+   ============================================================ */
+
+function _psEsc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function initProductSearch(selectEl) {
+  if (!selectEl || selectEl._psInit) return;
+  selectEl._psInit = true;
+  selectEl.style.display = 'none';
+
+  const products = window.productsData || [];
+
+  /* ── wrapper ── */
+  const wrap = document.createElement('div');
+  wrap.className = 'ps-wrap';
+  wrap.style.cssText = 'position:relative;';
+  selectEl.parentNode.insertBefore(wrap, selectEl);
+  wrap.appendChild(selectEl); // keep select in DOM for name/value submission
+
+  /* ── search input ── */
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'form-control form-control-sm ps-input';
+  input.placeholder = '— Search product… —';
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  wrap.insertBefore(input, selectEl);
+
+  // Pre-fill label when editing an existing row
+  if (selectEl.value) {
+    const cur = products.find(p => String(p.id) === String(selectEl.value));
+    if (cur) input.value = cur.name;
+  }
+
+  /* ── dropdown list ── */
+  const list = document.createElement('ul');
+  list.className = 'ps-list';
+  list.style.cssText = [
+    'display:none', 'position:absolute', 'top:100%', 'left:0', 'right:0',
+    'z-index:9999', 'background:#fff', 'border:1px solid #ced4da',
+    'border-top:none', 'border-radius:0 0 4px 4px', 'max-height:240px',
+    'overflow-y:auto', 'margin:0', 'padding:0', 'list-style:none',
+    'box-shadow:0 6px 16px rgba(0,0,0,.14)'
+  ].join(';');
+  wrap.appendChild(list);
+
+  let filtered = [];
+  let activeIdx = -1;
+
+  /* ── render ── */
+  function renderList(query) {
+    const q = (query || '').toLowerCase().trim();
+    filtered = q ? products.filter(p => p.name.toLowerCase().includes(q)) : products.slice();
+    list.innerHTML = '';
+    activeIdx = -1;
+
+    if (!filtered.length) {
+      const li = document.createElement('li');
+      li.style.cssText = 'padding:7px 10px;color:#999;font-size:12px;';
+      li.textContent = 'No products found';
+      list.appendChild(li);
+      list.style.display = '';
+      return;
+    }
+
+    filtered.forEach((p, i) => {
+      const ctn = Math.floor((p.stock || 0) / Math.max(1, p.qty_per_pack || 1));
+      const li  = document.createElement('li');
+      li.dataset.psIdx = i;
+      li.style.cssText = [
+        'padding:6px 10px', 'cursor:pointer', 'font-size:12px',
+        'border-bottom:1px solid #f3f3f3', 'white-space:nowrap',
+        'overflow:hidden', 'text-overflow:ellipsis'
+      ].join(';');
+
+      // Highlight matched fragment
+      if (q) {
+        const lo    = p.name.toLowerCase();
+        const start = lo.indexOf(q);
+        li.innerHTML = start >= 0
+          ? _psEsc(p.name.slice(0, start))
+            + `<strong style="color:#0d6efd;">${_psEsc(p.name.slice(start, start + q.length))}</strong>`
+            + _psEsc(p.name.slice(start + q.length))
+            + ` <span style="color:#999;font-size:10px;">· ${ctn} Ctn</span>`
+          : _psEsc(p.name) + ` <span style="color:#999;font-size:10px;">· ${ctn} Ctn</span>`;
+      } else {
+        li.innerHTML = _psEsc(p.name)
+          + ` <span style="color:#999;font-size:10px;">· ${ctn} Ctn</span>`;
+      }
+
+      li.addEventListener('mousedown', e => { e.preventDefault(); commit(i); });
+      li.addEventListener('mouseover', ()  => highlight(i));
+      list.appendChild(li);
+    });
+
+    list.style.display = '';
+  }
+
+  function highlight(idx) {
+    const items = list.querySelectorAll('li[data-ps-idx]');
+    items.forEach(el => { el.style.background = ''; });
+    activeIdx = idx;
+    if (idx >= 0 && idx < items.length) {
+      items[idx].style.background = '#e8f0fe';
+      items[idx].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function commit(idx) {
+    const p = filtered[idx];
+    if (!p) return;
+    input.value    = p.name;
+    selectEl.value = p.id;
+    list.style.display = 'none';
+    activeIdx = -1;
+    if (typeof onProductChange === 'function') onProductChange(selectEl);
+  }
+
+  function restoreLabel() {
+    if (!selectEl.value) { input.value = ''; return; }
+    const cur = products.find(p => String(p.id) === String(selectEl.value));
+    if (cur) input.value = cur.name;
+  }
+
+  /* ── events ── */
+  input.addEventListener('focus', () => renderList(input.value));
+
+  input.addEventListener('input', () => renderList(input.value));
+
+  input.addEventListener('blur', () => {
+    // Let mousedown fire first, then close
+    setTimeout(() => { list.style.display = 'none'; restoreLabel(); }, 160);
+  });
+
+  input.addEventListener('keydown', e => {
+    const items = list.querySelectorAll('li[data-ps-idx]');
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (list.style.display === 'none') renderList(input.value);
+      highlight(Math.min(activeIdx + 1, items.length - 1));
+
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      highlight(Math.max(activeIdx - 1, 0));
+
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (activeIdx >= 0)       commit(activeIdx);
+      else if (filtered.length === 1) commit(0);
+
+    } else if (e.key === 'Escape') {
+      list.style.display = 'none';
+      restoreLabel();
+      input.blur();
+
+    } else if (e.key === 'Tab') {
+      // Commit top match on Tab so keyboard-only entry is fast
+      if (activeIdx >= 0)             commit(activeIdx);
+      else if (filtered.length === 1) commit(0);
+      list.style.display = 'none';
+    }
+  });
+
+  // Close when clicking outside
+  document.addEventListener('click', e => {
+    if (!wrap.contains(e.target)) list.style.display = 'none';
+  }, { capture: false });
+}
+
+function initAllProductSearches() {
+  document.querySelectorAll('select.product-select').forEach(initProductSearch);
+}

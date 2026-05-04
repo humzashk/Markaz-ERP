@@ -121,17 +121,27 @@ router.get('/position', wrap(async (req, res) => {
   const warehouses = (await pool.query(`SELECT id, name FROM warehouses WHERE status='active' ORDER BY name`)).rows;
   let sql, params;
   if (warehouseId) {
+    // Show ONLY stock held in the selected warehouse — exclude products with zero or no stock there
     sql = `SELECT p.id, p.name, p.unit, p.min_stock, p.qty_per_pack,
-             COALESCE(ws.quantity,0) AS stock,
-             (COALESCE(ws.quantity,0) * p.cost_price)::NUMERIC(14,2) AS stock_value
-           FROM products p
-           LEFT JOIN warehouse_stock ws ON ws.product_id=p.id AND ws.warehouse_id=$1
-           WHERE p.status='active' ORDER BY p.name`;
+             ws.quantity AS stock,
+             (ws.quantity * p.cost_price)::NUMERIC(14,2) AS stock_value
+           FROM warehouse_stock ws
+           JOIN products p ON p.id = ws.product_id
+           WHERE ws.warehouse_id = $1
+             AND ws.quantity > 0
+             AND p.status = 'active'
+           ORDER BY p.name`;
     params = [warehouseId];
   } else {
-    sql = `SELECT p.id, p.name, p.unit, p.stock, p.min_stock, p.qty_per_pack,
-             (p.stock * p.cost_price)::NUMERIC(14,2) AS stock_value
-           FROM products p WHERE p.status='active' ORDER BY p.name`;
+    // No warehouse selected — require a selection; return empty list
+    sql = `SELECT p.id, p.name, p.unit, p.min_stock, p.qty_per_pack,
+             ws.quantity AS stock,
+             (ws.quantity * p.cost_price)::NUMERIC(14,2) AS stock_value
+           FROM warehouse_stock ws
+           JOIN products p ON p.id = ws.product_id
+           WHERE ws.quantity > 0
+             AND p.status = 'active'
+           ORDER BY p.name`;
     params = [];
   }
   const products = (await pool.query(sql, params)).rows;

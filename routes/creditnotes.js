@@ -62,22 +62,24 @@ router.post('/add', validate(schemas.creditNoteCreate), wrap(async (req, res) =>
         const qpp  = Math.max(1, Number(prod?.qty_per_pack || 1));
         const pcs  = it.quantity * qpp;   // total PCS being returned
 
-        // Fetch rate AND commission server-side — never trust client-supplied rate
+        // Rate always fetched server-side — never trust client-supplied rate.
+        // Commission % comes from the form (user-editable, validated 0-50 by schema).
         let commPct = 0, serverRate = 0;
         if (v.note_type === 'credit' && v.invoice_id) {
           const src = await db.one(
-            `SELECT COALESCE(commission_pct, 0) AS cp, rate AS server_rate
+            `SELECT rate AS server_rate
              FROM invoice_items WHERE invoice_id=$1 AND product_id=$2 LIMIT 1`,
             [v.invoice_id, it.product_id]);
-          commPct    = Number(src?.cp          || 0);
           serverRate = Number(src?.server_rate || 0);
+          // Use user-submitted commission% (schema validates 0–50); default to 0 if absent
+          commPct = Math.min(50, Math.max(0, Number(it.commission_pct ?? 0)));
         } else if (v.note_type === 'debit' && v.purchase_id) {
           const src = await db.one(
             `SELECT rate AS server_rate
              FROM purchase_items WHERE purchase_id=$1 AND product_id=$2 LIMIT 1`,
             [v.purchase_id, it.product_id]);
           serverRate = Number(src?.server_rate || 0);
-          // commPct stays 0 for purchases
+          commPct = Math.min(50, Math.max(0, Number(it.commission_pct ?? 0)));
         }
         if (!serverRate) throw new Error(`Rate not found for product ${it.product_id} on source document`);
 

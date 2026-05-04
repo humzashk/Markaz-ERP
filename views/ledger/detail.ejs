@@ -217,29 +217,33 @@ function closePreview() {
   document.getElementById('previewHint').style.display = '';
   document.querySelectorAll('.ledger-row').forEach(r => r.classList.remove('table-active'));
 }
-document.querySelectorAll('.ledger-row').forEach(function(row) {
-  row.style.cursor = 'pointer';
-  row.addEventListener('click', function() {
-    document.querySelectorAll('.ledger-row').forEach(r => r.classList.remove('table-active'));
-    row.classList.add('table-active');
+// Apply cursor style to all existing rows
+document.querySelectorAll('.ledger-row').forEach(r => { r.style.cursor = 'pointer'; });
 
-    const d = row.dataset;
-    document.getElementById('pv_date').textContent    = d.date;
-    document.getElementById('pv_desc').textContent    = d.desc;
-    document.getElementById('pv_type').textContent    = d.reftype ? d.reftype.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()) : 'General Entry';
-    document.getElementById('pv_pay').textContent     = d.paytype || '—';
-    document.getElementById('pv_debit').textContent   = parseFloat(d.debit)  > 0 ? 'Rs. ' + fmt(d.debit)  : '—';
-    document.getElementById('pv_credit').textContent  = parseFloat(d.credit) > 0 ? 'Rs. ' + fmt(d.credit) : '—';
-    document.getElementById('pv_balance').textContent = 'Rs. ' + fmt(d.balance);
+// Event delegation on the table — works even if rows are ever replaced dynamically
+document.addEventListener('click', function(e) {
+  const row = e.target.closest('tr.ledger-row');
+  if (!row) return;
 
-    const url = d.url;
-    document.getElementById('pv_link').innerHTML = url
-      ? `<a href="${url}" class="btn btn-primary w-100"><i class="bi bi-box-arrow-up-right"></i> Open ${d.reftype.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</a>`
-      : '';
+  document.querySelectorAll('.ledger-row').forEach(r => r.classList.remove('table-active'));
+  row.classList.add('table-active');
 
-    document.getElementById('previewHint').style.display = 'none';
-    document.getElementById('previewPanel').style.display = '';
-  });
+  const d = row.dataset;
+  document.getElementById('pv_date').textContent    = d.date;
+  document.getElementById('pv_desc').textContent    = d.desc;
+  document.getElementById('pv_type').textContent    = d.reftype ? d.reftype.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()) : 'General Entry';
+  document.getElementById('pv_pay').textContent     = d.paytype || '—';
+  document.getElementById('pv_debit').textContent   = parseFloat(d.debit)  > 0 ? 'Rs. ' + fmt(d.debit)  : '—';
+  document.getElementById('pv_credit').textContent  = parseFloat(d.credit) > 0 ? 'Rs. ' + fmt(d.credit) : '—';
+  document.getElementById('pv_balance').textContent = 'Rs. ' + fmt(d.balance);
+
+  const url = d.url;
+  document.getElementById('pv_link').innerHTML = url
+    ? `<a href="${url}" class="btn btn-primary w-100"><i class="bi bi-box-arrow-up-right"></i> Open ${d.reftype.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</a>`
+    : '';
+
+  document.getElementById('previewHint').style.display = 'none';
+  document.getElementById('previewPanel').style.display = '';
 });
 </script>
 <%- include('../partials/footer') %>

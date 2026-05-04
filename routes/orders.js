@@ -89,12 +89,13 @@ router.post('/add', validate(schemas.orderCreate), wrap(async (req, res) => {
 
   const orderId = await tx(async (db) => {
     const orderNo = await nextDocNo(db, 'ORD', 'orders', 'order_no');
+    const createdBy = (req.user && req.user.id) || null;
     const r = await db.run(`
       INSERT INTO orders(order_no,customer_id,warehouse_id,transport_id,bilty_no,order_date,delivery_date,
-                         subtotal,commission_amount,total,status,account_scope,notes)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11,$12) RETURNING id`,
+                         subtotal,commission_amount,total,status,account_scope,notes,created_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11,$12,$13) RETURNING id`,
       [orderNo, v.customer_id, v.warehouse_id, v.transport_id, v.bilty_no, v.order_date, v.delivery_date,
-       subtotal, totalComm, total, v.account_scope || 'plastic_markaz', v.notes]);
+       subtotal, totalComm, total, v.account_scope || 'plastic_markaz', v.notes, createdBy]);
     const id = r.id;
     for (const it of items) {
       await db.run(`
@@ -141,9 +142,14 @@ router.post('/edit/:id', _lockOrder, validate(schemas.orderCreate), wrap(async (
   }
   const total = subtotal - totalComm;
   await tx(async (db) => {
+    const existing = await db.one(`SELECT order_date FROM orders WHERE id=$1`, [id]);
+    if (!existing) throw new Error('Order not found');
+    // Date immutability: keep original date unless user submitted a different one
+    const origDate = existing.order_date ? new Date(existing.order_date).toISOString().split('T')[0] : null;
+    const finalDate = (v.order_date && v.order_date !== origDate) ? v.order_date : origDate;
     await db.run(`UPDATE orders SET customer_id=$1,warehouse_id=$2,transport_id=$3,bilty_no=$4,order_date=$5,delivery_date=$6,
                    subtotal=$7,commission_amount=$8,total=$9,account_scope=$10,notes=$11 WHERE id=$12`,
-      [v.customer_id, v.warehouse_id, v.transport_id, v.bilty_no, v.order_date, v.delivery_date,
+      [v.customer_id, v.warehouse_id, v.transport_id, v.bilty_no, finalDate, v.delivery_date,
        subtotal, totalComm, total, v.account_scope || 'plastic_markaz', v.notes, id]);
     await db.run(`DELETE FROM order_items WHERE order_id=$1`, [id]);
     for (const it of items) {
@@ -152,13 +158,43 @@ router.post('/edit/:id', _lockOrder, validate(schemas.orderCreate), wrap(async (
         [id, it.product_id, it.packages, it.packaging, it.quantity, it.rate, it.amount, it.commission_pct, it.commission_amount]);
     }
     await addAuditLog('update','orders', id, `Updated order total ${total}`);
+
+    // Auto-create / update bilty when bilty_no is provided on order edit
+    if (v.bilty_no) {
+      const existingBilty = (await db.one(`SELECT id FROM bilty WHERE order_id=$1 LIMIT 1`, [id]));
+      if (existingBilty) {
+        // Update bilty_no on existing record
+        await db.run(`UPDATE bilty SET bilty_no=$1 WHERE id=$2`, [v.bilty_no, existingBilty.id]);
+      } else {
+        // Fetch transport name for bilty record
+        let transportName = null;
+        if (v.transport_id) {
+          const t = await db.one(`SELECT name FROM transports WHERE id=$1`, [v.transport_id]);
+          if (t) transportName = t.name;
+        }
+        // Fetch customer city for to_city
+        const cust = await db.one(`SELECT city FROM customers WHERE id=$1`, [v.customer_id]);
+        const toCity = (cust && cust.city) || null;
+        // Auto-create bilty
+        await db.run(`
+          INSERT INTO bilty(order_id, transport_id, transport_name, bilty_no, to_city, bilty_date, status, account_scope)
+          VALUES ($1,$2,$3,$4,$5,CURRENT_DATE,'in_transit',COALESCE($6,'plastic_markaz'))`,
+          [id, v.transport_id || null, transportName, v.bilty_no, toCity, v.account_scope || null]);
+      }
+    }
   });
   res.redirect('/orders/view/' + id);
 }));
 
 router.get('/view/:id', wrap(async (req, res) => {
   const id = toInt(req.params.id);
-  const order = (await pool.query(`SELECT o.*, c.name AS customer_name, c.phone AS customer_phone, c.address AS customer_address, c.city AS customer_city FROM orders o JOIN customers c ON c.id=o.customer_id WHERE o.id=$1`, [id])).rows[0];
+  const order = (await pool.query(`
+    SELECT o.*, c.name AS customer_name, c.phone AS customer_phone, c.address AS customer_address, c.city AS customer_city,
+           COALESCE(u.name, u.username) AS created_by_name
+    FROM orders o
+    JOIN customers c ON c.id = o.customer_id
+    LEFT JOIN users u ON u.id = o.created_by
+    WHERE o.id=$1`, [id])).rows[0];
   if (!order) return res.redirect('/orders');
   const items = (await pool.query(`SELECT oi.*, p.name AS product_name FROM order_items oi JOIN products p ON p.id=oi.product_id WHERE oi.order_id=$1`, [id])).rows;
   const invoice = (await pool.query(`SELECT * FROM invoices WHERE order_id=$1`, [id])).rows[0] || null;

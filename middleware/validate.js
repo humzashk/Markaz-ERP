@@ -134,11 +134,11 @@ const schemas = {
   invoiceCreate: {
     required: {
       customer_id:  ['exists', { table:'customers', label:'customer' }],
-      warehouse_id: ['exists', { table:'warehouses', label:'warehouse' }],
       invoice_date: ['date'],
       due_date:     ['date'],
     },
     optional: {
+      warehouse_id:     ['existsOpt', { table:'warehouses', label:'warehouse' }],
       delivery_date:    ['date'],
       bilty_no:         ['str', { max:50 }],
       transport_id:     ['existsOpt', { table:'transports', label:'transport' }],
@@ -283,10 +283,12 @@ const schemas = {
     },
     items: {
       parentField:'product_id', skipIf: l=>!l.product_id, minRequired:1,
+      optional: ['commission_pct'],
       fields: {
-        product_id:['exists', { table:'products', label:'product' }],
-        quantity:  ['posInt', { max:1e7 }],
-        rate:      ['nonNegNum', { max:1e9 }]
+        product_id:     ['exists', { table:'products', label:'product' }],
+        quantity:       ['posInt', { max:1e7 }],
+        rate:           ['nonNegNum', { max:1e9 }],
+        commission_pct: ['num', { min:0, max:50 }]
       }
     },
     validate: async (v, body) => {
@@ -426,12 +428,14 @@ const schemas = {
     validate:(v)=>{ if (v.amount <= 0) return 'Amount must be > 0'; }
   },
   biltyCreate: {
-    required: { bilty_no:['str',{max:50}], bilty_date:['date'], from_city:['str',{max:50}], to_city:['str',{max:50}] },
+    required: { bilty_no:['str',{max:50}], bilty_date:['date'] },
     optional: {
       order_id:['existsOpt',{ table:'orders', label:'order' }],
       invoice_id:['existsOpt',{ table:'invoices', label:'invoice' }],
       transport_id:['existsOpt',{ table:'transports', label:'transport' }],
       transport_name:['str',{max:100}],
+      from_city:['str',{max:50}],
+      to_city:['str',{max:50}],
       freight_charges:['nonNegNum',{max:1e9}],
       weight:['str',{max:30}], packages_count:['nonNegInt',{max:1e9}],
       account_scope:['oneOf',{choices:['plastic_markaz','wings_furniture','cooler']}],
@@ -440,17 +444,6 @@ const schemas = {
     validate: async (v) => {
       if (!v.order_id && !v.invoice_id) return 'Link bilty to an order or invoice';
       if (!v.transport_id && !v.transport_name) return 'Select an existing transport or enter a transport name';
-      if (v.order_id) {
-        const r = await pool.query(`SELECT bilty_no FROM orders WHERE id=$1`, [v.order_id]);
-        const ob = r.rows[0] && r.rows[0].bilty_no;
-        if (!ob) return 'Linked order has no bilty # — set bilty # on the order first';
-        if (String(ob).trim() !== v.bilty_no) return `Bilty # must match the linked order (${ob})`;
-      } else if (v.invoice_id) {
-        const r = await pool.query(`SELECT bilty_no FROM invoices WHERE id=$1`, [v.invoice_id]);
-        const ib = r.rows[0] && r.rows[0].bilty_no;
-        if (!ib) return 'Linked invoice has no bilty # — set bilty # on the invoice first';
-        if (String(ib).trim() !== v.bilty_no) return `Bilty # must match the linked invoice (${ib})`;
-      }
     }
   },
   userCreate: {

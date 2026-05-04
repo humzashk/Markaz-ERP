@@ -288,12 +288,17 @@ function buildInvoiceRows(items) {
         <input type="number" name="quantity[]" class="form-control form-control-sm inv-qty"
                min="0" max="${maxCtn}" value="0"
                oninput="onInvQtyChange(this)"
-               data-max="${maxCtn}" data-qpp="${qpp}" data-rate="${rate}" data-comm="${commPct}">
+               data-max="${maxCtn}" data-qpp="${qpp}" data-rate="${rate}">
         <div class="invalid-feedback">Max: ${maxCtn} Ctn</div>
       </td>
-      <td class="text-end text-muted">${fmtN(rate)}</td>
-      <td class="text-end text-muted">${commPct.toFixed(2)}%</td>
-      <td class="text-end text-primary fw-semibold">${fmtN(netRate)}</td>
+      <td class="text-end text-muted align-middle">${fmtN(rate)}</td>
+      <td>
+        <input type="number" name="commission_pct[]" class="form-control form-control-sm comm-input text-end"
+               min="0" max="50" step="0.01" value="${commPct.toFixed(2)}"
+               oninput="onInvQtyChange(this.closest('tr').querySelector('.inv-qty'))"
+               title="Commission % (0–50)">
+      </td>
+      <td class="text-end text-primary fw-semibold align-middle inv-netrate">${fmtN(netRate)}</td>
       <td class="text-end fw-bold inv-amt">${fmtN(0)}</td>
     `;
     tbody.appendChild(tr);
@@ -303,22 +308,27 @@ function buildInvoiceRows(items) {
 }
 
 function onInvQtyChange(input) {
+  const row     = input.closest('tr');
   const max     = parseInt(input.dataset.max, 10) || 0;
   const qpp     = parseInt(input.dataset.qpp, 10) || 1;
   const rate    = parseFloat(input.dataset.rate)  || 0;
-  const commPct = parseFloat(input.dataset.comm)  || 0;
+  // Commission % is now user-editable — read from the sibling input in this row
+  const commInput = row.querySelector('.comm-input');
+  const commPct   = Math.min(50, Math.max(0, parseFloat(commInput ? commInput.value : 0) || 0));
 
   let ctn = parseInt(input.value, 10) || 0;
   if (ctn < 0)   { ctn = 0; input.value = 0; }
   if (ctn > max) { ctn = max; input.value = max; input.classList.add('is-invalid'); }
   else           { input.classList.remove('is-invalid'); }
 
-  // amount = Ctn × pcs/ctn × rate_per_pcs × (1 − comm/100)
+  // net_rate = rate × (1 − comm% / 100)
+  // amount   = Ctn × pcs/ctn × net_rate
+  const netRate = Math.round(rate * (1 - commPct / 100) * 10000) / 10000;
   const pcs     = ctn * qpp;
-  const netRate = rate * (1 - commPct / 100);
   const amount  = Math.round(pcs * netRate * 100) / 100;
 
-  const row = input.closest('tr');
+  const netRateCell = row.querySelector('.inv-netrate');
+  if (netRateCell) netRateCell.textContent = fmtN(netRate);
   row.querySelector('.inv-amt').textContent = fmtN(amount);
   calcTotal();
 }

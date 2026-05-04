@@ -18,20 +18,21 @@
           </select>
         </div>
 
-        <!-- Source Doc Search (REQUIRED): pick an order or invoice that already has a bilty_no -->
+        <!-- Source Doc Search: pick an order or invoice -->
         <div class="col-md-12">
           <label class="form-label fw-bold">Source Order / Invoice *</label>
           <div class="position-relative">
-            <input type="text" id="docSearch" class="form-control" placeholder="Search by order # / invoice # / bilty # / customer..." autocomplete="off" value="<%= bilty?.order_id ? ('ORDER #' + (bilty?.order_no||'')) : (bilty?.invoice_id ? ('INVOICE #' + (bilty?.invoice_no||'')) : '') %>">
+            <input type="text" id="docSearch" class="form-control" placeholder="Search by order # / invoice # / customer..." autocomplete="off" value="<%= bilty?.order_id ? ('ORDER #' + (bilty?.order_no||'')) : (bilty?.invoice_id ? ('INVOICE #' + (bilty?.invoice_no||'')) : '') %>">
             <div id="searchResults" class="list-group position-absolute w-100 shadow" style="z-index:1000; max-height:280px; overflow-y:auto; display:none;"></div>
           </div>
           <input type="hidden" name="order_id"   id="order_id"   value="<%= bilty?.order_id || '' %>">
           <input type="hidden" name="invoice_id" id="invoice_id" value="<%= bilty?.invoice_id || '' %>">
-          <small class="text-muted">Bilty # will be auto-filled from the selected order/invoice and must match.</small>
+          <small class="text-muted">Search and select a linked order or invoice.</small>
         </div>
 
-        <div class="col-md-6"><label class="form-label fw-bold">Bilty Number <small class="text-muted">(auto-filled from source)</small></label>
-          <input type="text" name="bilty_no" id="bilty_no" class="form-control bg-light" placeholder="Select source document above..." value="<%= bilty?.bilty_no || '' %>" readonly>
+        <div class="col-md-6"><label class="form-label fw-bold">Bilty Number *</label>
+          <input type="text" name="bilty_no" id="bilty_no" class="form-control" placeholder="Enter bilty number..." value="<%= bilty?.bilty_no || '' %>">
+          <small class="text-muted">Enter manually or it will be suggested from the selected order.</small>
         </div>
         <div class="col-md-6"><label class="form-label">Transport *</label>
           <div class="input-group">

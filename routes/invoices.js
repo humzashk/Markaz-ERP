@@ -42,23 +42,18 @@ router.get('/add', wrap(async (req, res) => {
       if (orders.length) {
         presetCustomerId = orders[0].customer_id;
         linkedOrderIds = orders.map(o => o.id);
-        const raw = (await pool.query(`
+        // Fix 2: fetch ALL order items as individual rows — no merging so nothing is dropped
+        items = (await pool.query(`
           SELECT oi.product_id, oi.quantity, oi.rate, oi.amount,
-                 COALESCE(oi.packages,0) AS packages,
-                 COALESCE(oi.packaging,1) AS packaging,
-                 COALESCE(oi.commission_pct,0) AS commission_pct,
-                 0 AS discount_per_pack,
+                 COALESCE(oi.packages,0)        AS packages,
+                 COALESCE(oi.packaging,1)       AS packaging,
+                 COALESCE(oi.commission_pct,0)  AS commission_pct,
+                 0                              AS discount_per_pack,
                  p.name AS product_name
-          FROM order_items oi JOIN products p ON p.id = oi.product_id
-          WHERE oi.order_id = ANY($1::int[])`, [ids])).rows;
-        // Merge same product+rate+packaging+commission rows
-        const merged = {};
-        for (const it of raw) {
-          const k = `${it.product_id}|${it.rate}|${it.packaging}|${it.commission_pct}`;
-          if (!merged[k]) merged[k] = { ...it, packages:Number(it.packages), quantity:Number(it.quantity), amount:Number(it.amount) };
-          else { merged[k].packages += Number(it.packages); merged[k].quantity += Number(it.quantity); merged[k].amount += Number(it.amount); }
-        }
-        items = Object.values(merged);
+          FROM order_items oi
+          JOIN products p ON p.id = oi.product_id
+          WHERE oi.order_id = ANY($1::int[])
+          ORDER BY oi.order_id, oi.id`, [ids])).rows;
       }
     }
   }
@@ -71,19 +66,21 @@ router.get('/add', wrap(async (req, res) => {
 }));
 
 router.get('/from-orders', wrap(async (req, res) => {
+  // Fix 3: show all customers who have any non-invoiced, non-cancelled orders
   const customers = (await pool.query(`
     SELECT DISTINCT c.id, c.name FROM customers c
     JOIN orders o ON o.customer_id = c.id
-    WHERE o.status IN ('pending','confirmed') AND c.status='active'
+    WHERE o.status NOT IN ('invoiced','cancelled') AND c.status='active'
     ORDER BY c.name
   `)).rows;
   const customerId = req.query.customer_id ? parseInt(req.query.customer_id,10) : null;
   let orders = [];
   if (customerId) {
     orders = (await pool.query(`
-      SELECT o.id, o.order_no, o.order_date, o.total,
+      SELECT o.id, o.order_no, o.order_date, o.total, o.status,
         (SELECT COUNT(*) FROM order_items WHERE order_id = o.id) AS item_count
-      FROM orders o WHERE o.customer_id=$1 AND o.status IN ('pending','confirmed')
+      FROM orders o
+      WHERE o.customer_id=$1 AND o.status NOT IN ('invoiced','cancelled')
       ORDER BY o.order_date DESC
     `, [customerId])).rows;
   }
@@ -143,17 +140,25 @@ router.post('/add', validate(schemas.invoiceCreate), wrap(async (req, res) => {
     }
     subtotal += it.amount; totalComm += it.commission_amount;
   }
-  const transportCharges = toNum(req.body.transport_charges, 0);
+  // Fix 1: use schema-validated transport_charges (falls back to 0 if absent/invalid)
+  const transportCharges = toNum(v.transport_charges, 0);
   const total = subtotal + transportCharges - totalComm;
 
   const orderIds = req.body.order_ids ? (Array.isArray(req.body.order_ids) ? req.body.order_ids : [req.body.order_ids]).map(toInt).filter(Boolean) : [];
 
   const newId = await tx(async (db) => {
-    // Double-invoice guard inside transaction
+    // Fix 4: dual duplicate guard — check both orders.status AND existing invoices table
     if (orderIds.length) {
-      const dup = await db.many(
+      const alreadyStatus = await db.many(
         `SELECT order_no FROM orders WHERE id = ANY($1::int[]) AND status = 'invoiced'`, [orderIds]);
-      if (dup.length) throw new Error(`Orders already invoiced: ${dup.map(r => r.order_no).join(', ')}`);
+      if (alreadyStatus.length)
+        throw new Error(`Orders already invoiced: ${alreadyStatus.map(r => r.order_no).join(', ')}`);
+
+      const alreadyInv = await db.many(
+        `SELECT i.invoice_no FROM invoices i
+         WHERE i.order_id = ANY($1::int[]) AND i.status != 'cancelled'`, [orderIds]);
+      if (alreadyInv.length)
+        throw new Error(`Invoice already exists for these orders: ${alreadyInv.map(r => r.invoice_no).join(', ')}`);
     }
     const invoiceNo = await nextDocNo(db, 'INV', 'invoices', 'invoice_no');
     let resolvedTransporter = req.body.transporter_name || null;
@@ -179,7 +184,7 @@ router.post('/add', validate(schemas.invoiceCreate), wrap(async (req, res) => {
         VALUES ($1,$2,COALESCE($3,0),COALESCE($4,1),$5,$6,$7,COALESCE($8,0),$9,COALESCE($10,0),$11)`,
         [invId, it.product_id, it.packages, it.packaging, it.quantity, it.rate, it.amount,
          it.commission_pct, it.commission_amount, it.discount_per_pack, it.cost_at_sale]);
-      await applyStockMovement(db, it.product_id, v.warehouse_id, -it.quantity, 'invoice', invId, 'sale', `Invoice ${invoiceNo}`);
+      await applyStockMovement(db, it.product_id, v.warehouse_id || null, -it.quantity, 'invoice', invId, 'sale', `Invoice ${invoiceNo}`);
     }
 
     // Mark linked orders invoiced
@@ -221,7 +226,8 @@ router.post('/edit/:id', _lockInvoice, validate(schemas.invoiceCreate), wrap(asy
   if (v.bilty_no) v.bilty_no = _normBilty(v.bilty_no);
   const items = v._items || [];
   if (!items.length) return res.redirect('/invoices/edit/' + id + '?err=no_items');
-  const transportCharges = toNum(req.body.transport_charges, 0);
+  // Fix 1: use schema-validated transport_charges
+  const transportCharges = toNum(v.transport_charges, 0);
 
   await tx(async (db) => {
     const existing = await db.one(`SELECT * FROM invoices WHERE id=$1`, [id]);
@@ -247,6 +253,10 @@ router.post('/edit/:id', _lockInvoice, validate(schemas.invoiceCreate), wrap(asy
       if (t) resolvedTransporter = t.name;
     }
 
+    // Date immutability: keep original invoice_date unless user submitted a different one
+    const origInvDate = existing.invoice_date ? new Date(existing.invoice_date).toISOString().split('T')[0] : null;
+    const finalInvDate = (v.invoice_date && v.invoice_date !== origInvDate) ? v.invoice_date : origInvDate;
+
     // Reverse stock + ledger then re-apply
     await reverseStockForRef(db, 'invoice', id);
     await removeLedgerForRef(db, 'customer', existing.customer_id, 'invoice', id);
@@ -258,7 +268,7 @@ router.post('/edit/:id', _lockInvoice, validate(schemas.invoiceCreate), wrap(asy
                     notes=$13, account_scope=$14
                   WHERE id=$15`,
       [v.customer_id, v.warehouse_id, v.transport_id, v.bilty_no, resolvedTransporter,
-       v.invoice_date, v.due_date, v.delivery_date,
+       finalInvDate, v.due_date, v.delivery_date,
        subtotal, totalComm, transportCharges, total,
        v.notes, v.account_scope || existing.account_scope || 'plastic_markaz', id]);
 
@@ -267,10 +277,10 @@ router.post('/edit/:id', _lockInvoice, validate(schemas.invoiceCreate), wrap(asy
       await db.run(`INSERT INTO invoice_items(invoice_id,product_id,packages,packaging,quantity,rate,amount,commission_pct,commission_amount,discount_per_pack,cost_at_sale)
                     VALUES ($1,$2,COALESCE($3,0),COALESCE($4,1),$5,$6,$7,COALESCE($8,0),$9,COALESCE($10,0),$11)`,
         [id, it.product_id, it.packages, it.packaging, it.quantity, it.rate, it.amount, it.commission_pct, it.commission_amount, it.discount_per_pack, it.cost_at_sale]);
-      await applyStockMovement(db, it.product_id, v.warehouse_id, -it.quantity, 'invoice', id, 'sale-edit', `Invoice ${existing.invoice_no} (edited)`);
+      await applyStockMovement(db, it.product_id, v.warehouse_id || null, -it.quantity, 'invoice', id, 'sale-edit', `Invoice ${existing.invoice_no} (edited)`);
     }
 
-    await addLedgerEntry(db, 'customer', v.customer_id, v.invoice_date, `Invoice ${existing.invoice_no}`, total, 0, 'invoice', id, v.account_scope || existing.account_scope || 'plastic_markaz');
+    await addLedgerEntry(db, 'customer', v.customer_id, finalInvDate, `Invoice ${existing.invoice_no}`, total, 0, 'invoice', id, v.account_scope || existing.account_scope || 'plastic_markaz');
     if (v.customer_id !== existing.customer_id) await recomputeBalance(db, 'customer', existing.customer_id);
 
     await addAuditLog('update','invoices', id, `Updated invoice ${existing.invoice_no} new total ${total}`);

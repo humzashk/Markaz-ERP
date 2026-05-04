@@ -49,9 +49,10 @@
             <td class="fw-bold text-end"><%= formatCurrency(o.total) %></td>
             <td><span class="badge bg-<%= o.status === 'invoiced' ? 'success' : 'warning' %>"><%= o.status || 'pending' %></span></td>
             <td>
-              <a href="/orders/view/<%= o.id %>" class="btn btn-sm btn-info"><i class="bi bi-eye"></i></a>
-              <a href="/orders/print/<%= o.id %>" target="_blank" class="btn btn-sm btn-secondary"><i class="bi bi-printer"></i></a>
-              <a href="/orders/edit/<%= o.id %>" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i></a>
+              <a href="/orders/view/<%= o.id %>" class="btn btn-sm btn-info" title="View Order"><i class="bi bi-eye"></i></a>
+              <a href="/orders/print/<%= o.id %>" target="_blank" class="btn btn-sm btn-secondary" title="Print Order"><i class="bi bi-printer"></i></a>
+              <a href="/orders/challan/<%= o.id %>" target="_blank" class="btn btn-sm btn-outline-success" title="View Delivery Challan"><i class="bi bi-truck"></i></a>
+              <a href="/orders/edit/<%= o.id %>" class="btn btn-sm btn-warning" title="Edit Order"><i class="bi bi-pencil"></i></a>
               <form class="d-inline" method="post" action="/orders/delete/<%= o.id %>" onsubmit="return confirm('Delete this order?')">
                 <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
               </form>
@@ -87,10 +88,18 @@ function confirmBulk() {
   if (action === 'delete') return confirm('Delete selected orders? This cannot be undone.');
   return true;
 }
-document.getElementById('selectAll').addEventListener('change', function() {
-  document.querySelectorAll('.row-check').forEach(c => c.checked = this.checked);
-  updateBulk();
+// Use event delegation so listeners survive any future DOM updates
+document.addEventListener('change', function(e) {
+  if (e.target.id === 'selectAll') {
+    document.querySelectorAll('.row-check').forEach(c => c.checked = e.target.checked);
+    updateBulk();
+  } else if (e.target.matches('.row-check')) {
+    updateBulk();
+    // Sync selectAll state
+    const all  = document.querySelectorAll('.row-check');
+    const chk  = document.querySelectorAll('.row-check:checked');
+    document.getElementById('selectAll').checked = all.length > 0 && chk.length === all.length;
+  }
 });
-document.querySelectorAll('.row-check').forEach(c => c.addEventListener('change', updateBulk));
 </script>
 <%- include('../partials/footer') %>

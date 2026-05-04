@@ -95,6 +95,9 @@ router.post('/edit/:id', _lockPurchase, validate(schemas.purchaseCreate), wrap(a
   await tx(async (db) => {
     const existing = await db.one(`SELECT * FROM purchases WHERE id=$1`, [id]);
     if (!existing) throw new Error('Purchase not found');
+    // Date immutability: keep original purchase_date unless user submitted a different one
+    const origPurDate = existing.purchase_date ? new Date(existing.purchase_date).toISOString().split('T')[0] : null;
+    const finalPurDate = (v.purchase_date && v.purchase_date !== origPurDate) ? v.purchase_date : origPurDate;
     await reverseStockForRef(db, 'purchase', id);
     await removeLedgerForRef(db, 'vendor', existing.vendor_id, 'purchase', id);
     await recomputeBalance(db, 'vendor', existing.vendor_id);
@@ -103,7 +106,7 @@ router.post('/edit/:id', _lockPurchase, validate(schemas.purchaseCreate), wrap(a
                     purchase_date=$5, delivery_date=$6, subtotal=$7, discount=$8, delivery_charges=$9, total=$10,
                     notes=$11, account_scope=$12 WHERE id=$13`,
       [v.vendor_id, v.warehouse_id, v.transport_id, v.bilty_no,
-       v.purchase_date, v.delivery_date, subtotal, discount, deliveryCharges, total,
+       finalPurDate, v.delivery_date, subtotal, discount, deliveryCharges, total,
        v.notes, v.account_scope || existing.account_scope || 'plastic_markaz', id]);
 
     await db.run(`DELETE FROM purchase_items WHERE purchase_id=$1`, [id]);
@@ -114,7 +117,7 @@ router.post('/edit/:id', _lockPurchase, validate(schemas.purchaseCreate), wrap(a
       await applyStockMovement(db, it.product_id, v.warehouse_id, +it.quantity, 'purchase', id, 'purchase-edit', `Purchase ${existing.purchase_no} (edited)`);
       await db.run(`UPDATE products SET cost_price=$1 WHERE id=$2`, [it.rate, it.product_id]);
     }
-    await addLedgerEntry(db, 'vendor', v.vendor_id, v.purchase_date, `Purchase ${existing.purchase_no}`, 0, total, 'purchase', id, v.account_scope || existing.account_scope || 'plastic_markaz');
+    await addLedgerEntry(db, 'vendor', v.vendor_id, finalPurDate, `Purchase ${existing.purchase_no}`, 0, total, 'purchase', id, v.account_scope || existing.account_scope || 'plastic_markaz');
     if (v.vendor_id !== existing.vendor_id) await recomputeBalance(db, 'vendor', existing.vendor_id);
     await addAuditLog('update','purchases', id, `Updated purchase ${existing.purchase_no} total ${total}`);
   });
