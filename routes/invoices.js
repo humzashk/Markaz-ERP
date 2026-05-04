@@ -31,6 +31,13 @@ router.get('/add', wrap(async (req, res) => {
   if (req.query.from_orders) {
     const ids = String(req.query.from_orders).split(',').map(s => parseInt(s,10)).filter(Boolean);
     if (ids.length) {
+      // Block if any selected order is already invoiced
+      const alreadyInv = (await pool.query(
+        `SELECT order_no FROM orders WHERE id = ANY($1::int[]) AND status = 'invoiced'`, [ids])).rows;
+      if (alreadyInv.length) {
+        return res.redirect('/orders?err=' + encodeURIComponent(
+          `Already invoiced: ${alreadyInv.map(r => r.order_no).join(', ')}`));
+      }
       const orders = (await pool.query(`SELECT id, customer_id FROM orders WHERE id = ANY($1::int[])`, [ids])).rows;
       if (orders.length) {
         presetCustomerId = orders[0].customer_id;
@@ -129,6 +136,11 @@ router.post('/add', validate(schemas.invoiceCreate), wrap(async (req, res) => {
     it.commission_amount = it.amount * (it.commission_pct || 0) / 100;
     it.discount_per_pack = it.discount_per_pack || 0;
     it.cost_at_sale = await getProductCost(null, it.product_id);
+    // Fallback: if cost_price is 0 in master, use item rate as minimum cost proxy
+    if (!it.cost_at_sale && it.rate > 0) {
+      const cp = await pool.query(`SELECT cost_price FROM products WHERE id=$1`, [it.product_id]);
+      it.cost_at_sale = Number(cp.rows[0]?.cost_price) || it.rate;
+    }
     subtotal += it.amount; totalComm += it.commission_amount;
   }
   const transportCharges = toNum(req.body.transport_charges, 0);
@@ -137,6 +149,12 @@ router.post('/add', validate(schemas.invoiceCreate), wrap(async (req, res) => {
   const orderIds = req.body.order_ids ? (Array.isArray(req.body.order_ids) ? req.body.order_ids : [req.body.order_ids]).map(toInt).filter(Boolean) : [];
 
   const newId = await tx(async (db) => {
+    // Double-invoice guard inside transaction
+    if (orderIds.length) {
+      const dup = await db.many(
+        `SELECT order_no FROM orders WHERE id = ANY($1::int[]) AND status = 'invoiced'`, [orderIds]);
+      if (dup.length) throw new Error(`Orders already invoiced: ${dup.map(r => r.order_no).join(', ')}`);
+    }
     const invoiceNo = await nextDocNo(db, 'INV', 'invoices', 'invoice_no');
     let resolvedTransporter = req.body.transporter_name || null;
     if (v.transport_id) {

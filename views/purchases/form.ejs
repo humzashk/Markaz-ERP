@@ -53,8 +53,8 @@
               <a href="/transports/add" target="_blank" class="btn btn-outline-secondary" title="New transport"><i class="bi bi-plus"></i></a>
             </div>
           </div>
-          <div class="mb-3"><label class="form-label">Discount (Rs.)</label><input type="number" id="discount" name="discount" class="form-control" value="<%= purchase?.discount || 0 %>" step="0.01" onchange="calcTotal()"></div>
-          <div class="mb-3"><label class="form-label">Delivery Charges (Rs.)</label><input type="number" id="delivery_charges" name="delivery_charges" class="form-control" value="<%= purchase?.delivery_charges || 0 %>" step="0.01" onchange="calcTotal()"></div>
+          <div class="mb-3"><label class="form-label">Discount (Rs.)</label><input type="number" id="discount" name="discount" class="form-control" value="<%= purchase?.discount || 0 %>" step="0.01" oninput="calcTotal()"></div>
+          <div class="mb-3"><label class="form-label">Delivery Charges (Rs.)</label><input type="number" id="delivery_charges" name="delivery_charges" class="form-control" value="<%= purchase?.delivery_charges || 0 %>" step="0.01" oninput="calcTotal()"></div>
           <div class="mb-3"><label class="form-label">Notes</label><textarea name="notes" class="form-control" rows="2"><%= purchase?.notes || '' %></textarea></div>
         </div>
       </div>
@@ -65,8 +65,17 @@
         <div class="card-body">
           <%- include('../partials/item-rows', { hideCommission: true }) %>
           <div class="text-end border-top pt-3">
-            <div class="d-flex justify-content-end gap-4 mb-2"><span class="text-muted">Subtotal:</span><strong id="subtotal">0.00</strong></div>
-            <div class="d-flex justify-content-end gap-4"><span class="fs-5 fw-bold">TOTAL:</span><strong class="fs-5 text-success" id="grandTotal">0.00</strong></div>
+            <div class="d-flex justify-content-end gap-4 mb-2">
+              <span class="text-muted">Items Subtotal:</span><strong id="subtotal">0.00</strong>
+            </div>
+            <div class="d-flex justify-content-end gap-4 mb-2">
+              <span class="text-muted">Gross <small class="text-secondary">(incl. delivery)</small>:</span>
+              <strong id="grandTotal">0.00</strong>
+            </div>
+            <div class="d-flex justify-content-end gap-4 border-top pt-2">
+              <span class="fs-5 fw-bold text-warning">NET TOTAL:</span>
+              <strong class="fs-5 text-warning" id="grossAmount">0.00</strong>
+            </div>
           </div>
         </div>
       </div>

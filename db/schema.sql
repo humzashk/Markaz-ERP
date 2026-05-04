@@ -507,15 +507,20 @@ CREATE TABLE settings (
 );
 
 CREATE TABLE audit_log (
-  id         SERIAL PRIMARY KEY,
-  action     TEXT NOT NULL,
-  module     TEXT NOT NULL,
-  record_id  INTEGER,
-  details    TEXT,
-  user_id    INTEGER REFERENCES users(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id                  SERIAL PRIMARY KEY,
+  action              TEXT NOT NULL,
+  module              TEXT NOT NULL,
+  record_id           INTEGER,
+  details             TEXT,
+  user_id             INTEGER REFERENCES users(id),
+  old_value           JSONB,
+  new_value           JSONB,
+  superadmin_override BOOLEAN NOT NULL DEFAULT false,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_audit_module ON audit_log(module);
+CREATE INDEX idx_audit_module             ON audit_log(module);
+CREATE INDEX idx_audit_created_at         ON audit_log(created_at DESC);
+CREATE INDEX idx_audit_superadmin_override ON audit_log(superadmin_override) WHERE superadmin_override = true;
 
 CREATE TABLE system_errors (
   id        SERIAL PRIMARY KEY,

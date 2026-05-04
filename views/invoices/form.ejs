@@ -67,7 +67,7 @@
             </div>
             <input type="hidden" name="transporter_name" value="<%= invoice?.transporter_name || '' %>">
           </div>
-          <div class="mb-3"><label class="form-label">Transport Charges (+/-)</label><input type="number" step="0.01" name="transport_charges" id="transport_charges" class="form-control" value="<%= invoice?.transport_charges || 0 %>" onchange="calcTotal()"></div>
+          <div class="mb-3"><label class="form-label">Transport Charges (+/-)</label><input type="number" step="0.01" name="transport_charges" id="transport_charges" class="form-control" value="<%= invoice?.transport_charges || 0 %>" oninput="calcTotal()"></div>
           <input type="hidden" name="delivery_charges" id="delivery_charges" value="0">
           <!-- Link Orders dropdown removed — use 'Generate Invoice from Orders' button on listing page -->
           <% if (!edit && typeof linkedOrderIds !== 'undefined' && linkedOrderIds && linkedOrderIds.length) { %>
@@ -93,16 +93,24 @@
         <div class="card-body">
           <%- include('../partials/item-rows') %>
           <div class="text-end border-top pt-3">
-            <div class="d-flex justify-content-end gap-4 mb-2"><span class="text-muted">Subtotal:</span><strong id="subtotal">0.00</strong></div>
-            <div class="d-flex justify-content-end gap-4 mb-2"><span class="fs-5 fw-bold">TOTAL:</span><strong class="fs-5 text-success" id="grandTotal">0.00</strong></div>
-            <div class="d-flex justify-content-end gap-4 mb-2 text-info">
-              <span>Less Commission (<span id="commPctDisp">0</span>%):</span><strong id="commAmount">0.00</strong>
+            <div class="d-flex justify-content-end gap-4 mb-2">
+              <span class="text-muted">Items Subtotal:</span><strong id="subtotal">0.00</strong>
             </div>
-            <div class="d-flex justify-content-end gap-4 mb-2 text-secondary">
-              <span>Less Discount:</span><strong id="discAmount">0.00</strong>
+            <div class="d-flex justify-content-end gap-4 mb-2">
+              <span class="text-muted">Gross Total <small class="text-secondary">(incl. transport)</small>:</span>
+              <strong id="grandTotal">0.00</strong>
+            </div>
+            <div class="d-flex justify-content-end gap-4 mb-2 text-info">
+              <span>Less Commission (<span id="commPctDisp">0</span>%):</span>
+              <strong id="commAmount">0.00</strong>
+            </div>
+            <div class="d-flex justify-content-end gap-4 mb-2 text-secondary" style="font-size:0.85em">
+              <span>Disc/Pack Total <small>(info only — not deducted)</small>:</span>
+              <span id="discAmount">0.00</span>
             </div>
             <div class="d-flex justify-content-end gap-4 border-top pt-2">
-              <span class="fs-5 fw-bold text-warning">NET AMOUNT:</span><strong class="fs-5 text-warning" id="grossAmount">0.00</strong>
+              <span class="fs-5 fw-bold text-warning">NET AMOUNT:</span>
+              <strong class="fs-5 text-warning" id="grossAmount">0.00</strong>
             </div>
           </div>
         </div>

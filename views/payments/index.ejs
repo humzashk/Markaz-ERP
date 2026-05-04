@@ -2,10 +2,8 @@
 <div class="page-header">
   <h2><i class="bi bi-list-check"></i> All Payments</h2>
   <div class="d-flex gap-2 flex-wrap">
-    <a href="/payments/received" class="btn btn-outline-success btn-sm"><i class="bi bi-list-check"></i> Received List</a>
-    <a href="/payments/paid" class="btn btn-outline-primary btn-sm"><i class="bi bi-list-ul"></i> Paid List</a>
-    <a href="/payments/receive" class="btn btn-success"><i class="bi bi-cash-coin"></i> Receive</a>
-    <a href="/payments/pay" class="btn btn-primary"><i class="bi bi-cash-stack"></i> Pay Vendor</a>
+    <a href="/payments/receive" class="btn btn-success btn-sm"><i class="bi bi-cash-coin"></i> Receive Payment</a>
+    <a href="/payments/pay" class="btn btn-primary btn-sm"><i class="bi bi-cash-stack"></i> Pay Vendor</a>
   </div>
 </div>
 
@@ -47,7 +45,7 @@
       <table class="table table-hover mb-0">
         <thead>
           <tr>
-            <th>#</th><th>Date</th><th>Type</th><th>Party</th><th>Amount</th><th>Method</th><th>Reference</th><th>Notes</th>
+            <th>#</th><th>Date</th><th>Type</th><th>Party</th><th class="text-end">Amount</th><th>Method</th><th>Reference</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -63,10 +61,10 @@
               <% } %>
             </td>
             <td><strong><%= p.entity_name || '-' %></strong></td>
-            <td class="fw-bold <%= p.entity_type==='customer'?'text-success':'text-primary' %>"><%= formatCurrency(p.amount) %></td>
+            <td class="text-end fw-bold <%= p.entity_type==='customer'?'text-success':'text-primary' %>"><%= formatCurrency(p.amount) %></td>
             <td><span class="badge bg-light text-dark"><%= p.payment_method || 'cash' %></span></td>
-            <td><%= p.reference || '-' %></td>
-            <td class="text-muted small"><%= p.notes || '' %></td>
+            <td class="text-muted small"><%= p.reference || '-' %></td>
+            <td><a href="/payments/view/<%= p.id %>" class="btn btn-xs btn-outline-secondary" style="font-size:11px;padding:2px 8px;">View</a></td>
           </tr>
           <% }) %>
           <% if (!payments.length) { %>

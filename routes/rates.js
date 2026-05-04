@@ -78,7 +78,7 @@ router.post('/update', wrap(async (req, res) => {
   if (isNaN(newRate) || newRate < 0) return res.redirect(back + '?err=' + encodeURIComponent('Rate must be a valid number ≥ 0'));
 
   await tx(async (db) => {
-    const r = await db.one(`SELECT selling_price FROM products WHERE id=$1`, [id]);
+    const r = await db.one(`SELECT selling_price FROM products WHERE id=$1 FOR UPDATE`, [id]);
     if (!r) throw new Error('Product not found');
     const oldRate = Number(r.selling_price) || 0;
 
@@ -115,7 +115,7 @@ router.post('/bulk-update', wrap(async (req, res) => {
   let updatedCount = 0;
   await tx(async (db) => {
     for (const { id, newRate } of entries) {
-      const r = await db.one(`SELECT selling_price FROM products WHERE id=$1`, [id]);
+      const r = await db.one(`SELECT selling_price FROM products WHERE id=$1 FOR UPDATE`, [id]);
       if (!r) throw new Error(`Product ${id} not found`);
       const oldRate = Number(r.selling_price) || 0;
       if (oldRate === newRate) continue; // skip unchanged

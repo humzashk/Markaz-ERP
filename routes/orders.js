@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { pool, tx, nextDocNo, addAuditLog, toInt, toNum } = require('../database');
 const { wrap } = require('../middleware/errorHandler');
-const { validate, schemas, requireEditPermission } = require('../middleware/validate');
+const { validate, schemas, requireEditPermission, isOlderThan2Years } = require('../middleware/validate');
 const _lockOrder = requireEditPermission('orders', 'order_date');
 
 // Orders DO NOT touch stock or ledger. They are draft sale agreements.
@@ -215,6 +215,20 @@ router.post('/bulk', wrap(async (req, res) => {
   if (!ids.length) return res.redirect('/orders?err=' + encodeURIComponent('No orders selected'));
 
   if (action === 'delete') {
+    // Age-gate each record before bulk delete
+    const rows = (await pool.query(`SELECT id, order_date FROM orders WHERE id=ANY($1::int[])`, [ids])).rows;
+    const isSuperadmin = req.user && req.user.role === 'superadmin';
+    const locked = rows.filter(r => isOlderThan2Years(r.order_date));
+    if (locked.length && !isSuperadmin) {
+      return res.redirect('/orders?err=' + encodeURIComponent(
+        `${locked.length} order(s) are older than 2 years and cannot be deleted`));
+    }
+    // Log superadmin override for every locked record before proceeding
+    for (const r of locked) {
+      await addAuditLog('superadmin_override', 'orders', r.id,
+        `Superadmin bulk-deleted order older than 2 years (order_date: ${r.order_date})`,
+        req.user && req.user.id, r, null);
+    }
     await tx(async (db) => {
       await db.run(`DELETE FROM order_items WHERE order_id=ANY($1::int[])`, [ids]);
       await db.run(`DELETE FROM orders WHERE id=ANY($1::int[])`, [ids]);

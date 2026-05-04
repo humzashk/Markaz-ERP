@@ -3,13 +3,14 @@
 <div class="page-header d-flex justify-content-between align-items-center flex-wrap gap-2">
   <h2><i class="bi bi-journal-text"></i> Vendor Ledger — <strong><%= vendor.name %></strong></h2>
   <div class="d-flex gap-2 flex-wrap no-print">
-    <a href="/payments/pay?entity_id=<%= vendor.id %>" class="btn btn-success btn-sm"><i class="bi bi-cash"></i> Pay Vendor</a>
+    <a href="/payments/pay?vendor_id=<%= vendor.id %>" class="btn btn-success btn-sm"><i class="bi bi-cash-stack"></i> Pay Vendor</a>
     <a href="/ledger/print/vendor/<%= vendor.id %>?from=<%= from %>&to=<%= to %>" class="btn btn-outline-secondary btn-sm" target="_blank"><i class="bi bi-printer"></i> Print</a>
+    <a href="/ledger/pdf/vendor/<%= vendor.id %>?from=<%= from %>&to=<%= to %>" class="btn btn-danger btn-sm"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
     <a href="/ledger" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
   </div>
 </div>
 
-<%/* ── Summary cards ── */%>
+<!-- Summary Cards -->
 <div class="row g-3 mb-3">
   <div class="col-sm-4">
     <div class="card border-0 shadow-sm h-100">
@@ -39,9 +40,9 @@
     <div class="card border-0 shadow-sm h-100">
       <div class="card-body py-3">
         <div class="text-muted small mb-1">Current Balance (All Time)</div>
-        <div class="fs-5 fw-bold <%= vendor.balance < 0 ? 'text-danger' : vendor.balance > 0 ? 'text-success' : 'text-secondary' %>">
-          Rs. <%= Math.abs(vendor.balance || 0).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) %>
-          <small class="fs-6 fw-normal text-muted ms-1"><%= (vendor.balance||0) < 0 ? '(Payable)' : (vendor.balance||0) > 0 ? '(Advance)' : '' %></small>
+        <div class="fs-5 fw-bold <%= (vendor.balance||0) > 0 ? 'text-danger' : (vendor.balance||0) < 0 ? 'text-success' : 'text-secondary' %>">
+          Rs. <%= Math.abs(vendor.balance||0).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) %>
+          <small class="fs-6 fw-normal text-muted ms-1"><%= (vendor.balance||0) > 0 ? '(Payable)' : (vendor.balance||0) < 0 ? '(Advance)' : '' %></small>
         </div>
         <div class="text-muted" style="font-size:11px"><%= vendor.phone || vendor.city || '' %></div>
       </div>
@@ -49,7 +50,7 @@
   </div>
 </div>
 
-<%/* ── Date filter ── */%>
+<!-- Date Filter -->
 <div class="card mb-3 no-print">
   <div class="card-body py-2">
     <form method="get" class="row g-2 align-items-end">
@@ -70,7 +71,9 @@
   </div>
 </div>
 
-<%/* ── Ledger table ── */%>
+<!-- Ledger Table + Preview Panel -->
+<div class="row g-3">
+<div class="col-lg-8">
 <div class="card">
   <div class="card-body p-0">
     <div class="table-responsive">
@@ -79,14 +82,14 @@
           <tr>
             <th style="width:105px">Date</th>
             <th>Description</th>
-            <th style="width:110px">Pay Type</th>
+            <th style="width:120px">Pay Type</th>
             <th class="text-end" style="width:130px">Debit (Dr)</th>
             <th class="text-end" style="width:130px">Credit (Cr)</th>
             <th class="text-end" style="width:140px">Balance</th>
           </tr>
         </thead>
         <tbody>
-          <%/* Opening balance row */%>
+          <!-- Opening Balance Row -->
           <tr class="table-light fw-semibold text-muted">
             <td><%= from || '—' %></td>
             <td colspan="4"><i class="bi bi-flag"></i> Opening Balance</td>
@@ -96,7 +99,7 @@
             </td>
           </tr>
 
-          <% entries.forEach((e, idx) => {
+          <% entries.forEach((e) => {
             const isPayment  = e.reference_type === 'payment';
             const isPurchase = e.reference_type === 'purchase';
             const isCrNote   = e.reference_type === 'credit_note';
@@ -105,11 +108,27 @@
             const payType    = e.payment_method
               ? e.payment_method.charAt(0).toUpperCase() + e.payment_method.slice(1)
               : (isPurchase ? 'Purchase' : isCrNote ? 'Credit Note' : isDbNote ? 'Debit Note' : '—');
-            const refLinks = { purchase: '/purchases/view/', payment: '/payments/view/', invoice: '/invoices/view/', credit_note: '/creditnotes/view/', debit_note: '/creditnotes/view/' };
-            const refUrl   = e.reference_id && refLinks[e.reference_type] ? refLinks[e.reference_type] + e.reference_id : null;
+            const refLinks = {
+              purchase:    '/purchases/view/',
+              payment:     '/payments/view/',
+              invoice:     '/invoices/view/',
+              credit_note: '/creditnotes/view/',
+              debit_note:  '/creditnotes/view/'
+            };
+            const refUrl = e.reference_id && refLinks[e.reference_type] ? refLinks[e.reference_type] + e.reference_id : null;
+            const rb = e.running_balance != null ? e.running_balance : 0;
+            const dateStr = new Date(e.txn_date).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',weekday:'short'}).replace(/,/g,'');
           %>
-          <tr class="<%= rowClass %>" style="cursor:<%= refUrl ? 'pointer' : 'default' %>" <%= refUrl ? `onclick="window.location='${refUrl}'"` : '' %>>
-            <td class="text-muted small"><%= new Date(e.txn_date).toLocaleDateString('en-PK',{day:'2-digit',month:'short',year:'numeric'}) %></td>
+          <tr class="<%= rowClass %> ledger-row"
+              data-url="<%= refUrl || '' %>"
+              data-date="<%= dateStr %>"
+              data-desc="<%= (e.description || '').replace(/"/g, '&quot;') %>"
+              data-debit="<%= e.debit || 0 %>"
+              data-credit="<%= e.credit || 0 %>"
+              data-balance="<%= rb %>"
+              data-reftype="<%= e.reference_type || '' %>"
+              data-paytype="<%= payType %>">
+            <td class="text-muted small"><%= dateStr %></td>
             <td>
               <span class="fw-semibold"><%= e.description %></span>
               <% if (e.reference_type && e.reference_id) { %>
@@ -119,9 +138,9 @@
             <td class="small text-muted"><%= payType %></td>
             <td class="text-end text-danger"><%= Number(e.debit||0) > 0 ? 'Rs. ' + Number(e.debit).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—' %></td>
             <td class="text-end text-success"><%= Number(e.credit||0) > 0 ? 'Rs. ' + Number(e.credit).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—' %></td>
-            <td class="text-end fw-bold <%= e.running_balance > 0 ? 'text-danger' : e.running_balance < 0 ? 'text-success' : 'text-secondary' %>">
-              Rs. <%= Math.abs(e.running_balance).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) %>
-              <span class="fw-normal" style="font-size:10px"><%= e.running_balance > 0 ? 'Dr' : e.running_balance < 0 ? 'Cr' : '' %></span>
+            <td class="text-end fw-bold <%= rb > 0 ? 'text-danger' : rb < 0 ? 'text-success' : 'text-secondary' %>">
+              Rs. <%= Math.abs(rb).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) %>
+              <span class="fw-normal" style="font-size:10px"><%= rb > 0 ? 'Dr' : rb < 0 ? 'Cr' : '' %></span>
             </td>
           </tr>
           <% }) %>
@@ -162,4 +181,66 @@
   </div>
 </div>
 
+</div><!-- col-lg-8 -->
+
+<!-- Preview Panel -->
+<div class="col-lg-4">
+  <div class="card" id="previewPanel" style="display:none; position:sticky; top:80px;">
+    <div class="card-header d-flex justify-content-between align-items-center fw-semibold">
+      <span><i class="bi bi-info-circle text-primary"></i> Transaction Detail</span>
+      <button type="button" class="btn-close btn-sm" onclick="closePreview()"></button>
+    </div>
+    <div class="card-body">
+      <table class="table table-sm mb-3">
+        <tr><th width="38%">Date</th><td id="pv_date">—</td></tr>
+        <tr><th>Description</th><td id="pv_desc">—</td></tr>
+        <tr><th>Type</th><td id="pv_type">—</td></tr>
+        <tr><th>Pay Method</th><td id="pv_pay">—</td></tr>
+        <tr><th>Debit</th><td id="pv_debit" class="text-danger fw-bold">—</td></tr>
+        <tr><th>Credit</th><td id="pv_credit" class="text-success fw-bold">—</td></tr>
+        <tr><th>Balance</th><td id="pv_balance" class="fw-bold">—</td></tr>
+      </table>
+      <div id="pv_link"></div>
+    </div>
+  </div>
+  <div class="card" id="previewHint">
+    <div class="card-body text-muted text-center py-4 small">
+      <i class="bi bi-hand-index fs-4 d-block mb-2"></i> Click a row to preview
+    </div>
+  </div>
+</div>
+</div><!-- row -->
+
+<script>
+const fmt = n => parseFloat(n||0).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2});
+function closePreview() {
+  document.getElementById('previewPanel').style.display = 'none';
+  document.getElementById('previewHint').style.display = '';
+  document.querySelectorAll('.ledger-row').forEach(r => r.classList.remove('table-active'));
+}
+document.querySelectorAll('.ledger-row').forEach(function(row) {
+  row.style.cursor = 'pointer';
+  row.addEventListener('click', function() {
+    document.querySelectorAll('.ledger-row').forEach(r => r.classList.remove('table-active'));
+    row.classList.add('table-active');
+
+    const d = row.dataset;
+    document.getElementById('pv_date').textContent    = d.date;
+    document.getElementById('pv_desc').textContent    = d.desc;
+    document.getElementById('pv_type').textContent    = d.reftype ? d.reftype.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()) : 'General Entry';
+    document.getElementById('pv_pay').textContent     = d.paytype || '—';
+    document.getElementById('pv_debit').textContent   = parseFloat(d.debit)  > 0 ? 'Rs. ' + fmt(d.debit)  : '—';
+    document.getElementById('pv_credit').textContent  = parseFloat(d.credit) > 0 ? 'Rs. ' + fmt(d.credit) : '—';
+    document.getElementById('pv_balance').textContent = 'Rs. ' + fmt(d.balance);
+
+    const url = d.url;
+    document.getElementById('pv_link').innerHTML = url
+      ? `<a href="${url}" class="btn btn-primary w-100"><i class="bi bi-box-arrow-up-right"></i> Open ${d.reftype.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</a>`
+      : '';
+
+    document.getElementById('previewHint').style.display = 'none';
+    document.getElementById('previewPanel').style.display = '';
+  });
+});
+</script>
 <%- include('../partials/footer') %>

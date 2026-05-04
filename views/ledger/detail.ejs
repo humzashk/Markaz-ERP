@@ -1,22 +1,49 @@
 <%- include('../partials/header') %>
 <div class="page-header">
-  <h2><i class="bi bi-journal-text"></i> <%= entityType === 'customer' ? 'Customer' : 'Vendor' %> Ledger: <%= entity.name %></h2>
-  <div class="d-flex gap-2 no-print">
-    <a href="/ledger/print/<%= entityType %>/<%= entity.id %>?from=<%= from %>&to=<%= to %>" class="btn btn-outline-secondary" target="_blank"><i class="bi bi-printer"></i> Print</a>
-    <a href="/ledger/pdf/<%= entityType %>/<%= entity.id %>?from=<%= from %>&to=<%= to %>" class="btn btn-danger" target="_blank"><i class="bi bi-file-pdf"></i> PDF</a>
-    <a href="/payments/add?type=<%= entityType %>&entity_id=<%= entity.id %>" class="btn btn-success"><i class="bi bi-cash"></i> <%= entityType === 'customer' ? 'Receive' : 'Make' %> Payment</a>
-    <a href="/ledger" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+  <h2><i class="bi bi-journal-text"></i> Customer Ledger — <strong><%= entity.name %></strong></h2>
+  <div class="d-flex gap-2 flex-wrap no-print">
+    <a href="/payments/receive?customer_id=<%= entity.id %>" class="btn btn-success btn-sm"><i class="bi bi-cash-coin"></i> Receive Payment</a>
+    <a href="/ledger/print/customer/<%= entity.id %>?from=<%= from %>&to=<%= to %>" class="btn btn-outline-secondary btn-sm" target="_blank"><i class="bi bi-printer"></i> Print</a>
+    <a href="/ledger/pdf/customer/<%= entity.id %>?from=<%= from %>&to=<%= to %>" class="btn btn-danger btn-sm"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+    <a href="/ledger" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
   </div>
 </div>
 
-<!-- Balance Highlight -->
+<!-- Summary Cards -->
 <div class="row g-3 mb-3">
-  <div class="col-md-4">
-    <div class="stat-card <%= entity.balance > 0 ? 'stat-red' : entity.balance < 0 ? 'stat-orange' : 'stat-green' %>">
-      <div class="stat-icon"><i class="bi bi-wallet2"></i></div>
-      <div class="stat-info">
-        <h3><%= formatCurrency(Math.abs(entity.balance)) %></h3>
-        <p><%= entity.balance > 0 && entityType === 'customer' ? 'Amount Due' : entity.balance < 0 && entityType === 'vendor' ? 'Amount Payable' : 'Settled' %></p>
+  <div class="col-sm-4">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small mb-1">Opening Balance</div>
+        <div class="fs-5 fw-bold <%= openingBalance > 0 ? 'text-danger' : openingBalance < 0 ? 'text-success' : 'text-secondary' %>">
+          Rs. <%= Math.abs(openingBalance).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) %>
+          <small class="fs-6 fw-normal text-muted ms-1"><%= openingBalance > 0 ? '(Receivable)' : openingBalance < 0 ? '(Advance)' : '' %></small>
+        </div>
+        <div class="text-muted" style="font-size:11px">Before <%= from || 'all time' %></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-4">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small mb-1">Closing Balance</div>
+        <div class="fs-5 fw-bold <%= closingBalance > 0 ? 'text-danger' : closingBalance < 0 ? 'text-success' : 'text-secondary' %>">
+          Rs. <%= Math.abs(closingBalance).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) %>
+          <small class="fs-6 fw-normal text-muted ms-1"><%= closingBalance > 0 ? '(Receivable)' : closingBalance < 0 ? '(Advance)' : '' %></small>
+        </div>
+        <div class="text-muted" style="font-size:11px">As of <%= to || 'today' %></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-4">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small mb-1">Current Balance (All Time)</div>
+        <div class="fs-5 fw-bold <%= (entity.balance||0) > 0 ? 'text-danger' : (entity.balance||0) < 0 ? 'text-success' : 'text-secondary' %>">
+          Rs. <%= Math.abs(entity.balance||0).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) %>
+          <small class="fs-6 fw-normal text-muted ms-1"><%= (entity.balance||0) > 0 ? '(Receivable)' : (entity.balance||0) < 0 ? '(Advance)' : '' %></small>
+        </div>
+        <div class="text-muted" style="font-size:11px"><%= entity.phone || entity.city || '' %></div>
       </div>
     </div>
   </div>
@@ -36,117 +63,183 @@
       </div>
       <div class="col-auto">
         <button class="btn btn-primary btn-sm"><i class="bi bi-filter"></i> Filter</button>
-        <a href="/ledger/<%= entityType %>/<%= entity.id %>" class="btn btn-outline-secondary btn-sm ms-1">Last 30 Days</a>
-        <a href="/ledger/<%= entityType %>/<%= entity.id %>?from=&to=" class="btn btn-outline-secondary btn-sm ms-1">All Time</a>
+        <a href="/ledger/customer/<%= entity.id %>" class="btn btn-outline-secondary btn-sm ms-1">Last 30 Days</a>
+        <a href="/ledger/customer/<%= entity.id %>?from=&to=" class="btn btn-outline-secondary btn-sm ms-1">All Time</a>
       </div>
     </form>
   </div>
 </div>
 
-<!-- Ledger Table + Detail Panel -->
+<!-- Ledger Table + Preview Panel -->
 <div class="row g-3">
-  <div class="col-lg-8">
-    <div class="card">
-      <div class="card-body p-0">
-        <div class="table-responsive">
-          <table class="table table-hover mb-0" id="ledgerTable">
-            <thead>
-              <tr><th>Date</th><th>Description</th><th>Pay Type</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th class="text-end">Balance</th></tr>
-            </thead>
-            <tbody>
-              <% var _ob = typeof openingBalance !== 'undefined' ? openingBalance : 0; %>
-              <tr class="table-light text-muted fw-semibold">
-                <td><%= from || '—' %></td>
-                <td colspan="4">Opening Balance</td>
-                <td class="text-end fw-bold"><%= formatCurrency(_ob) %></td>
-              </tr>
-              <% entries.forEach((e, idx) => { %>
-              <tr class="ledger-row" style="cursor:pointer;" onclick="showTxnDetail(<%= idx %>)"
-                data-id="<%= e.id %>"
-                data-date="<%= e.txn_date %>"
-                data-desc="<%= (e.description || '').replace(/'/g, '&#39;') %>"
-                data-debit="<%= e.debit || 0 %>"
-                data-credit="<%= e.credit || 0 %>"
-                data-balance="<%= e.running_balance != null ? e.running_balance : (e.balance || 0) %>"
-                data-reftype="<%= e.reference_type || '' %>"
-                data-refid="<%= e.reference_id || '' %>">
-                <td><%= formatDate(e.txn_date) %></td>
-                <td><%= e.description || '-' %></td>
-                <td class="text-muted small"><%= e.payment_method ? e.payment_method.charAt(0).toUpperCase()+e.payment_method.slice(1) : '—' %></td>
-                <td class="text-end"><%= e.debit > 0 ? formatCurrency(e.debit) : '-' %></td>
-                <td class="text-end"><%= e.credit > 0 ? formatCurrency(e.credit) : '-' %></td>
-                <% var _rb = e.running_balance != null ? e.running_balance : (e.balance || 0); %>
-                <td class="text-end fw-bold <%= _rb > 0 ? 'due-amount' : _rb < 0 ? 'credit-amount' : '' %>"><%= formatCurrency(_rb) %></td>
-              </tr>
-              <% }) %>
-              <% if (!entries.length) { %><tr><td colspan="6" class="text-center text-muted py-4">No transactions found for this period</td></tr><% } %>
-            </tbody>
-            <% if (entries.length) { %>
-            <tfoot class="table-light">
-              <tr class="fs-5 fw-bold">
-                <td colspan="5" class="text-end">Closing Balance:</td>
-                <% var _cb = typeof closingBalance !== 'undefined' ? closingBalance : entity.balance; %>
-                <td class="text-end <%= _cb > 0 ? 'due-amount' : _cb < 0 ? 'credit-amount' : '' %>"><%= formatCurrency(_cb) %></td>
-              </tr>
-            </tfoot>
-            <% } %>
-          </table>
-        </div>
-      </div>
+<div class="col-lg-8">
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead class="table-dark">
+          <tr>
+            <th style="width:105px">Date</th>
+            <th>Description</th>
+            <th style="width:120px">Pay Type</th>
+            <th class="text-end" style="width:130px">Debit (Dr)</th>
+            <th class="text-end" style="width:130px">Credit (Cr)</th>
+            <th class="text-end" style="width:140px">Balance</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Opening Balance Row -->
+          <tr class="table-light fw-semibold text-muted">
+            <td><%= from || '—' %></td>
+            <td colspan="4"><i class="bi bi-flag"></i> Opening Balance</td>
+            <td class="text-end fw-bold <%= openingBalance > 0 ? 'text-danger' : openingBalance < 0 ? 'text-success' : '' %>">
+              Rs. <%= Math.abs(openingBalance).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) %>
+              <%= openingBalance > 0 ? 'Dr' : openingBalance < 0 ? 'Cr' : '' %>
+            </td>
+          </tr>
+
+          <% entries.forEach((e) => {
+            const isPayment  = e.reference_type === 'payment';
+            const isInvoice  = e.reference_type === 'invoice';
+            const isCrNote   = e.reference_type === 'credit_note';
+            const isDbNote   = e.reference_type === 'debit_note';
+            const rowClass   = isInvoice ? 'table-warning' : isPayment ? '' : isCrNote || isDbNote ? 'table-info' : '';
+            const payType    = e.payment_method
+              ? e.payment_method.charAt(0).toUpperCase() + e.payment_method.slice(1)
+              : (isInvoice ? 'Invoice' : isCrNote ? 'Credit Note' : isDbNote ? 'Debit Note' : '—');
+            const refLinks = {
+              invoice:     '/invoices/view/',
+              payment:     '/payments/view/',
+              purchase:    '/purchases/view/',
+              credit_note: '/creditnotes/view/',
+              debit_note:  '/creditnotes/view/'
+            };
+            const refUrl = e.reference_id && refLinks[e.reference_type] ? refLinks[e.reference_type] + e.reference_id : null;
+            const rb = e.running_balance != null ? e.running_balance : 0;
+            const dateStr = new Date(e.txn_date).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',weekday:'short'}).replace(/,/g,'');
+          %>
+          <tr class="<%= rowClass %> ledger-row"
+              data-url="<%= refUrl || '' %>"
+              data-date="<%= dateStr %>"
+              data-desc="<%= (e.description || '').replace(/"/g, '&quot;') %>"
+              data-debit="<%= e.debit || 0 %>"
+              data-credit="<%= e.credit || 0 %>"
+              data-balance="<%= rb %>"
+              data-reftype="<%= e.reference_type || '' %>"
+              data-paytype="<%= payType %>">
+            <td class="text-muted small"><%= dateStr %></td>
+            <td>
+              <span class="fw-semibold"><%= e.description %></span>
+              <% if (e.reference_type && e.reference_id) { %>
+                <span class="badge bg-secondary ms-1" style="font-size:10px"><%= e.reference_type %> #<%= e.reference_id %></span>
+              <% } %>
+            </td>
+            <td class="small text-muted"><%= payType %></td>
+            <td class="text-end text-danger"><%= Number(e.debit||0) > 0 ? 'Rs. ' + Number(e.debit).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—' %></td>
+            <td class="text-end text-success"><%= Number(e.credit||0) > 0 ? 'Rs. ' + Number(e.credit).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—' %></td>
+            <td class="text-end fw-bold <%= rb > 0 ? 'text-danger' : rb < 0 ? 'text-success' : 'text-secondary' %>">
+              Rs. <%= Math.abs(rb).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) %>
+              <span class="fw-normal" style="font-size:10px"><%= rb > 0 ? 'Dr' : rb < 0 ? 'Cr' : '' %></span>
+            </td>
+          </tr>
+          <% }) %>
+
+          <% if (!entries.length) { %>
+          <tr>
+            <td colspan="6" class="text-center text-muted py-5">
+              <i class="bi bi-inbox fs-4 d-block mb-2"></i>
+              No transactions found for this period.
+            </td>
+          </tr>
+          <% } %>
+        </tbody>
+
+        <% if (entries.length) { %>
+        <tfoot>
+          <%
+            const totalDr = entries.reduce((s,e) => s + Number(e.debit||0), 0);
+            const totalCr = entries.reduce((s,e) => s + Number(e.credit||0), 0);
+          %>
+          <tr class="table-light fw-semibold">
+            <td colspan="3" class="text-end text-muted small">Period Totals:</td>
+            <td class="text-end text-danger">Rs. <%= totalDr.toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) %></td>
+            <td class="text-end text-success">Rs. <%= totalCr.toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) %></td>
+            <td></td>
+          </tr>
+          <tr class="table-dark fw-bold">
+            <td colspan="5" class="text-end">Closing Balance:</td>
+            <td class="text-end fs-6 <%= closingBalance > 0 ? 'text-warning' : closingBalance < 0 ? 'text-success' : 'text-light' %>">
+              Rs. <%= Math.abs(closingBalance).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) %>
+              <%= closingBalance > 0 ? 'Dr' : closingBalance < 0 ? 'Cr' : '' %>
+            </td>
+          </tr>
+        </tfoot>
+        <% } %>
+      </table>
     </div>
-  </div>
-  <div class="col-lg-4">
-    <div class="card" id="txnDetailPanel" style="display:none; position:sticky; top:80px;">
-      <div class="card-header fw-semibold"><i class="bi bi-info-circle text-primary"></i> Transaction Detail</div>
-      <div class="card-body">
-        <table class="table table-sm mb-0">
-          <tr><th width="40%">Date</th><td id="td_date">-</td></tr>
-          <tr><th>Description</th><td id="td_desc">-</td></tr>
-          <tr><th>Debit</th><td id="td_debit" class="text-danger fw-bold">-</td></tr>
-          <tr><th>Credit</th><td id="td_credit" class="text-success fw-bold">-</td></tr>
-          <tr><th>Balance</th><td id="td_balance" class="fw-bold">-</td></tr>
-          <tr><th>Type</th><td id="td_type">-</td></tr>
-        </table>
-        <div class="mt-3" id="td_link"></div>
-      </div>
-    </div>
-    <% if (!entries.length) { %>
-    <div class="card">
-      <div class="card-body text-muted text-center py-4"><i class="bi bi-info-circle"></i> Click a row to view details</div>
-    </div>
-    <% } %>
   </div>
 </div>
-<script>
-const fmt = (n) => parseFloat(n).toLocaleString('en-PK', {minimumFractionDigits:2, maximumFractionDigits:2});
-function showTxnDetail(idx) {
-  document.querySelectorAll('.ledger-row').forEach(r => r.classList.remove('table-active'));
-  const row = document.querySelectorAll('.ledger-row')[idx];
-  if (!row) return;
-  row.classList.add('table-active');
-  const d = row.dataset;
-  document.getElementById('td_date').textContent = d.date;
-  document.getElementById('td_desc').textContent = d.desc;
-  document.getElementById('td_debit').textContent = parseFloat(d.debit) > 0 ? 'Rs. ' + fmt(d.debit) : '-';
-  document.getElementById('td_credit').textContent = parseFloat(d.credit) > 0 ? 'Rs. ' + fmt(d.credit) : '-';
-  document.getElementById('td_balance').textContent = 'Rs. ' + fmt(d.balance);
-  document.getElementById('td_type').textContent = d.reftype ? d.reftype.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()) : 'General Entry';
 
-  let linkHtml = '';
-  if (d.reftype && d.refid) {
-    const links = {
-      invoice:     '/invoices/view/'    + d.refid,
-      order:       '/orders/view/'      + d.refid,
-      purchase:    '/purchases/view/'   + d.refid,
-      payment:     '/payments/view/'    + d.refid,
-      credit_note: '/creditnotes/view/' + d.refid,
-      debit_note:  '/creditnotes/view/' + d.refid,
-    };
-    const url = links[d.reftype];
-    if (url) linkHtml = `<a href="${url}" class="btn btn-sm btn-outline-primary w-100"><i class="bi bi-box-arrow-up-right"></i> View ${d.reftype.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</a>`;
-  }
-  document.getElementById('td_link').innerHTML = linkHtml;
-  document.getElementById('txnDetailPanel').style.display = '';
+</div><!-- col-lg-8 -->
+
+<!-- Preview Panel -->
+<div class="col-lg-4">
+  <div class="card" id="previewPanel" style="display:none; position:sticky; top:80px;">
+    <div class="card-header d-flex justify-content-between align-items-center fw-semibold">
+      <span><i class="bi bi-info-circle text-primary"></i> Transaction Detail</span>
+      <button type="button" class="btn-close btn-sm" onclick="closePreview()"></button>
+    </div>
+    <div class="card-body">
+      <table class="table table-sm mb-3">
+        <tr><th width="38%">Date</th><td id="pv_date">—</td></tr>
+        <tr><th>Description</th><td id="pv_desc">—</td></tr>
+        <tr><th>Type</th><td id="pv_type">—</td></tr>
+        <tr><th>Pay Method</th><td id="pv_pay">—</td></tr>
+        <tr><th>Debit</th><td id="pv_debit" class="text-danger fw-bold">—</td></tr>
+        <tr><th>Credit</th><td id="pv_credit" class="text-success fw-bold">—</td></tr>
+        <tr><th>Balance</th><td id="pv_balance" class="fw-bold">—</td></tr>
+      </table>
+      <div id="pv_link"></div>
+    </div>
+  </div>
+  <div class="card" id="previewHint">
+    <div class="card-body text-muted text-center py-4 small">
+      <i class="bi bi-hand-index fs-4 d-block mb-2"></i> Click a row to preview
+    </div>
+  </div>
+</div>
+</div><!-- row -->
+
+<script>
+const fmt = n => parseFloat(n||0).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2});
+function closePreview() {
+  document.getElementById('previewPanel').style.display = 'none';
+  document.getElementById('previewHint').style.display = '';
+  document.querySelectorAll('.ledger-row').forEach(r => r.classList.remove('table-active'));
 }
+document.querySelectorAll('.ledger-row').forEach(function(row) {
+  row.style.cursor = 'pointer';
+  row.addEventListener('click', function() {
+    document.querySelectorAll('.ledger-row').forEach(r => r.classList.remove('table-active'));
+    row.classList.add('table-active');
+
+    const d = row.dataset;
+    document.getElementById('pv_date').textContent    = d.date;
+    document.getElementById('pv_desc').textContent    = d.desc;
+    document.getElementById('pv_type').textContent    = d.reftype ? d.reftype.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()) : 'General Entry';
+    document.getElementById('pv_pay').textContent     = d.paytype || '—';
+    document.getElementById('pv_debit').textContent   = parseFloat(d.debit)  > 0 ? 'Rs. ' + fmt(d.debit)  : '—';
+    document.getElementById('pv_credit').textContent  = parseFloat(d.credit) > 0 ? 'Rs. ' + fmt(d.credit) : '—';
+    document.getElementById('pv_balance').textContent = 'Rs. ' + fmt(d.balance);
+
+    const url = d.url;
+    document.getElementById('pv_link').innerHTML = url
+      ? `<a href="${url}" class="btn btn-primary w-100"><i class="bi bi-box-arrow-up-right"></i> Open ${d.reftype.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</a>`
+      : '';
+
+    document.getElementById('previewHint').style.display = 'none';
+    document.getElementById('previewPanel').style.display = '';
+  });
+});
 </script>
 <%- include('../partials/footer') %>

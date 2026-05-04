@@ -254,33 +254,42 @@ function calcTotal() {
   let totalCommission = 0;
   let totalDiscount = 0;
   Array.from(tbody.rows).forEach(row => {
-    const qty = parseFloat(row.querySelector('.qty-input')?.value) || 0;
-    const rate = parseFloat(row.querySelector('.rate-input')?.value) || 0;
-    const commPct = parseFloat(row.querySelector('.commission-input')?.value) || 0;
-    const discPack = parseFloat(row.querySelector('.discount-input')?.value) || 0;
-    const amount = qty * rate;
-    const comm = amount * commPct / 100;
-    const disc = qty * discPack;
+    const qty      = parseFloat(row.querySelector('.qty-input')?.value)        || 0;
+    const pkg      = parseFloat(row.querySelector('.pkg-input')?.value)         || 0;
+    const rate     = parseFloat(row.querySelector('.rate-input')?.value)       || 0;
+    const commPct  = parseFloat(row.querySelector('.commission-input')?.value) || 0;
+    const discPack = parseFloat(row.querySelector('.discount-input')?.value)   || 0;
+    const amount   = qty * rate;             // gross row amount: PCS × rate/pc
+    const comm     = amount * commPct / 100; // commission deducted from this row
+    const disc     = pkg * discPack;         // discount per carton × num cartons (informational)
     const amountCell = row.querySelector('.row-amount');
     if (amountCell) amountCell.textContent = amount.toLocaleString('en-PK', {minimumFractionDigits:2, maximumFractionDigits:2});
-    subtotal += amount;
+    subtotal        += amount;
     totalCommission += comm;
-    totalDiscount += disc;
+    totalDiscount   += disc;
   });
 
-  const transport = parseFloat(document.getElementById('transport_charges')?.value) || 0;
-  const delivery  = parseFloat(document.getElementById('delivery_charges')?.value) || 0;
-  const discountField = parseFloat(document.getElementById('discount')?.value) || 0;
-  const grand = subtotal + transport + delivery - totalCommission - totalDiscount - discountField;
-  const gross = grand;
+  const transport     = parseFloat(document.getElementById('transport_charges')?.value) || 0;
+  const delivery      = parseFloat(document.getElementById('delivery_charges')?.value)  || 0;
+  const discountField = parseFloat(document.getElementById('discount')?.value)          || 0;
 
+  // Gross total = items + transport/delivery charges (before commission and header discount)
+  const grossTotal = subtotal + transport + delivery;
+
+  // NET AMOUNT matches backend:
+  //  Invoices:  total = subtotal + transportCharges  - totalComm         (no #discount field)
+  //  Purchases: total = subtotal + deliveryCharges   - headerDiscount    (no commission)
+  // discount_per_pack is stored per item for reporting but NOT deducted from the saved total
+  const netAmount  = grossTotal - totalCommission - discountField;
+
+  const fmt = n => n.toLocaleString('en-PK', {minimumFractionDigits:2, maximumFractionDigits:2});
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-  set('subtotal', subtotal.toLocaleString('en-PK', {minimumFractionDigits:2}));
-  set('grandTotal', grand.toLocaleString('en-PK', {minimumFractionDigits:2}));
-  set('commAmount', totalCommission.toLocaleString('en-PK', {minimumFractionDigits:2}));
+  set('subtotal',    fmt(subtotal));
+  set('grandTotal',  fmt(grossTotal));    // Gross before commission / header discount
+  set('commAmount',  fmt(totalCommission));
   set('commPctDisp', totalCommission > 0 ? 'Item-wise' : '0');
-  set('discAmount', totalDiscount.toLocaleString('en-PK', {minimumFractionDigits:2}));
-  set('grossAmount', gross.toLocaleString('en-PK', {minimumFractionDigits:2}));
+  set('discAmount',  fmt(totalDiscount)); // informational only (disc/pack × cartons)
+  set('grossAmount', fmt(netAmount));     // NET AMOUNT = what backend saves as `total`
 }
 
 function loadCustomerCommission(sel) {

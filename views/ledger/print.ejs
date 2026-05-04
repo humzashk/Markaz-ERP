@@ -1,89 +1,239 @@
 <!DOCTYPE html>
 <html><head>
   <meta charset="UTF-8">
-  <title>Ledger - <%= entity.name %></title>
+  <title>Ledger — <%= entity.name %></title>
   <style>
     * { box-sizing:border-box; margin:0; padding:0; }
-    body { font-family: Arial, Helvetica, sans-serif; font-size: 14px; color:#000; padding: 18mm 14mm; line-height:1.5; }
-    .no-print { text-align:center; margin-bottom:14px; }
-    .no-print button, .no-print a { padding:8px 22px; margin:0 5px; border:1px solid #000; background:#fff; cursor:pointer; font-size:13px; text-decoration:none; color:#000; font-weight:600; }
-    .header { display:flex; align-items:center; gap:24px; border-bottom:3px solid #000; padding-bottom:14px; margin-bottom:18px; }
-    .logo-box { width:260px; height:100px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
-    .logo-box img { max-width:100%; max-height:100%; object-fit:contain; }
-    .company-block { flex:1; text-align:center; }
-    .company-name { font-size:32px; font-weight:900; letter-spacing:3px; text-transform:uppercase; }
-    .doc-title { font-size:18px; font-weight:700; margin-top:6px; letter-spacing:2px; text-transform:uppercase; }
+    body { font-family:'Segoe UI',Arial,sans-serif; font-size:12px; color:#111; background:#fff; }
+    .page { padding:14mm 12mm 10mm; }
 
-    .party-title { text-align:center; font-size:22px; font-weight:800; text-transform:uppercase; margin:10px 0 6px; letter-spacing:2px; }
-    .period { text-align:center; font-size:14px; margin-bottom:14px; font-weight:600; }
+    /* ── toolbar ── */
+    .toolbar { background:#1e293b; color:#fff; padding:10px 20px; display:flex; gap:10px; align-items:center; }
+    .toolbar button, .toolbar a {
+      padding:6px 18px; border:none; border-radius:4px; cursor:pointer; font-size:13px;
+      font-weight:600; text-decoration:none; color:#fff;
+    }
+    .toolbar .btn-print { background:#3b82f6; }
+    .toolbar .btn-back  { background:#475569; }
 
-    table { width:100%; border-collapse:collapse; border:2px solid #000; margin-bottom:12px; }
-    th, td { border:1px solid #000; padding:8px 10px; font-size:14px; }
-    thead th { background:#000; color:#fff; font-weight:700; text-transform:uppercase; letter-spacing:1px; text-align:center; }
-    tbody td.tr, tbody th.tr { text-align:right; }
-    tbody td.fw { font-weight:700; }
-    tfoot td { background:#f0f0f0; font-weight:800; font-size:15px; padding:10px; }
-    .totals-row td { background:#000; color:#fff; }
+    /* ── letterhead ── */
+    .lh-wrap { display:flex; align-items:center; gap:20px; margin-bottom:10px; }
+    .lh-logo { width:80px; height:70px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+    .lh-logo img { max-width:100%; max-height:100%; object-fit:contain; }
+    .lh-center { flex:1; text-align:center; }
+    .lh-biz   { font-size:26px; font-weight:900; letter-spacing:3px; text-transform:uppercase; color:#1e293b; }
+    .lh-sub   { font-size:12px; color:#64748b; margin-top:2px; letter-spacing:1px; }
+    .lh-doc   { font-size:15px; font-weight:700; letter-spacing:2px; text-transform:uppercase; margin-top:4px; color:#334155; }
+    .lh-right { width:80px; flex-shrink:0; }
 
-    .footer { text-align:center; margin-top:24px; font-size:11px; color:#555; border-top:1px solid #999; padding-top:8px; }
-    @media print { .no-print { display:none; } body { padding:10mm 12mm; } }
+    .divider-thick { border:none; border-top:3px solid #1e293b; margin:8px 0; }
+    .divider-thin  { border:none; border-top:1px solid #cbd5e1; margin:6px 0; }
+
+    /* ── party info bar ── */
+    .party-bar { background:#f1f5f9; border-radius:6px; padding:10px 16px; margin:10px 0; display:flex; justify-content:space-between; align-items:center; }
+    .party-name { font-size:18px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:#1e293b; }
+    .party-meta { text-align:right; font-size:11px; color:#64748b; line-height:1.8; }
+    .party-type { display:inline-block; background:#1e293b; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:3px; letter-spacing:1px; margin-left:8px; }
+
+    /* ── summary boxes ── */
+    .summary-row { display:flex; gap:10px; margin:10px 0; }
+    .summary-box { flex:1; border:1px solid #e2e8f0; border-radius:6px; padding:8px 12px; }
+    .summary-box .s-label { font-size:10px; color:#94a3b8; text-transform:uppercase; letter-spacing:1px; }
+    .summary-box .s-value { font-size:15px; font-weight:800; margin-top:2px; }
+    .s-ob   { border-left:4px solid #94a3b8; }
+    .s-ob   .s-value { color:#475569; }
+    .s-dr   { border-left:4px solid #dc2626; }
+    .s-dr   .s-value { color:#dc2626; }
+    .s-cr   { border-left:4px solid #16a34a; }
+    .s-cr   .s-value { color:#16a34a; }
+    .s-cb   { border-left:4px solid #1d4ed8; }
+    .s-cb   .s-value { color:#1d4ed8; }
+
+    /* ── table ── */
+    table { width:100%; border-collapse:collapse; margin-top:10px; font-size:11.5px; }
+    thead th {
+      background:#1e293b; color:#fff; padding:7px 8px;
+      text-transform:uppercase; font-size:10px; letter-spacing:0.8px; font-weight:700;
+    }
+    thead th.r { text-align:right; }
+    thead th.c { text-align:center; }
+
+    tbody tr { border-bottom:1px solid #e2e8f0; }
+    tbody tr:nth-child(even) { background:#f8fafc; }
+    tbody tr.ob-row { background:#f1f5f9; font-weight:700; color:#475569; }
+    tbody tr.ob-row td { border-bottom:2px solid #cbd5e1; }
+
+    tbody td { padding:6px 8px; vertical-align:middle; }
+    tbody td.r { text-align:right; }
+    tbody td.c { text-align:center; }
+    tbody td.date-col { font-size:10.5px; color:#64748b; white-space:nowrap; }
+    tbody td.desc-col { color:#1e293b; }
+    tbody td.pay-col  { font-size:10px; color:#64748b; text-align:center; }
+    tbody td.dr-col   { color:#dc2626; font-weight:600; text-align:right; }
+    tbody td.cr-col   { color:#16a34a; font-weight:600; text-align:right; }
+    tbody td.bal-col  { font-weight:700; text-align:right; white-space:nowrap; }
+    tbody td.bal-pos  { color:#dc2626; }
+    tbody td.bal-neg  { color:#16a34a; }
+    tbody td.bal-zero { color:#64748b; }
+
+
+
+    tfoot .totals-row td { background:#f1f5f9; font-weight:700; font-size:11.5px; padding:7px 8px; border-top:2px solid #cbd5e1; }
+    tfoot .closing-row td { background:#1e293b; color:#fff; font-weight:800; font-size:13px; padding:8px; }
+    tfoot .closing-row td.r { text-align:right; }
+
+    /* ── footer ── */
+    .doc-footer { margin-top:16px; display:flex; justify-content:space-between; align-items:flex-end; font-size:10px; color:#94a3b8; border-top:1px solid #e2e8f0; padding-top:8px; }
+    .sig-block { text-align:center; }
+    .sig-line { border-top:1px solid #334155; width:140px; margin:0 auto 4px; margin-top:24px; }
+
+    @media print {
+      .toolbar { display:none !important; }
+      body { font-size:11px; }
+      .page { padding:8mm 8mm 6mm; }
+    }
   </style>
 </head><body>
-<div class="no-print">
-  <button onclick="window.print()">&#128438; Print</button>
-  <a href="javascript:history.back()">&#8592; Back</a>
+
+<div class="toolbar no-print">
+  <button class="btn-print" onclick="window.print()">🖨 Print</button>
+  <a class="btn-back" href="javascript:history.back()">← Back</a>
 </div>
+
 <%
-  var scope = (entity && entity.account_scope) ? entity.account_scope : 'plastic_markaz';
-  var bizName = (typeof accountName === 'function') ? accountName(scope) : 'PLASTIC MARKAZ';
-  var logoPath = (typeof getLogoPath === 'function') ? getLogoPath(scope) : '/Logo.png';
-  var logoMeta = (typeof getLogoMeta === 'function') ? getLogoMeta(scope) : { w:260, h:100, align:'left', offsetX:0, offsetY:0 };
-  var totalDebit = 0, totalCredit = 0;
-  entries.forEach(function(e){ totalDebit += (e.debit||0); totalCredit += (e.credit||0); });
-  var finalBalance = (entity.balance != null) ? Number(entity.balance) : (totalDebit - totalCredit);
+  var scope    = (entity && entity.account_scope) ? entity.account_scope : 'plastic_markaz';
+  var bizName  = (typeof accountName === 'function') ? accountName(scope) : 'PLASTIC MARKAZ';
+  var logoPath = (typeof getLogoPath  === 'function') ? getLogoPath(scope)  : '/Logo.png';
+  var logoMeta = (typeof getLogoMeta  === 'function') ? getLogoMeta(scope)  : { w:80, h:70, align:'left', offsetX:0, offsetY:0 };
+  var totalDr  = 0, totalCr = 0;
+  entries.forEach(function(e){ totalDr += Number(e.debit||0); totalCr += Number(e.credit||0); });
+  var closingBal = typeof closingBalance !== 'undefined' ? closingBalance : (totalDr - totalCr);
+  var fmtN = function(n){ return Number(n||0).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}); };
+  var fmtD = function(d){ return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',weekday:'short'}).replace(/,/g,''); };
 %>
-<div class="header">
-  <div class="logo-box" style="width:<%= logoMeta.w %>px; height:<%= logoMeta.h %>px; align-self:<%= logoMeta.align==='left'?'flex-start':logoMeta.align==='right'?'flex-end':'center' %>; transform:translate(<%= logoMeta.offsetX %>px, <%= logoMeta.offsetY %>px);"><img src="<%= logoPath %>" alt="logo"></div>
-  <div class="company-block">
-    <div class="company-name"><%= bizName %></div>
-    <div class="doc-title"><%= entityType === 'customer' ? 'Customer' : 'Vendor' %> Ledger Statement</div>
+
+<div class="page">
+  <!-- Letterhead -->
+  <div class="lh-wrap">
+    <div class="lh-logo" style="width:<%= logoMeta.w || 80 %>px;height:<%= logoMeta.h || 70 %>px;">
+      <img src="<%= logoPath %>" alt="logo" onerror="this.style.display='none'">
+    </div>
+    <div class="lh-center">
+      <div class="lh-biz"><%= bizName %></div>
+      <div class="lh-sub">Account Statement</div>
+      <div class="lh-doc"><%= entityType === 'customer' ? 'Customer Ledger' : 'Vendor Ledger' %></div>
+    </div>
+    <div class="lh-right"></div>
   </div>
-  <div class="logo-box"></div>
+  <hr class="divider-thick">
+
+  <!-- Party Info -->
+  <div class="party-bar">
+    <div>
+      <div class="party-name">
+        <%= entity.name %>
+        <span class="party-type"><%= entityType === 'customer' ? 'RECEIVABLE' : 'PAYABLE' %></span>
+      </div>
+      <% if (entity.phone || entity.city) { %>
+        <div style="font-size:11px;color:#64748b;margin-top:3px;">
+          <% if (entity.phone) { %><span>📞 <%= entity.phone %></span><% } %>
+          <% if (entity.city)  { %><span style="margin-left:12px;">📍 <%= entity.city %></span><% } %>
+        </div>
+      <% } %>
+    </div>
+    <div class="party-meta">
+      <div>Period: <strong><%= from || 'Beginning' %></strong> → <strong><%= to || 'Present' %></strong></div>
+      <div>Printed: <%= new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) %></div>
+    </div>
+  </div>
+
+  <!-- Summary Boxes -->
+  <div class="summary-row">
+    <div class="summary-box s-ob">
+      <div class="s-label">Opening Balance</div>
+      <div class="s-value">Rs. <%= fmtN(openingBalance) %></div>
+    </div>
+    <div class="summary-box s-dr">
+      <div class="s-label">Total Debit</div>
+      <div class="s-value">Rs. <%= fmtN(totalDr) %></div>
+    </div>
+    <div class="summary-box s-cr">
+      <div class="s-label">Total Credit</div>
+      <div class="s-value">Rs. <%= fmtN(totalCr) %></div>
+    </div>
+    <div class="summary-box s-cb">
+      <div class="s-label">Closing Balance</div>
+      <div class="s-value">Rs. <%= fmtN(closingBal) %> <span style="font-size:10px;font-weight:600;"><%= closingBal>0?'Dr':closingBal<0?'Cr':'' %></span></div>
+    </div>
+  </div>
+
+  <!-- Ledger Table -->
+  <table>
+    <thead>
+      <tr>
+        <th style="width:12%">Date</th>
+        <th style="width:34%">Description</th>
+        <th style="width:10%" class="c">Pay Type</th>
+        <th style="width:14%" class="r">Debit (Rs.)</th>
+        <th style="width:14%" class="r">Credit (Rs.)</th>
+        <th style="width:16%" class="r">Balance (Rs.)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Opening Balance Row -->
+      <tr class="ob-row">
+        <td class="date-col"><%= from || '—' %></td>
+        <td class="desc-col" colspan="4">🚩 Opening Balance</td>
+        <td class="bal-col <%= openingBalance>0?'bal-pos':openingBalance<0?'bal-neg':'bal-zero' %>">
+          <%= fmtN(openingBalance) %> <%= openingBalance>0?'Dr':openingBalance<0?'Cr':'' %>
+        </td>
+      </tr>
+
+      <% entries.forEach(function(e) {
+        var rb = e.running_balance != null ? e.running_balance : 0;
+        var balClass = rb > 0 ? 'bal-pos' : rb < 0 ? 'bal-neg' : 'bal-zero';
+        var pm = e.payment_method ? e.payment_method.charAt(0).toUpperCase()+e.payment_method.slice(1) : '';
+      %>
+      <tr>
+        <td class="date-col"><%= fmtD(e.txn_date) %></td>
+        <td class="desc-col"><%= e.description || '—' %></td>
+        <td class="pay-col"><%= pm || '—' %></td>
+        <td class="dr-col"><%= Number(e.debit||0)>0 ? fmtN(e.debit) : '—' %></td>
+        <td class="cr-col"><%= Number(e.credit||0)>0 ? fmtN(e.credit) : '—' %></td>
+        <td class="bal-col <%= balClass %>"><%= fmtN(rb) %> <%= rb>0?'Dr':rb<0?'Cr':'' %></td>
+      </tr>
+      <% }); %>
+
+      <% if (!entries.length) { %>
+      <tr><td colspan="6" style="text-align:center;padding:20px;color:#94a3b8;">No transactions in selected period.</td></tr>
+      <% } %>
+    </tbody>
+    <tfoot>
+      <tr class="totals-row">
+        <td colspan="3" style="text-align:right;color:#64748b;">Period Totals:</td>
+        <td style="text-align:right;color:#dc2626;"><%= fmtN(totalDr) %></td>
+        <td style="text-align:right;color:#16a34a;"><%= fmtN(totalCr) %></td>
+        <td></td>
+      </tr>
+      <tr class="closing-row">
+        <td colspan="5" style="text-align:right;">Closing Balance:</td>
+        <td class="r"><%= fmtN(closingBal) %> <%= closingBal>0?'Dr':closingBal<0?'Cr':'' %></td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <!-- Doc Footer -->
+  <div class="doc-footer">
+    <div>
+      <div><%= bizName %></div>
+      <div>Generated: <%= new Date().toLocaleString('en-GB') %></div>
+    </div>
+    <div class="sig-block">
+      <div class="sig-line"></div>
+      <div>Authorised Signature</div>
+    </div>
+  </div>
 </div>
 
-<div class="party-title"><%= entity.name %></div>
-<div class="period">Period: <strong><%= from || 'Beginning' %></strong> &nbsp;to&nbsp; <strong><%= to || 'Present' %></strong></div>
-
-<table>
-  <thead>
-    <tr><th style="width:14%">Date</th><th>Description</th><th style="width:14%">Debit</th><th style="width:14%">Credit</th><th style="width:16%">Balance</th></tr>
-  </thead>
-  <tbody>
-    <% var run = 0; entries.forEach(function(e){
-        run += (Number(e.debit)||0) - (Number(e.credit)||0);
-    %>
-      <tr>
-        <td><%= e.txn_date %></td>
-        <td><%= e.description || '-' %></td>
-        <td class="tr"><%= (Number(e.debit)||0) > 0 ? Number(e.debit).toFixed(2) : '-' %></td>
-        <td class="tr"><%= (Number(e.credit)||0) > 0 ? Number(e.credit).toFixed(2) : '-' %></td>
-        <td class="tr fw"><%= run.toFixed(2) %></td>
-      </tr>
-    <% }); %>
-    <% if (!entries.length) { %>
-      <tr><td colspan="5" style="text-align:center; padding:18px;">No transactions in selected period.</td></tr>
-    <% } %>
-  </tbody>
-  <tfoot>
-    <tr class="totals-row">
-      <td colspan="2" class="tr">TOTALS</td>
-      <td class="tr">Rs. <%= totalDebit.toFixed(2) %></td>
-      <td class="tr">Rs. <%= totalCredit.toFixed(2) %></td>
-      <td class="tr">Rs. <%= finalBalance.toFixed(2) %></td>
-    </tr>
-  </tfoot>
-</table>
-
-<div class="footer"><%= bizName %> &mdash; Generated <%= new Date().toLocaleString('en-GB') %></div>
 <script>window.onload = function(){ if(!window.location.search.includes('noprint')) window.print(); };</script>
 </body></html>

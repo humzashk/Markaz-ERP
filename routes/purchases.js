@@ -5,7 +5,7 @@ const { pool, tx, nextDocNo, applyStockMovement, reverseStockForRef,
         addLedgerEntry, removeLedgerForRef, recomputeBalance,
         addAuditLog, toInt, toNum } = require('../database');
 const { wrap } = require('../middleware/errorHandler');
-const { validate, schemas, requireEditPermission } = require('../middleware/validate');
+const { validate, schemas, requireEditPermission, isOlderThan2Years } = require('../middleware/validate');
 const _lockPurchase = requireEditPermission('purchases', 'purchase_date');
 
 router.get('/', wrap(async (req, res) => {
@@ -166,9 +166,22 @@ router.post('/bulk', wrap(async (req, res) => {
   if (!ids.length) return res.redirect('/purchases?err=' + encodeURIComponent('No purchases selected'));
 
   if (action === 'delete') {
+    // Age-gate each record before bulk delete
+    const rows = (await pool.query(`SELECT id, vendor_id, purchase_no, purchase_date FROM purchases WHERE id=ANY($1::int[])`, [ids])).rows;
+    const isSuperadmin = req.user && req.user.role === 'superadmin';
+    const locked = rows.filter(r => isOlderThan2Years(r.purchase_date));
+    if (locked.length && !isSuperadmin) {
+      return res.redirect('/purchases?err=' + encodeURIComponent(
+        `${locked.length} purchase(s) are older than 2 years and cannot be deleted`));
+    }
+    // Log superadmin override for every locked record before proceeding
+    for (const r of locked) {
+      await addAuditLog('superadmin_override', 'purchases', r.id,
+        `Superadmin bulk-deleted purchase older than 2 years (purchase_date: ${r.purchase_date})`,
+        req.user && req.user.id, r, null);
+    }
     await tx(async (db) => {
-      const purs = await db.many(`SELECT id, vendor_id, purchase_no FROM purchases WHERE id=ANY($1::int[])`, [ids]);
-      for (const p of purs) {
+      for (const p of rows) {
         await reverseStockForRef(db, 'purchase', p.id);
         await removeLedgerForRef(db, 'vendor', p.vendor_id, 'purchase', p.id);
         await recomputeBalance(db, 'vendor', p.vendor_id);

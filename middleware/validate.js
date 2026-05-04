@@ -285,58 +285,78 @@ const schemas = {
       parentField:'product_id', skipIf: l=>!l.product_id, minRequired:1,
       fields: {
         product_id:['exists', { table:'products', label:'product' }],
-        quantity:['posInt', { max:1e7 }], rate:['nonNegNum', { max:1e9 }]
+        quantity:  ['posInt', { max:1e7 }],
+        rate:      ['nonNegNum', { max:1e9 }]
       }
     },
     validate: async (v, body) => {
-      if (v.note_type==='credit' && (!v.customer_id || !v.invoice_id))  return 'Credit note requires customer + invoice';
-      if (v.note_type==='debit'  && (!v.vendor_id   || !v.purchase_id)) return 'Debit note requires vendor + purchase';
+      const isManual = (body.mode === 'manual');
+      v._mode = isManual ? 'manual' : 'invoice';
 
-      // Enforce invoice belongs to customer
-      if (v.note_type==='credit' && v.invoice_id && v.customer_id) {
-        const r = await pool.query(`SELECT customer_id FROM invoices WHERE id=$1`, [v.invoice_id]);
-        if (!r.rows[0] || String(r.rows[0].customer_id) !== String(v.customer_id))
-          return 'The selected invoice does not belong to this customer';
-      }
-      // Enforce purchase belongs to vendor
-      if (v.note_type==='debit' && v.purchase_id && v.vendor_id) {
-        const r = await pool.query(`SELECT vendor_id FROM purchases WHERE id=$1`, [v.purchase_id]);
-        if (!r.rows[0] || String(r.rows[0].vendor_id) !== String(v.vendor_id))
-          return 'The selected purchase does not belong to this vendor';
-      }
+      if (!isManual) {
+        // Invoice-linked mode: require invoice/purchase
+        if (v.note_type==='credit' && (!v.customer_id || !v.invoice_id))
+          return 'Credit note requires customer + invoice (or switch to Manual Entry)';
+        if (v.note_type==='debit'  && (!v.vendor_id   || !v.purchase_id))
+          return 'Debit note requires vendor + purchase (or switch to Manual Entry)';
 
-      // Enforce line item quantities (in Ctn) don't exceed original document quantities (in Ctn)
-      if (v._items && v._items.length) {
-        for (const item of v._items) {
-          if (!item.product_id || !item.quantity) continue;
-          if (v.note_type === 'credit' && v.invoice_id) {
-            const r = await pool.query(
-              `SELECT COALESCE(ii.packages, CEIL(ii.quantity::numeric / NULLIF(p.qty_per_pack,0)))::int AS max_ctn
-               FROM invoice_items ii JOIN products p ON p.id = ii.product_id
-               WHERE ii.invoice_id=$1 AND ii.product_id=$2`,
-              [v.invoice_id, item.product_id]);
-            if (!r.rows[0]) return `Product not found on selected invoice`;
-            const maxCtn = Number(r.rows[0].max_ctn) || 0;
-            if (item.quantity > maxCtn)
-              return `Return quantity (${item.quantity} Ctn) exceeds invoice quantity (${maxCtn} Ctn) for one or more items`;
-          }
-          if (v.note_type === 'debit' && v.purchase_id) {
-            const r = await pool.query(
-              `SELECT COALESCE(pi.packages, CEIL(pi.quantity::numeric / NULLIF(p.qty_per_pack,0)))::int AS max_ctn
-               FROM purchase_items pi JOIN products p ON p.id = pi.product_id
-               WHERE pi.purchase_id=$1 AND pi.product_id=$2`,
-              [v.purchase_id, item.product_id]);
-            if (!r.rows[0]) return `Product not found on selected purchase`;
-            const maxCtn = Number(r.rows[0].max_ctn) || 0;
-            if (item.quantity > maxCtn)
-              return `Return quantity (${item.quantity} Ctn) exceeds purchase quantity (${maxCtn} Ctn) for one or more items`;
-          }
+        // Enforce invoice belongs to customer
+        if (v.note_type==='credit' && v.invoice_id && v.customer_id) {
+          const r = await pool.query(`SELECT customer_id FROM invoices WHERE id=$1`, [v.invoice_id]);
+          if (!r.rows[0] || String(r.rows[0].customer_id) !== String(v.customer_id))
+            return 'The selected invoice does not belong to this customer';
+        }
+        // Enforce purchase belongs to vendor
+        if (v.note_type==='debit' && v.purchase_id && v.vendor_id) {
+          const r = await pool.query(`SELECT vendor_id FROM purchases WHERE id=$1`, [v.purchase_id]);
+          if (!r.rows[0] || String(r.rows[0].vendor_id) !== String(v.vendor_id))
+            return 'The selected purchase does not belong to this vendor';
         }
 
-        // Ensure at least one item has qty > 0
-        const hasQty = v._items.some(i => (i.quantity || 0) > 0);
-        if (!hasQty) return 'At least one item must have a return quantity greater than 0';
+        // Enforce Ctn quantities don't exceed original document (invoice mode only)
+        if (v._items && v._items.length) {
+          for (const item of v._items) {
+            if (!item.product_id || !item.quantity) continue;
+            if (v.note_type === 'credit' && v.invoice_id) {
+              const r = await pool.query(
+                `SELECT COALESCE(ii.packages, CEIL(ii.quantity::numeric / NULLIF(p.qty_per_pack,0)))::int AS max_ctn
+                 FROM invoice_items ii JOIN products p ON p.id = ii.product_id
+                 WHERE ii.invoice_id=$1 AND ii.product_id=$2`,
+                [v.invoice_id, item.product_id]);
+              if (!r.rows[0]) return `Product not found on selected invoice`;
+              const maxCtn = Number(r.rows[0].max_ctn) || 0;
+              if (item.quantity > maxCtn)
+                return `Return qty (${item.quantity} Ctn) exceeds invoice qty (${maxCtn} Ctn)`;
+            }
+            if (v.note_type === 'debit' && v.purchase_id) {
+              const r = await pool.query(
+                `SELECT COALESCE(pi.packages, CEIL(pi.quantity::numeric / NULLIF(p.qty_per_pack,0)))::int AS max_ctn
+                 FROM purchase_items pi JOIN products p ON p.id = pi.product_id
+                 WHERE pi.purchase_id=$1 AND pi.product_id=$2`,
+                [v.purchase_id, item.product_id]);
+              if (!r.rows[0]) return `Product not found on selected purchase`;
+              const maxCtn = Number(r.rows[0].max_ctn) || 0;
+              if (item.quantity > maxCtn)
+                return `Return qty (${item.quantity} Ctn) exceeds purchase qty (${maxCtn} Ctn)`;
+            }
+          }
+        }
+      } else {
+        // Manual mode: only require party
+        if (v.note_type==='credit' && !v.customer_id) return 'Credit note requires a customer';
+        if (v.note_type==='debit'  && !v.vendor_id)   return 'Debit note requires a vendor';
+        // Validate manual items: pcs > 0, rate > 0
+        if (v._items && v._items.length) {
+          for (let i=0; i<v._items.length; i++) {
+            const it = v._items[i];
+            if (!it.quantity || it.quantity < 1) return `Line ${i+1}: PCS must be ≥ 1`;
+            if (!it.rate || it.rate <= 0)        return `Line ${i+1}: Rate must be > 0`;
+          }
+        }
       }
+
+      const hasQty = (v._items||[]).some(i => (i.quantity || 0) > 0);
+      if (!hasQty) return 'At least one item must have a return quantity greater than 0';
     }
   },
   productCreate: {
@@ -451,46 +471,106 @@ const schemas = {
   }
 };
 
-// ── 2-Month Edit Lock ────────────────────────────────────────────────────────
-// Returns true if the given date is older than 2 calendar months from today.
-function isOlderThan2Months(dateVal) {
+// ── 2-Year Edit Lock (Data Retention Policy) ─────────────────────────────────
+// DATA RETENTION: ALL records are kept permanently — NO automatic purge.
+// EDIT LOCK: records older than 2 years are read-only for normal users.
+//            Only superadmin can modify them, with full audit trail.
+
+// Returns true if the given date is strictly older than 2 calendar years from today.
+function isOlderThan2Years(dateVal) {
   if (!dateVal) return false;
   const d = new Date(dateVal);
   if (isNaN(d.getTime())) return false;
   const cutoff = new Date();
-  cutoff.setMonth(cutoff.getMonth() - 2);
+  cutoff.setFullYear(cutoff.getFullYear() - 2);
   cutoff.setHours(0, 0, 0, 0);
   return d < cutoff;
 }
 
+// Keep legacy alias so any external code that imports isOlderThan2Months still compiles.
+const isOlderThan2Months = isOlderThan2Years;
+
 /**
- * requireEditPermission(table, dateCol, idParam)
- * Middleware: blocks edit/delete of records older than 2 months for non-superadmin.
- *   table    — DB table name
- *   dateCol  — column that holds the record date (e.g. 'invoice_date')
- *   idParam  — req.params key for the record ID (default 'id')
+ * enforceAgeRestriction(table, dateCol, idParam)
+ * alias: requireEditPermission(...)
+ *
+ * Backend middleware — enforces the 2-year retention / edit-lock policy:
+ *
+ *   • Record age ≤ 2 years  → allow all authenticated users (no action)
+ *   • Record age  > 2 years, user is NOT superadmin
+ *       → HTTP 403, explain lock, do NOT proceed
+ *   • Record age  > 2 years, user IS superadmin
+ *       → snapshot current DB row into audit_log(superadmin_override=true, old_value=…)
+ *       → allow action to proceed (route handler runs normally)
+ *
+ *   table    — DB table name (e.g. 'invoices')
+ *   dateCol  — date column to age-check (e.g. 'invoice_date')
+ *   idParam  — req.params key holding the record PK (default: 'id')
  */
-function requireEditPermission(table, dateCol, idParam) {
+function enforceAgeRestriction(table, dateCol, idParam) {
   idParam = idParam || 'id';
   return async function(req, res, next) {
-    if (req.user && req.user.role === 'superadmin') return next();
     const id = parseInt(req.params[idParam], 10);
-    if (!id || isNaN(id)) return next();
+    if (!id || isNaN(id)) return next();   // no id — let route handle 404
+
     try {
-      const r = await pool.query(`SELECT ${dateCol} AS doc_date FROM ${table} WHERE id=$1`, [id]);
+      // Fetch the full row so we can (a) check age and (b) snapshot old_value for audit
+      const r = await pool.query(`SELECT * FROM ${table} WHERE id=$1`, [id]);
       const row = r.rows[0];
-      if (row && isOlderThan2Months(row.doc_date)) {
-        const isJson = req.xhr || (req.headers.accept||'').includes('application/json');
-        if (isJson) return res.status(403).json({ error: 'This record is older than 2 months. Only a superadmin can modify it.' });
+      if (!row) return next();  // row not found — let route return 404 normally
+
+      const docDate = row[dateCol] || row.created_at;
+      if (!isOlderThan2Years(docDate)) return next();  // recent record — everyone can edit
+
+      // ── Record is older than 2 years ─────────────────────────────────────
+      const isSuperadmin = req.user && req.user.role === 'superadmin';
+
+      if (!isSuperadmin) {
+        // Normal user / admin — hard block
+        const isJson = req.xhr || (req.headers.accept || '').includes('application/json');
+        if (isJson) return res.status(403).json({
+          error: 'This record is older than 2 years and is permanently locked. Contact your superadmin.'
+        });
         return res.status(403).render('error', {
-          page: 'error',
-          message: 'This record is older than 2 months and is locked. Only a superadmin can edit or delete it.',
+          page:    'error',
+          message: 'This record is older than 2 years and cannot be edited or deleted. ' +
+                   'All financial records are retained permanently. ' +
+                   'Contact your system administrator if a correction is required.',
           back: req.get('Referer') || '/'
         });
       }
-    } catch(e) { /* allow on DB error */ }
-    next();
+
+      // ── Superadmin override — log before allowing ─────────────────────────
+      // Capture a clean snapshot (exclude internal pg row metadata).
+      const oldSnapshot = Object.assign({}, row);
+
+      // Import addAuditLog lazily to avoid circular-require at module load time
+      const { addAuditLog } = require('../database');
+      await addAuditLog(
+        'superadmin_override',
+        table,
+        id,
+        `Superadmin is modifying a record older than 2 years ` +
+        `(${dateCol}: ${docDate instanceof Date ? docDate.toISOString().split('T')[0] : docDate})`,
+        req.user.id,
+        oldSnapshot,   // old_value — full DB snapshot before change
+        null           // new_value — populated by the route's own addAuditLog call after save
+      );
+
+      // Attach snapshot to request so route handlers can reference it if needed
+      req._auditOldValue = oldSnapshot;
+
+      return next();  // allow superadmin action to proceed
+
+    } catch(e) {
+      // On DB error: fail-safe — do NOT silently allow; surface the problem
+      console.error('[enforceAgeRestriction] DB error:', e.message);
+      return next(e);
+    }
   };
 }
 
-module.exports = { validate, schemas, RULES, preventDoubleSubmit, requireEditPermission, isOlderThan2Months };
+// Alias for backward-compatibility with all existing route files
+const requireEditPermission = enforceAgeRestriction;
+
+module.exports = { validate, schemas, RULES, preventDoubleSubmit, enforceAgeRestriction, requireEditPermission, isOlderThan2Years, isOlderThan2Months };

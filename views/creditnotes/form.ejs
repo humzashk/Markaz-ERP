@@ -1,6 +1,8 @@
 <%- include('../partials/header') %>
 <div class="page-header">
-  <h2><i class="bi bi-file-earmark-minus"></i> New <%= noteType === 'credit' ? 'Credit Note (Sales Return)' : 'Debit Note (Purchase Return)' %></h2>
+  <h2><i class="bi bi-file-earmark-minus"></i>
+    New <%= noteType === 'credit' ? 'Credit Note (Sales Return)' : 'Debit Note (Purchase Return)' %>
+  </h2>
   <a href="/creditnotes" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
 </div>
 
@@ -8,98 +10,184 @@
 <div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> <%= formError %></div>
 <% } %>
 
+<!-- Mode Toggle -->
+<div class="btn-group mb-3" role="group">
+  <a href="?type=<%= noteType %>&mode=invoice"
+     class="btn <%= mode === 'invoice' ? 'btn-primary' : 'btn-outline-primary' %>">
+    <i class="bi bi-receipt"></i> Against Invoice / Purchase
+  </a>
+  <a href="?type=<%= noteType %>&mode=manual"
+     class="btn <%= mode === 'manual' ? 'btn-warning' : 'btn-outline-warning' %>">
+    <i class="bi bi-pencil-square"></i> Manual Entry
+  </a>
+</div>
+
 <div class="card">
   <div class="card-body">
     <form method="POST" action="/creditnotes/add" id="cnForm" onsubmit="return validateForm()">
       <input type="hidden" name="note_type" value="<%= noteType %>">
+      <input type="hidden" name="mode"      value="<%= mode %>">
 
       <div class="row mb-3">
+
+        <!-- Party Selection -->
         <% if (noteType === 'credit') { %>
-        <!-- CUSTOMER SELECTION -->
         <div class="col-md-4">
           <label class="form-label fw-semibold">Customer <span class="text-danger">*</span></label>
-          <select name="customer_id" id="customer_sel" class="form-select" required onchange="onPartyChange()">
+          <select name="customer_id" id="party_sel" class="form-select" required onchange="onPartyChange()">
             <option value="">— Select Customer —</option>
             <% customers.forEach(c => { %>
             <option value="<%= c.id %>"><%= c.name %></option>
             <% }) %>
           </select>
         </div>
-        <!-- INVOICE SELECTION — dynamically loaded per customer -->
-        <div class="col-md-4">
-          <label class="form-label fw-semibold">Against Invoice <span class="text-danger">*</span></label>
-          <select name="invoice_id" id="ref_sel" class="form-select" required onchange="onRefChange()" disabled>
-            <option value="">— Select customer first —</option>
-          </select>
-          <div id="refLoading" class="text-muted small d-none"><i class="bi bi-hourglass-split"></i> Loading...</div>
-        </div>
         <% } else { %>
-        <!-- VENDOR SELECTION -->
         <div class="col-md-4">
           <label class="form-label fw-semibold">Vendor <span class="text-danger">*</span></label>
-          <select name="vendor_id" id="vendor_sel" class="form-select" required onchange="onPartyChange()">
+          <select name="vendor_id" id="party_sel" class="form-select" required onchange="onPartyChange()">
             <option value="">— Select Vendor —</option>
             <% vendors.forEach(v => { %>
             <option value="<%= v.id %>"><%= v.name %></option>
             <% }) %>
           </select>
         </div>
-        <!-- PURCHASE SELECTION — dynamically loaded per vendor -->
-        <div class="col-md-4">
-          <label class="form-label fw-semibold">Against Purchase <span class="text-danger">*</span></label>
-          <select name="purchase_id" id="ref_sel" class="form-select" required onchange="onRefChange()" disabled>
-            <option value="">— Select vendor first —</option>
+        <% } %>
+
+        <!-- Invoice / Purchase Selector (invoice mode only) -->
+        <% if (mode === 'invoice') { %>
+        <div class="col-md-4" id="refWrap">
+          <label class="form-label fw-semibold">
+            <%= noteType === 'credit' ? 'Against Invoice' : 'Against Purchase' %>
+            <span class="text-danger">*</span>
+          </label>
+          <select name="<%= noteType === 'credit' ? 'invoice_id' : 'purchase_id' %>"
+                  id="ref_sel" class="form-select" required onchange="onRefChange()" disabled>
+            <option value="">— Select <%= noteType === 'credit' ? 'customer' : 'vendor' %> first —</option>
           </select>
-          <div id="refLoading" class="text-muted small d-none"><i class="bi bi-hourglass-split"></i> Loading...</div>
+          <div id="refLoading" class="text-muted small d-none"><i class="bi bi-hourglass-split"></i> Loading…</div>
         </div>
         <% } %>
 
         <div class="col-md-4">
           <label class="form-label fw-semibold">Date <span class="text-danger">*</span></label>
-          <input type="date" name="note_date" class="form-control" value="<%= new Date().toISOString().split('T')[0] %>" required>
+          <input type="date" name="note_date" class="form-control"
+                 value="<%= new Date().toISOString().split('T')[0] %>" required>
         </div>
       </div>
 
       <div class="mb-3">
         <label class="form-label fw-semibold">Reason / Description <span class="text-danger">*</span></label>
-        <input type="text" name="reason" class="form-control" placeholder="e.g. Defective goods, wrong item..." required>
+        <input type="text" name="reason" class="form-control"
+               placeholder="e.g. Defective goods, wrong item…" required>
       </div>
 
-      <!-- Items table — auto-populated from invoice/purchase -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <!-- INVOICE MODE — items auto-populated from selected document         -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <% if (mode === 'invoice') { %>
       <div class="mb-3">
         <label class="form-label fw-semibold">Items Returned</label>
         <div id="itemsPlaceholder" class="alert alert-info py-2">
-          <i class="bi bi-info-circle"></i> Select a customer and invoice above — items will appear automatically.
+          <i class="bi bi-info-circle"></i>
+          Select <%= noteType === 'credit' ? 'customer then invoice' : 'vendor then purchase' %> — items appear automatically.
         </div>
         <div id="itemsSection" class="d-none">
-          <table class="table table-bordered" id="itemsTable">
-            <thead class="table-light">
+          <table class="table table-bordered table-sm" id="itemsTable">
+            <thead class="table-dark">
               <tr>
                 <th>Product</th>
-                <th>Invoice Qty (Ctn)</th>
-                <th>Return Qty (Ctn) <span class="text-danger">*</span></th>
-                <th>Rate/Pc</th>
-                <th>Amount</th>
+                <th class="text-center">Invoice Qty</th>
+                <th class="text-center" style="width:120px">Return Qty (Ctn) <span class="text-danger">*</span></th>
+                <th class="text-end">Rate/Pc</th>
+                <th class="text-end">Comm %</th>
+                <th class="text-end">Net Rate/Pc</th>
+                <th class="text-end">Amount</th>
               </tr>
             </thead>
             <tbody id="itemRows"></tbody>
             <tfoot>
-              <tr>
-                <td colspan="4" class="text-end fw-bold">Total Return Amount:</td>
-                <td colspan="1"><strong id="grandTotal">Rs. 0.00</strong></td>
+              <tr class="table-dark fw-bold">
+                <td colspan="6" class="text-end">Total Return Amount:</td>
+                <td class="text-end"><span id="grandTotal">Rs. 0.00</span></td>
               </tr>
             </tfoot>
           </table>
-          <div class="text-muted small"><i class="bi bi-info-circle"></i> Quantities are in <strong>Cartons (Ctn)</strong>. Leave "Return Qty" as 0 to exclude an item.</div>
+          <div class="text-muted small">
+            <i class="bi bi-info-circle"></i>
+            Qty in <strong>Cartons</strong>. Amount = Ctn × Pcs/Ctn × Rate × (1 − Comm%).
+            Leave Return Qty = 0 to exclude an item.
+          </div>
         </div>
       </div>
+
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <!-- MANUAL MODE — user enters product + pcs + rate directly            -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <% } else { %>
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Items Returned (Manual)</label>
+        <table class="table table-bordered table-sm" id="manualTable">
+          <thead class="table-dark">
+            <tr>
+              <th>Product <span class="text-danger">*</span></th>
+              <th class="text-center" style="width:120px">Qty (PCS) <span class="text-danger">*</span></th>
+              <th class="text-end" style="width:140px">Rate / Pc <span class="text-danger">*</span></th>
+              <th class="text-end" style="width:130px">Amount</th>
+              <th style="width:40px"></th>
+            </tr>
+          </thead>
+          <tbody id="manualRows">
+            <tr class="manual-row">
+              <td>
+                <select name="product_id[]" class="form-select form-select-sm" required onchange="onManualChange(this)">
+                  <option value="">— Select Product —</option>
+                  <% products.forEach(p => { %>
+                  <option value="<%= p.id %>"
+                          data-rate="<%= Number(p.selling_price)||0 %>"
+                          data-qpp="<%= Number(p.qty_per_pack)||1 %>">
+                    <%= p.name %>
+                  </option>
+                  <% }) %>
+                </select>
+              </td>
+              <td>
+                <input type="number" name="quantity[]" class="form-control form-control-sm manual-qty"
+                       min="1" step="1" placeholder="PCS" oninput="onManualChange(this)" required>
+              </td>
+              <td>
+                <input type="number" name="rate[]" class="form-control form-control-sm manual-rate"
+                       min="0.01" step="0.01" placeholder="0.00" oninput="onManualChange(this)" required>
+              </td>
+              <td class="text-end align-middle fw-bold manual-amt">Rs. 0.00</td>
+              <td class="text-center align-middle">
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeManualRow(this)">✕</button>
+              </td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr class="table-dark fw-bold">
+              <td colspan="3" class="text-end">Total Return Amount:</td>
+              <td class="text-end"><span id="grandTotal">Rs. 0.00</span></td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addManualRow()">
+          <i class="bi bi-plus"></i> Add Row
+        </button>
+        <div class="text-muted small mt-1">
+          <i class="bi bi-info-circle"></i> Enter quantities in <strong>PCS</strong>. Amount = PCS × Rate/Pc.
+        </div>
+      </div>
+      <% } %>
 
       <div class="mb-3">
         <label class="form-label fw-semibold">Notes</label>
         <textarea name="notes" class="form-control" rows="2"></textarea>
       </div>
 
-      <button type="submit" id="saveBtn" class="btn btn-primary btn-lg" disabled>
+      <button type="submit" id="saveBtn" class="btn btn-primary btn-lg"
+              <%= mode === 'manual' ? '' : 'disabled' %>>
         <i class="bi bi-check"></i> Save <%= noteType === 'credit' ? 'Credit' : 'Debit' %> Note
       </button>
     </form>
@@ -107,22 +195,25 @@
 </div>
 
 <script>
-const NOTE_TYPE = '<%= noteType %>';
+const NOTE_TYPE  = '<%= noteType %>';
+const MODE       = '<%= mode %>';
 
-// ── Party change: fetch their documents ──────────────────────────────────────
+/* ══════════════════════════════════════════════════════════════════════════
+   INVOICE MODE
+══════════════════════════════════════════════════════════════════════════ */
 function onPartyChange() {
-  const partySel = document.getElementById(NOTE_TYPE === 'credit' ? 'customer_sel' : 'vendor_sel');
+  if (MODE !== 'invoice') return;
+  const partySel = document.getElementById('party_sel');
   const refSel   = document.getElementById('ref_sel');
-  const partyId  = partySel.value;
+  const partyId  = partySel ? partySel.value : '';
 
-  // Reset reference selector and items
-  refSel.innerHTML = '<option value="">— Loading... —</option>';
-  refSel.disabled = true;
-  clearItems();
+  refSel.innerHTML = '<option value="">— Loading… —</option>';
+  refSel.disabled  = true;
+  clearInvoiceItems();
   document.getElementById('saveBtn').disabled = true;
 
   if (!partyId) {
-    refSel.innerHTML = NOTE_TYPE === 'credit' ? '<option value="">— Select customer first —</option>' : '<option value="">— Select vendor first —</option>';
+    refSel.innerHTML = `<option value="">— Select ${NOTE_TYPE === 'credit' ? 'customer' : 'vendor'} first —</option>`;
     return;
   }
 
@@ -131,149 +222,202 @@ function onPartyChange() {
     : `/creditnotes/api/vendor-purchases?vendor_id=${partyId}`;
 
   document.getElementById('refLoading').classList.remove('d-none');
-  fetch(url)
-    .then(r => r.json())
-    .then(docs => {
-      document.getElementById('refLoading').classList.add('d-none');
-      if (!docs.length) {
-        refSel.innerHTML = `<option value="">— No ${NOTE_TYPE === 'credit' ? 'invoices' : 'purchases'} found —</option>`;
-        refSel.disabled = true;
-        return;
-      }
-      const placeholder = NOTE_TYPE === 'credit' ? '— Select invoice —' : '— Select purchase —';
-      refSel.innerHTML = `<option value="">${placeholder}</option>` +
-        docs.map(d => `<option value="${d.id}">${d.ref_no} — ${d.date_str} — Rs.${Number(d.total||0).toLocaleString()}</option>`).join('');
-      refSel.disabled = false;
-    })
-    .catch(() => {
-      document.getElementById('refLoading').classList.add('d-none');
-      refSel.innerHTML = '<option value="">— Error loading —</option>';
-    });
+  fetch(url).then(r => r.json()).then(docs => {
+    document.getElementById('refLoading').classList.add('d-none');
+    if (!docs.length) {
+      refSel.innerHTML = `<option value="">— No ${NOTE_TYPE === 'credit' ? 'invoices' : 'purchases'} found —</option>`;
+      return;
+    }
+    const placeholder = NOTE_TYPE === 'credit' ? '— Select invoice —' : '— Select purchase —';
+    refSel.innerHTML = `<option value="">${placeholder}</option>` +
+      docs.map(d => `<option value="${d.id}">${d.ref_no} — ${d.date_str} — Rs.${Number(d.total||0).toLocaleString()}</option>`).join('');
+    refSel.disabled = false;
+  }).catch(() => {
+    document.getElementById('refLoading').classList.add('d-none');
+    refSel.innerHTML = '<option value="">— Error loading —</option>';
+  });
 }
-
-// ── Reference (invoice/purchase) change: load items ─────────────────────────
-let _refItems = [];  // current items from selected reference doc
 
 function onRefChange() {
   const refSel = document.getElementById('ref_sel');
-  const refId  = refSel.value;
-  clearItems();
+  const refId  = refSel ? refSel.value : '';
+  clearInvoiceItems();
   document.getElementById('saveBtn').disabled = true;
   if (!refId) return;
 
   const qs = NOTE_TYPE === 'credit' ? `invoice_id=${refId}` : `purchase_id=${refId}`;
   fetch(`/creditnotes/api/items?${qs}`)
     .then(r => r.json())
-    .then(items => {
-      _refItems = items;
-      buildItemRows(items);
-      document.getElementById('saveBtn').disabled = false;
-    })
-    .catch(() => {
-      alert('Failed to load items from selected document.');
-    });
+    .then(items => { buildInvoiceRows(items); document.getElementById('saveBtn').disabled = false; })
+    .catch(() => alert('Failed to load items.'));
 }
 
-function buildItemRows(items) {
+function buildInvoiceRows(items) {
   if (!items.length) {
     document.getElementById('itemsPlaceholder').textContent = 'No items found for this document.';
     document.getElementById('itemsPlaceholder').classList.remove('d-none');
     document.getElementById('itemsSection').classList.add('d-none');
     return;
   }
-
   document.getElementById('itemsPlaceholder').classList.add('d-none');
   document.getElementById('itemsSection').classList.remove('d-none');
 
   const tbody = document.getElementById('itemRows');
   tbody.innerHTML = '';
 
-  items.forEach((item, idx) => {
-    const maxQty = parseInt(item.max_qty, 10) || 0;   // in Ctn
-    const rate   = parseFloat(item.rate) || 0;          // per pcs
-    const qpp    = Math.max(1, parseInt(item.qty_per_pack, 10) || 1);
-    const row = document.createElement('tr');
-    row.dataset.maxQty = maxQty;
-    row.dataset.rate   = rate;
-    row.dataset.qpp    = qpp;
-    row.dataset.idx    = idx;
-    row.innerHTML = `
+  items.forEach((item) => {
+    const maxCtn   = parseInt(item.max_qty, 10) || 0;
+    const rate     = parseFloat(item.rate) || 0;           // rate per PCS
+    const commPct  = parseFloat(item.commission_pct) || 0; // commission %
+    const qpp      = Math.max(1, parseInt(item.qty_per_pack, 10) || 1);
+    const netRate  = Math.round(rate * (1 - commPct / 100) * 10000) / 10000;
+
+    const tr = document.createElement('tr');
+    tr.dataset.rate    = rate;
+    tr.dataset.commPct = commPct;
+    tr.dataset.qpp     = qpp;
+    tr.dataset.maxCtn  = maxCtn;
+    tr.innerHTML = `
       <input type="hidden" name="product_id[]" value="${item.product_id}">
-      <input type="hidden" name="rate[]" value="${rate}">
-      <td class="fw-semibold">${escHtml(item.name)}<br><small class="text-muted">${qpp} pcs/Ctn</small></td>
-      <td class="text-center text-muted">${maxQty} Ctn</td>
-      <td style="width:130px">
-        <input type="number" name="quantity[]" class="form-control form-control-sm qty-input"
-          min="0" max="${maxQty}" value="0" oninput="onQtyChange(this)"
-          data-max="${maxQty}" data-qpp="${qpp}" data-idx="${idx}">
-        <div class="invalid-feedback">Max: ${maxQty} Ctn</div>
+      <input type="hidden" name="rate[]"        value="${rate}">
+      <td class="fw-semibold">${escHtml(item.name)}<br>
+        <small class="text-muted">${qpp} pcs/ctn</small>
       </td>
-      <td class="text-end">${formatRs(rate)}/pc</td>
-      <td class="text-end fw-bold amount-cell">${formatRs(0)}</td>
+      <td class="text-center text-muted">${maxCtn} Ctn</td>
+      <td>
+        <input type="number" name="quantity[]" class="form-control form-control-sm inv-qty"
+               min="0" max="${maxCtn}" value="0"
+               oninput="onInvQtyChange(this)"
+               data-max="${maxCtn}" data-qpp="${qpp}" data-rate="${rate}" data-comm="${commPct}">
+        <div class="invalid-feedback">Max: ${maxCtn} Ctn</div>
+      </td>
+      <td class="text-end text-muted">${fmtN(rate)}</td>
+      <td class="text-end text-muted">${commPct.toFixed(2)}%</td>
+      <td class="text-end text-primary fw-semibold">${fmtN(netRate)}</td>
+      <td class="text-end fw-bold inv-amt">${fmtN(0)}</td>
     `;
-    tbody.appendChild(row);
+    tbody.appendChild(tr);
   });
 
   calcTotal();
 }
 
-function onQtyChange(input) {
-  const max = parseInt(input.dataset.max, 10) || 0;  // Ctn
-  const qpp = parseInt(input.dataset.qpp, 10) || 1;
-  const val = parseInt(input.value, 10) || 0;
+function onInvQtyChange(input) {
+  const max     = parseInt(input.dataset.max, 10) || 0;
+  const qpp     = parseInt(input.dataset.qpp, 10) || 1;
+  const rate    = parseFloat(input.dataset.rate)  || 0;
+  const commPct = parseFloat(input.dataset.comm)  || 0;
+
+  let ctn = parseInt(input.value, 10) || 0;
+  if (ctn < 0)   { ctn = 0; input.value = 0; }
+  if (ctn > max) { ctn = max; input.value = max; input.classList.add('is-invalid'); }
+  else           { input.classList.remove('is-invalid'); }
+
+  // amount = Ctn × pcs/ctn × rate_per_pcs × (1 − comm/100)
+  const pcs     = ctn * qpp;
+  const netRate = rate * (1 - commPct / 100);
+  const amount  = Math.round(pcs * netRate * 100) / 100;
+
   const row = input.closest('tr');
-  const amtCell = row.querySelector('.amount-cell');
-  const rate = parseFloat(row.dataset.rate) || 0;
-
-  if (val < 0 || val > max) {
-    input.classList.add('is-invalid');
-    input.value = val < 0 ? 0 : max;
-  } else {
-    input.classList.remove('is-invalid');
-  }
-  // Amount = Ctn × pcs_per_ctn × rate_per_pcs
-  const ctn = parseInt(input.value, 10) || 0;
-  amtCell.textContent = formatRs(ctn * qpp * rate);
+  row.querySelector('.inv-amt').textContent = fmtN(amount);
   calcTotal();
 }
 
-function calcTotal() {
-  let total = 0;
-  document.querySelectorAll('.amount-cell').forEach(cell => {
-    total += parseFloat(cell.textContent.replace(/[^0-9.]/g, '')) || 0;
-  });
-  document.getElementById('grandTotal').textContent = 'Rs. ' + total.toLocaleString('en-PK', {minimumFractionDigits:2, maximumFractionDigits:2});
-}
-
-function clearItems() {
-  _refItems = [];
+function clearInvoiceItems() {
+  if (!document.getElementById('itemRows')) return;
   document.getElementById('itemRows').innerHTML = '';
-  document.getElementById('itemsPlaceholder').innerHTML = '<i class="bi bi-info-circle"></i> Select a customer and invoice above — items will appear automatically.';
+  document.getElementById('itemsPlaceholder').innerHTML =
+    '<i class="bi bi-info-circle"></i> Select customer/vendor and document above.';
   document.getElementById('itemsPlaceholder').classList.remove('d-none');
   document.getElementById('itemsSection').classList.add('d-none');
   document.getElementById('grandTotal').textContent = 'Rs. 0.00';
 }
 
-function validateForm() {
-  // Check at least one item has qty > 0
-  const qtys = [...document.querySelectorAll('.qty-input')].map(i => parseInt(i.value,10)||0);
-  if (!qtys.length || qtys.every(q => q === 0)) {
-    alert('Enter a return quantity for at least one item.');
-    return false;
+/* ══════════════════════════════════════════════════════════════════════════
+   MANUAL MODE
+══════════════════════════════════════════════════════════════════════════ */
+function onManualChange(el) {
+  const row    = el.closest('tr');
+  const qtyEl  = row.querySelector('.manual-qty');
+  const rateEl = row.querySelector('.manual-rate');
+  const amtEl  = row.querySelector('.manual-amt');
+
+  // Auto-fill rate from product master if product just changed and rate is empty
+  if (el.tagName === 'SELECT' && !rateEl.value) {
+    const opt = el.selectedOptions[0];
+    if (opt && opt.dataset.rate) rateEl.value = parseFloat(opt.dataset.rate).toFixed(2);
   }
-  // Check no invalid quantities
-  if (document.querySelectorAll('.qty-input.is-invalid').length) {
-    alert('Fix quantity errors before saving.');
-    return false;
+
+  const pcs  = parseInt(qtyEl.value, 10)    || 0;
+  const rate = parseFloat(rateEl.value)     || 0;
+  const amt  = Math.round(pcs * rate * 100) / 100;
+  amtEl.textContent = fmtN(amt);
+  calcTotal();
+}
+
+function addManualRow() {
+  const tbody = document.getElementById('manualRows');
+  const first = tbody.querySelector('tr.manual-row');
+  const clone = first.cloneNode(true);
+  // Reset cloned row
+  clone.querySelectorAll('input').forEach(i => i.value = '');
+  clone.querySelector('select').value = '';
+  clone.querySelector('.manual-amt').textContent = fmtN(0);
+  tbody.appendChild(clone);
+}
+
+function removeManualRow(btn) {
+  const tbody = document.getElementById('manualRows');
+  if (tbody.querySelectorAll('tr.manual-row').length <= 1) {
+    alert('At least one item row is required.'); return;
+  }
+  btn.closest('tr').remove();
+  calcTotal();
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SHARED
+══════════════════════════════════════════════════════════════════════════ */
+function calcTotal() {
+  let total = 0;
+  const cells = MODE === 'invoice'
+    ? document.querySelectorAll('.inv-amt')
+    : document.querySelectorAll('.manual-amt');
+  cells.forEach(c => { total += parseFloat(c.textContent.replace(/[^0-9.]/g,'')) || 0; });
+  document.getElementById('grandTotal').textContent = fmtN(total);
+}
+
+function validateForm() {
+  if (MODE === 'invoice') {
+    const qtys = [...document.querySelectorAll('.inv-qty')].map(i => parseInt(i.value,10)||0);
+    if (!qtys.length || qtys.every(q => q === 0)) {
+      alert('Enter a return quantity for at least one item.'); return false;
+    }
+    if (document.querySelectorAll('.inv-qty.is-invalid').length) {
+      alert('Fix quantity errors before saving.'); return false;
+    }
+  } else {
+    const rows = document.querySelectorAll('#manualRows tr.manual-row');
+    let ok = false;
+    for (const row of rows) {
+      const prod = row.querySelector('select').value;
+      const pcs  = parseInt(row.querySelector('.manual-qty').value, 10) || 0;
+      const rate = parseFloat(row.querySelector('.manual-rate').value) || 0;
+      if (!prod) { alert('Select a product for all rows.'); return false; }
+      if (pcs < 1) { alert('PCS must be ≥ 1 for all rows.'); return false; }
+      if (rate <= 0) { alert('Rate must be > 0 for all rows.'); return false; }
+      ok = true;
+    }
+    if (!ok) { alert('Add at least one item.'); return false; }
   }
   return true;
 }
 
+function fmtN(n) {
+  return 'Rs. ' + (Number(n)||0).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
 function escHtml(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function formatRs(n) {
-  return 'Rs. ' + (Number(n)||0).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 </script>
 <%- include('../partials/footer') %>

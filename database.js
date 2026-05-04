@@ -102,31 +102,36 @@ async function applyStockMovement(client, productId, warehouseId, qtyDelta, refT
   }
 }
 async function reverseStockForRef(client, refType, refId) {
-  // Get all stock movements for this reference to reverse them
-  const rows = await client.many(`SELECT product_id, warehouse_id, qty_delta FROM stock_ledger WHERE ref_type=$1 AND ref_id=$2 AND reason != 'reverse'`, [refType, refId]);
+  // Idempotency: if reversal already applied for this ref, skip silently
+  const already = await client.one(
+    `SELECT 1 FROM stock_ledger WHERE ref_type=$1 AND ref_id=$2 AND reason='reverse' LIMIT 1`,
+    [refType, refId]
+  );
+  if (already) return;
 
-  // Reverse the stock impacts (inverse the deltas)
+  const rows = await client.many(
+    `SELECT product_id, warehouse_id, qty_delta FROM stock_ledger WHERE ref_type=$1 AND ref_id=$2 AND reason != 'reverse'`,
+    [refType, refId]
+  );
   for (const r of rows) {
-    const delta = -r.qty_delta;  // Negate to reverse
-    const pid = toInt(r.product_id);
-    const wid = toInt(r.warehouse_id, null);
-
-    // Update products stock
+    const delta = -r.qty_delta;
+    const pid   = toInt(r.product_id);
+    const wid   = toInt(r.warehouse_id, null);
+    // Append counter-entry — never DELETE stock_ledger rows
+    await client.run(
+      `INSERT INTO stock_ledger(product_id, warehouse_id, qty_delta, ref_type, ref_id, reason, note)
+       VALUES ($1,$2,$3,$4,$5,'reverse',$6)`,
+      [pid, wid, delta, refType, refId, `Reversal of ${refType} #${refId}`]
+    );
     await client.run(`UPDATE products SET stock = stock + $1 WHERE id = $2`, [delta, pid]);
-
-    // Update warehouse stock if applicable
     if (wid) {
       await client.run(`
-        INSERT INTO warehouse_stock(warehouse_id, product_id, quantity)
-        VALUES ($1,$2,$3)
+        INSERT INTO warehouse_stock(warehouse_id, product_id, quantity) VALUES ($1,$2,$3)
         ON CONFLICT (warehouse_id, product_id)
           DO UPDATE SET quantity = warehouse_stock.quantity + EXCLUDED.quantity
       `, [wid, pid, delta]);
     }
   }
-
-  // Delete the original entries instead of creating counter-entries to prevent ledger bloat
-  await client.run(`DELETE FROM stock_ledger WHERE ref_type=$1 AND ref_id=$2 AND reason != 'reverse'`, [refType, refId]);
 }
 // Sum current stock from ledger (single source of truth)
 async function stockOnHand(client, productId, warehouseId) {
@@ -151,10 +156,31 @@ async function addLedgerEntry(client, entityType, entityId, date, desc, debit, c
   await recomputeBalance(client, entityType, entityId);
 }
 async function removeLedgerForRef(client, entityType, entityId, refType, refId) {
-  await client.run(`DELETE FROM ledger WHERE entity_type=$1 AND entity_id=$2 AND reference_type=$3 AND reference_id=$4`,
-    [entityType, entityId, refType, refId]);
+  // Idempotency: skip if reversal rows already exist for this ref
+  const already = await client.one(
+    `SELECT 1 FROM ledger WHERE entity_type=$1 AND entity_id=$2 AND reference_type=$3 AND reference_id=$4 LIMIT 1`,
+    [entityType, entityId, refType + '_reversal', refId]
+  );
+  if (already) return;
+  // Append reversal rows (debit↔credit swapped) — ledger remains append-only, no DELETE
+  await client.run(
+    `INSERT INTO ledger(entity_type, entity_id, txn_date, description, debit, credit, reference_type, reference_id, account_scope)
+     SELECT entity_type, entity_id, CURRENT_DATE,
+            'Reversal: ' || COALESCE(description, ''),
+            credit, debit,
+            $3, reference_id, account_scope
+     FROM ledger
+     WHERE entity_type=$1 AND entity_id=$2 AND reference_type=$4 AND reference_id=$5`,
+    [entityType, entityId, refType + '_reversal', refType, refId]
+  );
 }
 async function recomputeBalance(client, entityType, entityId) {
+  // Row-level lock prevents concurrent transactions from overwriting with a stale SUM
+  if (entityType === 'customer') {
+    await client.run(`SELECT id FROM customers WHERE id=$1 FOR UPDATE`, [entityId]);
+  } else if (entityType === 'vendor') {
+    await client.run(`SELECT id FROM vendors WHERE id=$1 FOR UPDATE`, [entityId]);
+  }
   const r = await client.one(`SELECT COALESCE(SUM(debit) - SUM(credit),0) AS bal FROM ledger WHERE entity_type=$1 AND entity_id=$2`, [entityType, entityId]);
   const bal = Number(r && r.bal) || 0;
   if (entityType === 'customer') await client.run(`UPDATE customers SET balance=$1 WHERE id=$2`, [bal, entityId]);
@@ -170,14 +196,21 @@ async function getProductCost(client, productId) {
 }
 
 // ===== AUDIT =====
-async function addAuditLog(action, module, recordId, details, userId) {
+// oldValue / newValue: plain objects — stored as JSONB.
+// superadmin_override is set automatically when action === 'superadmin_override'.
+async function addAuditLog(action, module, recordId, details, userId, oldValue, newValue) {
   if (userId == null) {
     try { const a = auditContext.getStore(); if (a && a.userId) userId = a.userId; } catch(_){}
   }
+  const isSuperOverride = action === 'superadmin_override';
   try {
     await pool.query(
-      `INSERT INTO audit_log(action,module,record_id,details,user_id) VALUES ($1,$2,$3,$4,$5)`,
-      [action, module, recordId, details, userId || null]
+      `INSERT INTO audit_log(action,module,record_id,details,user_id,old_value,new_value,superadmin_override)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [action, module, recordId, details, userId || null,
+       oldValue  ? JSON.stringify(oldValue)  : null,
+       newValue  ? JSON.stringify(newValue)  : null,
+       isSuperOverride]
     );
   } catch(_){}
 }
